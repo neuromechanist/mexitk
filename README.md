@@ -51,6 +51,16 @@ The remaining 37 opcodes are **not implemented**.
 They are catalogued in `docs/matitk_opcode_registry.txt` (the original binary's own parameter dump)
 and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`.
 
+> **Comparing against an older result?**
+> Output from `FCA` and `SWS` will differ slightly from what the original `matitk`
+> binary produced on Linux before 2026.
+> `FOMT` is identical.
+> This is upstream ITK's own evolution from 2.4 to 5.4, not a porting error,
+> and it is accepted deliberately: the alternative is that segmentation does not run
+> on Apple Silicon at all.
+> The measured magnitudes are in
+> [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md#read-this-first-if-you-are-comparing-against-an-older-result).
+
 **`docs/COMPATIBILITY.md` is the full record**: every measurement,
 every quirk reproduced on purpose, and every deliberate deviation.
 Read it before relying on this for science.

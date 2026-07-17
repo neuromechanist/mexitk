@@ -383,11 +383,11 @@ ITK's and the MEX's object files agree on the deployment target and avoid
 
 ## 4. PoC — what was actually built and run
 
-Location: `/private/tmp/claude-501/.../scratchpad/mexitk-poc/` during this
-session; a permanent copy of the three working files (`CMakeLists.txt`,
-`mexitk_median.cpp`, `test_mexitk.m`) is kept at
-`/Users/yahya/Documents/git/eeg/.mexitk-spec/poc/` for reference. Not
-committed anywhere — this is reference material, not shipped mexitk code.
+Built in a scratch directory during the bring-up session; a copy of the three
+working files (`CMakeLists.txt`, `mexitk_median.cpp`, `test_mexitk.m`) is kept
+outside the repo, in the maintainer's local working area, for reference. Not
+committed anywhere — this is reference material, not shipped mexitk code, and
+its content is superseded by the real `CMakeLists.txt` at the repo root.
 
 **Route used for the PoC's ITK:** Homebrew (`brew install itk`, approved
 before running), explicitly *not* the shipping recommendation — chosen

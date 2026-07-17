@@ -6,6 +6,46 @@ It is the honest counterpart to the README's status table.
 Nothing here is estimated;
 every number was measured by running both implementations over the same input.
 
+## Read this first, if you are comparing against an older result
+
+**Segmentation output produced through `mexitk` will differ slightly from output produced
+by the original `matitk` binary on Linux before 2026.**
+If you are comparing a result computed today against a historical result,
+expect small differences, and do not assume either one is broken.
+
+Concretely:
+
+- **`FOMT` (Otsu thresholding) is identical** for `double` and `single` input.
+  No difference at all.
+- **`FCA` (anisotropic diffusion smoothing) differs.**
+  Root-mean-square difference of 2.6e-3 after one iteration,
+  on a volume whose intensities span 0 to 88,
+  growing to 5.7e-3 after five iterations;
+  about 40% of voxels differ by some non-zero amount.
+- **`SWS` (watershed) differs.**
+  It finds the *same number of regions* every time,
+  but the region containing a given seed voxel is not always identical:
+  across 16 tested seed and parameter combinations, 11 matched exactly,
+  and the worst case overlapped the original with a Dice coefficient of 0.718.
+
+**Why this happens, and why it is not a defect in mexitk.**
+`mexitk` calls the *same ITK filters* the original called, with the same parameters.
+The original was built against ITK 2.4 in 2006; `mexitk` is built against ITK 5.4.
+ITK's own implementations of anisotropic diffusion and watershed changed over those 19 years.
+The difference is upstream ITK's evolution, not a porting error.
+Removing it would mean pinning a 19-year-old ITK or forking ITK's filter internals.
+Both were considered and rejected:
+that would mean rewriting the science, which this project will not do.
+
+**This deviation is accepted deliberately.**
+The practical alternative is not "identical results".
+It is that segmentation does not run on Apple Silicon at all,
+because the original ships no `mexmaca64` and MEX files cannot run under Rosetta.
+
+The exact magnitudes are asserted by the test suite
+(`tests/tFcaReference.m`, `tests/tSwsReference.m`)
+and broken down per opcode below.
+
 ## The reference
 
 | | |
@@ -203,11 +243,35 @@ and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`,
 but they are **not implemented**.
 See the README for the current status of each.
 
-Two opcodes are known to be problematic for any future port:
+### `SCSS`: will not support
 
-- **`SCSS`** is not a segmentation filter in the modern sense.
-  It maps to `itk::bio::CellularAggregate` in the opt-in `ITKBioCell` remote module,
-  produces mesh output rather than an image, and carries global static state.
-  It should probably be dropped rather than ported.
+**Decision: `SCSS` will not be implemented.** This is settled; please do not re-open it
+without new information.
+
+`SCSS` is not a segmentation filter in the modern sense.
+It maps to `itk::bio::CellularAggregate`, which:
+
+- lives in `ITKBioCell`, an opt-in *remote* module that is not part of a default ITK build,
+  so supporting it would impose an extra dependency on everyone building mexitk;
+- produces **mesh** output rather than an image,
+  so it cannot satisfy the MATITK contract of returning image volumes through the same
+  calling convention;
+- carries global static state, which is hostile to a MEX file that is loaded once and
+  called repeatedly inside a long-lived MATLAB session.
+
+There is no modern ITK filter that is behaviourally equivalent.
+Shipping something merely *similar* under the name `SCSS` would be worse than not
+shipping it: callers would get silently different results under a familiar name,
+which is exactly the failure mode this project exists to avoid.
+Calling `mexitk('SCSS', ...)` returns an unknown-operation error, which is the honest answer.
+
+### Other opcodes needing resolution before implementation
+
 - **`FGMS`** could not be pinned to any ITK class name with confidence
   and needs verification against the original binary before implementation.
+- **`FFFT`**: the VNL FFT backend was removed from ITK and rerouted via pocketfft;
+  the real/complex output switch semantics are unconfirmed.
+- **`FGA`** is very likely a duplicate of `FDG` (both `DiscreteGaussianImageFilter`),
+  an artifact of the original's Perl generator.
+- **`RD`**: `SetStandardDeviations` is silently inert unless `SmoothDisplacementFieldOn()`
+  is also called, a real silent-failure trap to avoid inheriting.
