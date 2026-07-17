@@ -76,19 +76,27 @@ if echo "$CHECKABLE" | grep -qE '/opt/homebrew|/usr/local/opt|/opt/local|itk-ins
   status=1
 fi
 
-# 3. Linux only: no libstdc++/libgcc dependency.
-#    MATLAB preloads its own, older, libstdc++.so.6. A MEX built against a newer
-#    distro toolchain then fails at load with "version `GLIBCXX_3.4.xx' not
-#    found", which is a redistributability failure even though no ITK is
-#    involved -- checks 1 and 2 both pass while the file is unusable. CMakeLists
-#    links the C++ runtime statically on Linux to prevent this; this asserts it
-#    actually happened.
+# 3. Linux only: the MEX must not require a newer libstdc++ than MATLAB ships.
+#    MATLAB preloads its own libstdc++.so.6 from sys/os/glnxa64. R2025b bundles
+#    6.0.30, which provides up to GLIBCXX_3.4.30 (measured directly from a real
+#    R2025b install, not assumed). Build with gcc 13 and the MEX asks for
+#    GLIBCXX_3.4.32 and dies at load, even though checks 1 and 2 both pass and
+#    the file looks perfect. This is the exact failure that got through before,
+#    so it gets its own gate rather than relying on the load test to catch it.
 if [ "$(uname -s)" = "Linux" ]; then
-  if echo "$CHECKABLE" | grep -qE 'libstdc\+\+|libgcc_s'; then
-    echo "FAIL: the MEX depends on the system C++ runtime. MATLAB preloads its own"
-    echo "      older libstdc++ and this will fail at load with a GLIBCXX version"
-    echo "      error. Expected -static-libstdc++ -static-libgcc at link time."
-    status=1
+  MAX_ALLOWED="${MEXITK_MAX_GLIBCXX:-3.4.30}"
+  REQUIRED="$(objdump -T "$MEX" 2>/dev/null \
+    | grep -oE 'GLIBCXX_[0-9]+\.[0-9]+\.[0-9]+' | sed 's/GLIBCXX_//' \
+    | sort -V | tail -1 || true)"
+  if [ -n "$REQUIRED" ]; then
+    echo "    highest GLIBCXX required: $REQUIRED (MATLAB provides up to $MAX_ALLOWED)"
+    if [ "$(printf '%s\n%s\n' "$MAX_ALLOWED" "$REQUIRED" | sort -V | tail -1)" != "$MAX_ALLOWED" ]; then
+      echo "FAIL: the MEX requires GLIBCXX_$REQUIRED but MATLAB's bundled libstdc++"
+      echo "      only provides up to GLIBCXX_$MAX_ALLOWED. It will fail at load."
+      echo "      Build with gcc/g++ 12 or older. Do not use -static-libstdc++:"
+      echo "      it segfaults MATLAB on the error paths (two libstdc++ copies)."
+      status=1
+    fi
   fi
 fi
 

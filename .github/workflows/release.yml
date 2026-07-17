@@ -84,9 +84,19 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
+      - name: Pin the Linux compiler to GCC 12
+        if: runner.os == 'Linux'
+        # See ci.yml: MATLAB R2025b bundles libstdc++ 6.0.30 (max GLIBCXX_3.4.30);
+        # ubuntu-latest's gcc 13 emits GLIBCXX_3.4.32 and the MEX fails at load.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-12 g++-12
+          echo "CC=gcc-12" >> "$GITHUB_ENV"
+          echo "CXX=g++-12" >> "$GITHUB_ENV"
+
       - name: Record compiler version for the cache key
         id: cxx
-        run: echo "value=$(c++ --version | head -1 | tr -cd '[:alnum:].' )" >> "$GITHUB_OUTPUT"
+        run: echo "value=$(${CXX:-c++} --version | head -1 | tr -cd '[:alnum:].' )" >> "$GITHUB_OUTPUT"
 
       - name: Cache static ITK
         id: itk-cache

@@ -77,18 +77,26 @@ target_include_directories(mexitk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_directories(mexitk PRIVATE ${ITK_LIBRARY_DIRS})
 
 if(UNIX AND NOT APPLE)
-  # MATLAB ships its own libstdc++.so.6 in sys/os/glnxa64 and preloads it, and
-  # that copy is older than a current distro's. A MEX built by, say, Ubuntu's
-  # gcc 13 asks for GLIBCXX_3.4.32, MATLAB's bundled libstdc++ does not provide
-  # it, and the MEX fails to load with:
+  # On Linux the MEX must be built with a compiler whose libstdc++ requirements
+  # MATLAB can satisfy. MATLAB preloads its OWN libstdc++.so.6 from
+  # sys/os/glnxa64, and R2025b bundles 6.0.30, which provides up to
+  # GLIBCXX_3.4.30 (measured, not assumed). A MEX built by Ubuntu 24.04's
+  # default gcc 13 asks for GLIBCXX_3.4.32 and dies at load with:
   #   version `GLIBCXX_3.4.32' not found (required by mexitk.mexa64)
-  # That would hit every Linux user whose MATLAB is older than their compiler,
-  # not just CI. Linking the C++ runtime statically removes the dependency
-  # entirely, which is the same self-containment goal that makes us link ITK
-  # statically. Safe here because the MEX is a leaf module: no C++ exception or
-  # object ever crosses its boundary (ITK exceptions are caught in mexitk.cpp
-  # and converted to MATLAB errors).
-  target_link_options(mexitk PRIVATE -static-libstdc++ -static-libgcc)
+  # Use gcc/g++ 12 or older (GLIBCXX_3.4.30). CI pins this; see ci.yml.
+  #
+  # Do NOT "fix" this with -static-libstdc++. It was tried and it is worse: it
+  # puts a second libstdc++ in the process, so the C++ exception that
+  # mexErrMsgIdAndTxt throws unwinds out of the MEX using our static copy and is
+  # caught by MATLAB's, which segfaults the whole session. It looks like it
+  # works, because it only crashes on the error paths.
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 13)
+    message(WARNING
+      "Building with GCC ${CMAKE_CXX_COMPILER_VERSION}. The resulting MEX will "
+      "require GLIBCXX newer than the libstdc++ MATLAB ships (R2025b provides "
+      "up to GLIBCXX_3.4.30) and will fail to load. Use gcc/g++ 12 or older, "
+      "e.g. -DCMAKE_CXX_COMPILER=g++-12.")
+  endif()
 endif()
 
 if(APPLE)

@@ -88,12 +88,27 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Pin the Linux compiler to GCC 12
+        if: runner.os == 'Linux'
+        # MATLAB preloads its own libstdc++.so.6; R2025b bundles 6.0.30, which
+        # provides up to GLIBCXX_3.4.30 (measured from a real R2025b install).
+        # ubuntu-latest's default gcc 13 emits GLIBCXX_3.4.32, so the MEX builds
+        # cleanly and then dies at load with
+        #   version `GLIBCXX_3.4.32' not found (required by mexitk.mexa64)
+        # GCC 12 tops out at exactly GLIBCXX_3.4.30. Set before ITK is built so
+        # both ITK and the MEX use one ABI.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-12 g++-12
+          echo "CC=gcc-12" >> "$GITHUB_ENV"
+          echo "CXX=g++-12" >> "$GITHUB_ENV"
+
       - name: Record compiler version for the cache key
         id: cxx
         # A statically linked C++17 dependency graph is ABI-sensitive to the
         # compiler, so a cached ITK built by a different compiler is not safe to
-        # reuse.
-        run: echo "value=$(c++ --version | head -1 | tr -cd '[:alnum:].' )" >> "$GITHUB_OUTPUT"
+        # reuse. Uses $CXX so pinning the compiler invalidates the cache.
+        run: echo "value=$(${CXX:-c++} --version | head -1 | tr -cd '[:alnum:].' )" >> "$GITHUB_OUTPUT"
 
       - name: Cache static ITK
         id: itk-cache
