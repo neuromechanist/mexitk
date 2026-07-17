@@ -36,8 +36,26 @@ Status as of 2026-07-16. Version 0.1.0.
 
 ### Near term
 
-- **Build and test on Linux x86_64 (`glnxa64`).** Primary target, currently unproven.
-  Ubuntu's `libinsighttoolkit5-dev` is 5.3.0, below our 5.4 floor, so CI builds ITK from source.
+- **Linux x86_64 (`glnxa64`): the build WORKS; only runtime loading fails.**
+  First CI run on `ubuntu-latest` compiled ITK 5.4.6 from source and built
+  `mexitk.mexa64` successfully, so the toolchain and the code are fine on Linux.
+  The test step then failed at MEX load:
+  `Invalid MEX-file 'mexitk.mexa64': libitkNetlibSlatec-5.4.so.1: cannot open shared
+  object file: No such file or directory`.
+  CI builds ITK **shared**, and MATLAB does not have ITK's `.so` directory on its
+  runtime loader path.
+  Two ways out:
+  1. Export `LD_LIBRARY_PATH` for the test step. One line, but it papers over the
+     real issue and leaves the artifact non-redistributable.
+  2. Build ITK with `BUILD_SHARED_LIBS=OFF`. This is already the documented shipping
+     recommendation, makes the MEX self-contained, and fixes CI as a side effect.
+     Prefer this. Expect to work through symbol-visibility issues when statically
+     linking ITK into a MEX that must export only `mexFunction`.
+  Note macOS CI passes only because Homebrew's ITK dylibs sit at an absolute path
+  that happens to exist on the runner. It is the same fragility, merely masked, and
+  option 2 fixes both platforms.
+  Ubuntu's `libinsighttoolkit5-dev` is 5.3.0, below our 5.4 floor, so building from
+  source is required regardless.
 - **Static, module-pruned ITK superbuild** pinned to v5.4.6
   (`BUILD_SHARED_LIBS=OFF`, `ITK_BUILD_DEFAULT_MODULES=OFF`).
   Required for a redistributable MEX: a Homebrew-linked MEX has absolute
