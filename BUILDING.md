@@ -60,18 +60,42 @@ Homebrew's ITK build also pulls in roughly 70 transitive dependencies,
 including all of VTK and Qt, none of which mexitk's filters need; see
 Troubleshooting below for why that matters beyond disk space.
 
-### Shipping: static superbuild (not yet implemented)
+### Shipping: static ITK (recommended, and what CI uses)
 
-The intended path for a redistributable binary is a static, module-pruned
-ITK superbuild, pinned to a fixed tag (`v5.4.6`), built with
-`BUILD_SHARED_LIBS=OFF` and `ITK_BUILD_DEFAULT_MODULES=OFF` plus an explicit
-module list matching what mexitk actually links against.
-This has **not yet been done**; there is no static ITK build script in this
-repository yet, and no static-linked mexitk binary has been produced or
-tested.
-A fuller writeup of the reasoning and the concrete CMake flags involved is
-in `.context/research.md`; read that file for detail if you are picking up
-this work.
+For a **redistributable** binary, build a static, module-pruned ITK and link
+that instead:
+
+```sh
+./tools/build_itk.sh "$HOME/itk-prefix"          # pinned to ITK 5.4.6
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+      -DITK_DIR="$HOME/itk-prefix/lib/cmake/ITK-5.4"
+cmake --build build -j
+./tools/check_redistributable.sh matlab/mexitk.mexmaca64
+```
+
+`tools/build_itk.sh` sets `BUILD_SHARED_LIBS=OFF`,
+`CMAKE_POSITION_INDEPENDENT_CODE=ON` (static archives have to go into a shared
+object), `ITK_BUILD_DEFAULT_MODULES=OFF` plus the explicit module list, and
+hidden symbol visibility.
+Measured at roughly 80 seconds on a 12-core Apple M4 Pro, because the pruned
+module set is small; expect a few minutes on a machine with fewer cores.
+
+The difference is not subtle. Linked against Homebrew's ITK, the MEX records
+**22 absolute references** into `/opt/homebrew/opt/itk/lib` and loads only on a
+machine with that exact ITK at that exact path. Linked against a static ITK, the
+same MEX depends only on the C/C++ runtime and MATLAB's own `libmex`/`libmx`:
+
+```
+@rpath/libmex.dylib          <- MATLAB's, resolved by MATLAB at load
+@rpath/libmx.dylib
+/usr/lib/libSystem.B.dylib
+/usr/lib/libc++.1.dylib
+```
+
+`tools/check_redistributable.sh` enforces exactly that, and is verified to
+reject a Homebrew-linked MEX and accept a static one. CI additionally downloads
+the artifact onto a runner that never installed ITK and loads it there, because
+a build-and-test-on-the-same-machine result cannot prove redistributability.
 
 ## Configuring and building
 
@@ -108,8 +132,8 @@ On the verified macOS arm64 build, this reports 34/34 tests passing.
 
 | Platform | MEX extension | Status |
 |---|---|---|
-| macOS arm64 | `mexmaca64` | Builds and tested. Verified on Apple M4 Pro, MATLAB R2025b, Homebrew ITK 5.4.6, Apple clang 21. |
-| Linux x86_64 | `glnxa64` | Not yet built. This is a primary target, but no build has been attempted or verified yet. |
+| macOS arm64 | `mexmaca64` | Builds and tested, 34/34, against both Homebrew ITK and a static ITK. Verified on Apple M4 Pro, MATLAB R2025b, ITK 5.4.6, Apple clang 21. The static build is confirmed self-contained (no ITK or package-manager paths recorded). |
+| Linux x86_64 | `mexa64` | Builds in CI (ITK 5.4.6 from source). With a **shared** ITK the MEX compiles but fails to load: `libitkNetlibSlatec-5.4.so.1: cannot open shared object file`. The static path exists to fix exactly that; see CI for its current state rather than trusting this table. |
 | macOS x86_64 | `mexmaci64` | Untried. Legacy target: R2025b is MathWorks' final Intel-Mac release. Build it if convenient, but it is never a blocker. |
 | Windows | `mexw64` | Not attempted. Best-effort only, through GitHub Actions. |
 

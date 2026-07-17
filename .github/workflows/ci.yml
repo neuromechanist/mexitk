@@ -6,35 +6,37 @@
 # Institute for Neural Computation (INC), UC San Diego.
 #
 # ---------------------------------------------------------------------------
-# READ THIS BEFORE RELYING ON A GREEN CHECK
+# WHAT A GREEN CHECK HERE MEANS
 # ---------------------------------------------------------------------------
-# 1. macOS arm64 is the only platform whose build+test path has actually run
-#    end to end (this machine, MATLAB R2025b, Homebrew ITK 5.4.6, Apple
-#    clang 21, 34/34 tests passing). Everything about that job mirrors a
-#    real, verified run.
-# 2. Ubuntu x86_64 has NEVER been built here. Every step below is the best
-#    reasoned reconstruction from CMakeLists.txt plus vendor documentation,
-#    not a reproduction of a working run. Treat the first few runs of this
-#    job as debugging sessions, not as a working pipeline.
-# 3. MATLAB licensing on GitHub Actions is free and automatic ONLY when
-#    (a) the repository is public, AND (b) MATLAB is launched through one of
-#    matlab-actions' own wrapper actions (run-command / run-tests /
-#    run-build) -- NOT via a bare `matlab -batch` shell call or `ctest`.
-#    This repo starts PRIVATE. On a private repo, matlab-actions/run-command
-#    will fail to license MATLAB at all unless a MATLAB Batch Licensing
-#    Pilot token (https://github.com/matlab-actions/setup-matlab, "Batch
-#    Licensing Pilot Eligibility" form) is requested from MathWorks and
-#    stored as the MLM_LICENSE_TOKEN repository secret. That pilot is an
-#    application process, not a guaranteed/instant grant, and it explicitly
-#    does not cover MATLAB Engine / external-language-interface use (not
-#    needed here -- mexitk only calls plain MATLAB unit tests).
-#    Until the repo goes public or a token is obtained, the "run tests" step
-#    in both jobs is SKIPPED (not silently -- it prints a ::warning:: and the
-#    job stays green only because the *build* succeeded, not because tests
-#    ran). The CMake configure/build steps do NOT need a license at all --
-#    matlab_add_mex() compiles directly against MATLAB's shipped headers and
-#    import libraries, no MATLAB process is ever launched to build -- so the
-#    build+artifact-upload signal is meaningful even while private.
+# ITK is built STATIC and module-pruned (tools/build_itk.sh), then linked in.
+# This is not an optimisation, it is what makes the artifact real:
+#
+#   - A MEX linked against a package-manager ITK records absolute paths to the
+#     build machine's ITK. On macOS that was 22 references into
+#     /opt/homebrew/opt/itk/lib; on Linux the same mistake showed up at MEX load
+#     as "libitkNetlibSlatec-5.4.so.1: cannot open shared object file".
+#   - Both look fine on the runner that built them. A build-and-test-on-the-same-
+#     runner job therefore proves nothing about redistributability, because the
+#     toolchain is still sitting right there.
+#
+# So there are two jobs, and both must pass:
+#   build    - builds static ITK + the MEX, runs tools/check_redistributable.sh
+#              (inspects what is *recorded* in the binary), runs the suite.
+#   verify   - downloads the artifact onto a FRESH runner that never installed
+#              ITK, and runs the same suite. This is the half that actually
+#              proves a downloader can use the file.
+#
+# Pruning is also a correctness requirement, not a size win: resolving ITK
+# without an explicit module list pulls in ITKVtkGlue, and VTK's static
+# destructors crash MATLAB on exit even when the filter returned correct output.
+#
+# MATLAB licensing: free and automatic only when (a) the repo is public AND
+# (b) MATLAB is launched through matlab-actions' own wrappers (run-command /
+# run-tests), NOT a bare `matlab -batch` or ctest -- the free licensing is
+# implemented inside those actions. This repo is public, so tests run. On a
+# private fork they will skip loudly unless MLM_LICENSE_TOKEN is set.
+# Building needs no license: matlab_add_mex() compiles against MATLAB's shipped
+# headers and never launches MATLAB.
 # ---------------------------------------------------------------------------
 
 name: CI
@@ -53,190 +55,65 @@ permissions:
   contents: read
 
 env:
-  # Pinned to the exact release this project has actually been tested
-  # against (see header). Bump deliberately -- after validating locally --
-  # not opportunistically; "latest" would let MathWorks silently change the
+  # Pinned deliberately. "latest" would let MathWorks silently change the
   # toolchain mexitk is graded against.
   MATLAB_RELEASE: R2025b
-  # ITK tag shared by both platforms so "5.4+" means the same thing
-  # everywhere. 5.4.6 matches the Homebrew formula's current stable version
-  # (verified) and is used as the from-source pin on Ubuntu too, for parity.
-  ITK_TAG: v5.4.6
+  # Must match the version tools/build_itk.sh defaults to, and the floor in
+  # CMakeLists.txt's find_package(ITK 5.4 ...).
+  ITK_VERSION: 5.4.6
 
 jobs:
-  # ---------------------------------------------------------------------
-  # macOS arm64 -- primary target, and the one platform this has actually
-  # run on. ITK comes from Homebrew: on macos-15 (Sequoia) the `itk` formula
-  # has a prebuilt arm64_sequoia bottle (verified: formulae.brew.sh reports
-  # 5.4.6 with arm64_tahoe/arm64_sequoia/arm64_sonoma bottles), so this is a
-  # `brew install` with zero compilation, not a build. That is fine for CI
-  # (we only need "does it build and pass tests", not a redistributable
-  # binary) even though it is explicitly NOT the shipping strategy recorded
-  # in .context/research.md (that calls for a static, module-pruned
-  # superbuild so nothing links Homebrew's dylibs at redistribution time).
-  # ---------------------------------------------------------------------
-  macos-arm64:
-    name: macOS arm64 (Homebrew ITK)
-    # Pinned rather than `macos-latest`: GitHub silently rolls `-latest`
-    # forward to a new default image on its own schedule, and while all of
-    # macos-14/15/26 are arm64 today (verified against GitHub's runner-images
-    # docs), pinning keeps a cache-key/toolchain surprise from landing on an
-    # unrelated PR. Bump deliberately alongside a green run, not implicitly.
-    runs-on: macos-15
-    timeout-minutes: 30
-    env:
-      MLM_LICENSE_TOKEN: ${{ secrets.MLM_LICENSE_TOKEN }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Install ITK via Homebrew
-        run: |
-          brew install itk
-          echo "ITK_DIR=$(brew --prefix itk)/lib/cmake/ITK-5.4" >> "$GITHUB_ENV"
-
-      - name: Set up MATLAB
-        id: setup-matlab
-        uses: matlab-actions/setup-matlab@v3
-        with:
-          release: ${{ env.MATLAB_RELEASE }}
-          # setup-matlab's own cache of the downloaded MATLAB installation,
-          # unrelated to the ITK cache below.
-          cache: true
-
-      - name: Configure
-        # MATLAB_ROOT_DIR feeds CMakeLists.txt's own
-        # `if(NOT DEFINED Matlab_ROOT_DIR AND DEFINED ENV{MATLAB_ROOT_DIR})`
-        # fallback -- required because setup-matlab installs MATLAB to a
-        # runner-specific path that FindMatlab's default search (
-        # $HOME/Applications, /Applications, PATH) will not find on its own.
-        env:
-          MATLAB_ROOT_DIR: ${{ steps.setup-matlab.outputs.matlabroot }}
-        run: |
-          cmake -S . -B build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DITK_DIR="$ITK_DIR"
-
-      - name: Build
-        # Exact command verified to work on this machine; do not add flags.
-        run: cmake --build build -j
-
-      - name: Upload built MEX
-        uses: actions/upload-artifact@v7
-        with:
-          name: mexitk-macos-arm64
-          path: matlab/mexitk.mexmaca64
-          if-no-files-found: error
-
-      - name: Determine MATLAB license availability
-        id: matlab-license
-        run: |
-          if [ "${{ github.event.repository.private }}" = "true" ] && [ -z "$MLM_LICENSE_TOKEN" ]; then
-            echo "available=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Warn if MATLAB tests are being skipped
-        if: steps.matlab-license.outputs.available == 'false'
-        run: |
-          echo "::warning::Skipping the mexitk test suite: this repository is private and no MLM_LICENSE_TOKEN secret is configured, so matlab-actions/run-command cannot license MATLAB. The MEX above was built (build does not need a license) but NOT test-verified in this run. Request a MATLAB Batch Licensing Pilot token from MathWorks and add it as the MLM_LICENSE_TOKEN repo secret, or make the repository public, to get real test signal."
-
-      - name: Run mexitk test suite
-        if: steps.matlab-license.outputs.available == 'true'
-        uses: matlab-actions/run-command@v3
-        with:
-          # matlab-actions/run-command is required here rather than plain
-          # `matlab -batch` or CTest (even though CMakeLists.txt already
-          # registers a `matlab_unittests` CTest target running this same
-          # command) -- automatic free public-repo licensing is implemented
-          # inside run-command/run-tests/run-build themselves, not as a
-          # runner-wide license setup done by setup-matlab, so a
-          # bare `matlab`/`ctest` invocation would NOT get the free license
-          # even on a public repo. run_mexitk_tests returns the failure
-          # count; the documented run-command convention for failing the
-          # step is `assert`/`error`, not calling exit() directly (exit()
-          # is what the plain-CLI form in the project docs uses, and is not
-          # demonstrated as supported inside a run-command `command:`).
-          command: >-
-            addpath('matlab');
-            assert(run_mexitk_tests('.') == 0,
-            'mexitk test suite reported one or more failures; see log above.')
-
-  # ---------------------------------------------------------------------
-  # Ubuntu x86_64 -- primary target, UNVERIFIED end to end (see header).
-  # apt's libinsighttoolkit5-dev is too old to satisfy `find_package(ITK
-  # 5.4 ...)`: verified via Launchpad/packages.ubuntu.com that noble
-  # (24.04, what ubuntu-latest currently maps to) ships 5.3.0-7build4, and
-  # even questing (25.10) only reaches 5.4.3. So there is no apt shortcut
-  # here -- ITK is built from source, pruned to exactly the modules
-  # CMakeLists.txt asks for (ITKCommon, ITKAnisotropicSmoothing,
-  # ITKThresholding, ITKWatersheds), matching the "explicit COMPONENTS is a
-  # correctness requirement" rule from CMakeLists.txt's own comments (an
-  # unpruned build would drag in ITKVtkGlue/VTK here too, same crash class
-  # documented for the Homebrew build in .context/research.md).
-  # ---------------------------------------------------------------------
-  ubuntu-x86_64:
-    name: Ubuntu x86_64 (ITK built from source)
-    runs-on: ubuntu-latest
-    # Generous ceiling: a from-scratch, pruned ITK build is estimated
-    # (reasoned from Homebrew's dependency graph and community build-time
-    # reports, NOT measured in CI) at roughly 10-25 minutes on a modern
-    # multi-core machine. This has not been timed on an actual Actions
-    # runner. Recalibrate this number, and the estimate in this comment,
-    # after the first real run -- do not trust it blindly.
+  build:
+    name: Build + test (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Pinned rather than -latest: all of macos-14/15/26 are arm64 today,
+          # but -latest rolls forward on GitHub's schedule and would land a
+          # toolchain/cache surprise on an unrelated PR.
+          - os: macos-15
+            label: macOS arm64
+            mex: mexitk.mexmaca64
+            artifact: mexitk-macos-arm64
+          - os: ubuntu-latest
+            label: Linux x86_64
+            mex: mexitk.mexa64
+            artifact: mexitk-ubuntu-x86_64
     env:
       MLM_LICENSE_TOKEN: ${{ secrets.MLM_LICENSE_TOKEN }}
+      ITK_PREFIX: ${{ github.workspace }}/../itk-prefix
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install build toolchain
-        # GitHub's ubuntu-latest image ships build-essential/gcc/cmake
-        # already (per actions/runner-images' documented software list);
-        # this is a defensive no-op in the common case, kept explicit so the
-        # job does not silently depend on image contents that could change.
-        run: sudo apt-get update && sudo apt-get install -y build-essential
+      - name: Record compiler version for the cache key
+        id: cxx
+        # A statically linked C++17 dependency graph is ABI-sensitive to the
+        # compiler, so a cached ITK built by a different compiler is not safe to
+        # reuse.
+        run: echo "value=$(c++ --version | head -1 | tr -cd '[:alnum:].' )" >> "$GITHUB_OUTPUT"
 
-      - name: Determine compiler version for cache key
-        id: cxx-version
-        run: echo "value=$(g++ -dumpfullversion -dumpversion)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache built ITK
+      - name: Cache static ITK
         id: itk-cache
         uses: actions/cache@v6
         with:
-          path: ${{ runner.temp }}/itk-install
-          # Cache key components, in the order actions/cache docs recommend
-          # thinking about invalidation: ITK tag, platform+arch, the exact
-          # pruned module list (hardcoded here rather than hashFiles()'d
-          # from a separate cmake/ file, since this workflow does not own
-          # one -- if CMakeLists.txt's MEXITK_ITK_COMPONENTS list ever
-          # changes, this literal must be updated by hand or the cache will
-          # serve a stale module set), and the compiler version (C++17 ABI
-          # is compiler-version-sensitive for a statically-linked-in
-          # dependency graph). The trailing -v1 lets the whole scheme be
-          # invalidated on purpose by bumping it, independent of the above.
-          key: itk-${{ runner.os }}-x86_64-${{ env.ITK_TAG }}-common_aniso_thresh_watersheds-gcc${{ steps.cxx-version.outputs.value }}-v1
+          path: ${{ env.ITK_PREFIX }}
+          # The module list is part of the key via the hash of build_itk.sh,
+          # which owns that list. Change the modules, change the script, get a
+          # new cache. That is deliberately better than a hand-maintained
+          # literal that silently goes stale.
+          key: itk-static-${{ matrix.os }}-${{ env.ITK_VERSION }}-${{ hashFiles('tools/build_itk.sh') }}-${{ steps.cxx.outputs.value }}
 
-      - name: Build ITK from source
+      - name: Build static ITK
         if: steps.itk-cache.outputs.cache-hit != 'true'
-        run: |
-          git clone --branch "$ITK_TAG" --depth 1 \
-            https://github.com/InsightSoftwareConsortium/ITK.git "$RUNNER_TEMP/itk-src"
-          cmake -S "$RUNNER_TEMP/itk-src" -B "$RUNNER_TEMP/itk-build" \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/itk-install" \
-            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-            -DBUILD_SHARED_LIBS=ON \
-            -DBUILD_TESTING=OFF \
-            -DBUILD_EXAMPLES=OFF \
-            -DITK_BUILD_DEFAULT_MODULES=OFF \
-            -DModule_ITKCommon=ON \
-            -DModule_ITKAnisotropicSmoothing=ON \
-            -DModule_ITKThresholding=ON \
-            -DModule_ITKWatersheds=ON
-          cmake --build "$RUNNER_TEMP/itk-build" -j "$(nproc)"
-          cmake --install "$RUNNER_TEMP/itk-build"
+        # Measured at ~80s on a 12-core M4 Pro for the pruned module set;
+        # expect several minutes on a runner with fewer cores. Cached after the
+        # first run.
+        env:
+          ITK_BUILD_WORKDIR: ${{ runner.temp }}/itk-work
+        run: ./tools/build_itk.sh "$ITK_PREFIX" "$ITK_VERSION"
 
       - name: Set up MATLAB
         id: setup-matlab
@@ -247,20 +124,28 @@ jobs:
 
       - name: Configure
         env:
+          # Feeds CMakeLists.txt's MATLAB_ROOT_DIR fallback: setup-matlab
+          # installs MATLAB where FindMatlab's default search will not look.
           MATLAB_ROOT_DIR: ${{ steps.setup-matlab.outputs.matlabroot }}
         run: |
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
-            -DITK_DIR="${{ runner.temp }}/itk-install/lib/cmake/ITK-5.4"
+            -DITK_DIR="$ITK_PREFIX/lib/cmake/ITK-5.4"
 
       - name: Build
-        run: cmake --build build -j "$(nproc)"
+        run: cmake --build build -j
+
+      - name: Check the MEX is redistributable
+        # Fails if ITK is still a runtime dependency or a build-time prefix got
+        # baked in. Verified to reject a Homebrew-linked MEX and accept a
+        # static one.
+        run: ./tools/check_redistributable.sh "matlab/${{ matrix.mex }}"
 
       - name: Upload built MEX
         uses: actions/upload-artifact@v7
         with:
-          name: mexitk-ubuntu-x86_64
-          path: matlab/mexitk.mexa64
+          name: ${{ matrix.artifact }}
+          path: matlab/${{ matrix.mex }}
           if-no-files-found: error
 
       - name: Determine MATLAB license availability
@@ -275,37 +160,108 @@ jobs:
       - name: Warn if MATLAB tests are being skipped
         if: steps.matlab-license.outputs.available == 'false'
         run: |
-          echo "::warning::Skipping the mexitk test suite: this repository is private and no MLM_LICENSE_TOKEN secret is configured, so matlab-actions/run-command cannot license MATLAB. The MEX above was built (build does not need a license) but NOT test-verified in this run. Request a MATLAB Batch Licensing Pilot token from MathWorks and add it as the MLM_LICENSE_TOKEN repo secret, or make the repository public, to get real test signal."
+          echo "::warning::Skipping the mexitk test suite: this repository is private and no MLM_LICENSE_TOKEN secret is set, so matlab-actions cannot license MATLAB. The MEX was built but NOT test-verified in this run."
 
       - name: Run mexitk test suite
+        if: steps.matlab-license.outputs.available == 'true'
+        uses: matlab-actions/run-command@v3
+        with:
+          # run-command rather than `matlab -batch`/ctest: the free public-repo
+          # licensing lives inside this action. run_mexitk_tests returns the
+          # failure count; assert is the documented way to fail the step.
+          command: >-
+            addpath('matlab');
+            assert(run_mexitk_tests('.') == 0,
+            'mexitk test suite reported one or more failures; see log above.')
+
+  verify-clean-runner:
+    # The point of this job: this runner never installs ITK. If the downloaded
+    # MEX loads and passes here, a user who downloads it can use it. That claim
+    # cannot be made by the build job, which has ITK sitting on disk.
+    name: Verify on clean runner, no ITK (${{ matrix.label }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            label: macOS arm64
+            mex: mexitk.mexmaca64
+            artifact: mexitk-macos-arm64
+          - os: ubuntu-latest
+            label: Linux x86_64
+            mex: mexitk.mexa64
+            artifact: mexitk-ubuntu-x86_64
+    env:
+      MLM_LICENSE_TOKEN: ${{ secrets.MLM_LICENSE_TOKEN }}
+    steps:
+      # Checked out for the test suite and fixtures only. Nothing is built here
+      # and ITK is never installed; adding either would defeat the job.
+      - uses: actions/checkout@v7
+
+      - name: Download the built MEX
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: matlab
+
+      - name: Confirm no ITK is present on this runner
+        run: |
+          echo "--- searching for any ITK install ---"
+          found=0
+          for p in /opt/homebrew/opt/itk /usr/local/opt/itk /usr/include/ITK-5.4 /usr/local/include/ITK-5.4; do
+            if [ -e "$p" ]; then echo "UNEXPECTED: $p exists"; found=1; fi
+          done
+          if [ "$found" = "1" ]; then
+            echo "::error::This runner has ITK installed, so it cannot prove the MEX is self-contained."
+            exit 1
+          fi
+          echo "No ITK on this runner. Loading the MEX here is a real test."
+          chmod +x "matlab/${{ matrix.mex }}" || true
+
+      - name: Re-check the downloaded artifact
+        run: ./tools/check_redistributable.sh "matlab/${{ matrix.mex }}"
+
+      - name: Set up MATLAB
+        uses: matlab-actions/setup-matlab@v3
+        with:
+          release: ${{ env.MATLAB_RELEASE }}
+          cache: true
+
+      - name: Determine MATLAB license availability
+        id: matlab-license
+        run: |
+          if [ "${{ github.event.repository.private }}" = "true" ] && [ -z "$MLM_LICENSE_TOKEN" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Warn if the clean-runner check is being skipped
+        if: steps.matlab-license.outputs.available == 'false'
+        run: |
+          echo "::warning::Cannot license MATLAB, so the downloaded MEX was inspected but never loaded. Redistributability is NOT verified in this run."
+
+      - name: Load the MEX and run the suite with no ITK installed
         if: steps.matlab-license.outputs.available == 'true'
         uses: matlab-actions/run-command@v3
         with:
           command: >-
             addpath('matlab');
             assert(run_mexitk_tests('.') == 0,
-            'mexitk test suite reported one or more failures; see log above.')
+            'The downloaded MEX failed on a runner with no ITK installed.')
 
-  # ---------------------------------------------------------------------
-  # Windows -- best-effort target per project brief, and explicitly allowed
-  # to never block. Disabled rather than written-and-broken because none of
-  # the following were established anywhere in this project's research:
-  #   - How ITK 5.4+ gets onto a Windows runner at all (no apt/brew
-  #     equivalent verified; vcpkg's ITK 5.4.4 port is the closest lead in
-  #     .context/research.md but was never built).
-  #   - Whether matlab_add_mex()'s MSVC path needs any analogue of the
-  #     -Wl,-ld_classic workaround CMakeLists.txt applies on Apple's linker
-  #     (untested, and the failure mode -- if any -- is unknown).
-  #   - The MEX extension (mexw64) and artifact path have never been
-  #     produced by an actual build.
-  # A job that is `if: false` costs nothing and documents the gap; a job
-  # that runs and fails on every push trains everyone to ignore red CI.
-  # Flip this on only after a maintainer has a real, locally-reproduced
-  # Windows build to copy from -- not speculatively.
-  # ---------------------------------------------------------------------
   windows-placeholder:
+    # Best-effort target, explicitly allowed never to block. Disabled rather
+    # than written-and-broken: how ITK 5.4+ gets onto a Windows runner was never
+    # established here (vcpkg's port is the lead, never built), and the MSVC
+    # link path for matlab_add_mex is untested. A job that is `if: false` costs
+    # nothing and documents the gap; a job that fails every push trains people to
+    # ignore red CI. Turn on only with a locally reproduced Windows build.
     name: "Windows (disabled -- unresolved toolchain, see workflow comments)"
     if: false
     runs-on: windows-latest
     steps:
-      - run: echo "Windows CI is not implemented. See the comment block above this job in ci.yml."
+      - run: echo "Windows CI is not implemented. See the comment block above this job."

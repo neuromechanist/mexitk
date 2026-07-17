@@ -1,0 +1,265 @@
+# mexitk release
+#
+# SPDX-License-Identifier: BSD-3-Clause
+# Copyright (c) 2026, Seyed Yahya Shirazi <shirazi@ieee.org>
+# Swartz Center for Computational Neuroscience (SCCN),
+# Institute for Neural Computation (INC), UC San Diego.
+#
+# ---------------------------------------------------------------------------
+# Builds a redistributable MEX per platform on a `v*` tag push and attaches the
+# binaries to the GitHub release.
+#
+# The binaries are the product. A user should get a working MEX without building
+# ITK. That only holds if the MEX is genuinely self-contained, so every artifact
+# passes two gates before it is attached:
+#
+#   1. tools/check_redistributable.sh - no ITK runtime dependency, no build-time
+#      prefix baked in. (A Homebrew-linked MEX had 22 references into
+#      /opt/homebrew/opt/itk/lib and would fail for every downloader with an
+#      opaque dyld error. That is worse than shipping nothing, because it looks
+#      like it should work.)
+#   2. verify-clean-runner - the artifact is downloaded onto a fresh runner that
+#      never installed ITK, loaded by MATLAB, and run against the full suite.
+#      A build-and-test-on-the-same-runner job cannot make this claim.
+#
+# An artifact that fails either gate is NOT attached, and the release notes are
+# appended to say that platform is unsupported in this release. A missing binary
+# with no explanation reads as an oversight; a stated one is information.
+#
+# Zenodo archives release assets, so whatever is attached here lands in the DOI'd
+# artifact. .zenodo.json and CITATION.cff must be committed BEFORE the tag:
+# Zenodo reads them at release time and a minted DOI cannot be cleanly retracted.
+# ---------------------------------------------------------------------------
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build and attach binaries for"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  MATLAB_RELEASE: R2025b
+  ITK_VERSION: 5.4.6
+
+jobs:
+  build:
+    name: Build (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    # A legacy or best-effort target must never sink the release.
+    continue-on-error: ${{ matrix.required == false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            label: macOS arm64 (maca64)
+            mex: mexitk.mexmaca64
+            artifact: mexitk-macos-arm64
+            required: true
+          - os: ubuntu-latest
+            label: Linux x86_64 (glnxa64)
+            mex: mexitk.mexa64
+            artifact: mexitk-ubuntu-x86_64
+            required: true
+          # Legacy: R2025b is MathWorks' final Intel-Mac release. Built if it is
+          # free, never blocking.
+          - os: macos-13
+            label: macOS x86_64 (maci64, legacy)
+            mex: mexitk.mexmaci64
+            artifact: mexitk-macos-x86_64
+            required: false
+    env:
+      ITK_PREFIX: ${{ github.workspace }}/../itk-prefix
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Record compiler version for the cache key
+        id: cxx
+        run: echo "value=$(c++ --version | head -1 | tr -cd '[:alnum:].' )" >> "$GITHUB_OUTPUT"
+
+      - name: Cache static ITK
+        id: itk-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.ITK_PREFIX }}
+          key: itk-static-${{ matrix.os }}-${{ env.ITK_VERSION }}-${{ hashFiles('tools/build_itk.sh') }}-${{ steps.cxx.outputs.value }}
+
+      - name: Build static ITK
+        if: steps.itk-cache.outputs.cache-hit != 'true'
+        env:
+          ITK_BUILD_WORKDIR: ${{ runner.temp }}/itk-work
+        run: ./tools/build_itk.sh "$ITK_PREFIX" "$ITK_VERSION"
+
+      - name: Set up MATLAB
+        id: setup-matlab
+        uses: matlab-actions/setup-matlab@v3
+        with:
+          release: ${{ env.MATLAB_RELEASE }}
+          cache: true
+
+      - name: Configure and build
+        env:
+          MATLAB_ROOT_DIR: ${{ steps.setup-matlab.outputs.matlabroot }}
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DITK_DIR="$ITK_PREFIX/lib/cmake/ITK-5.4"
+          cmake --build build -j
+
+      - name: Gate 1 - the MEX must be redistributable
+        run: ./tools/check_redistributable.sh "matlab/${{ matrix.mex }}"
+
+      - name: Upload built MEX
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: matlab/${{ matrix.mex }}
+          if-no-files-found: error
+
+  verify-clean-runner:
+    name: Gate 2 - load on clean runner, no ITK (${{ matrix.label }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    continue-on-error: ${{ matrix.required == false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            label: macOS arm64
+            mex: mexitk.mexmaca64
+            artifact: mexitk-macos-arm64
+            required: true
+          - os: ubuntu-latest
+            label: Linux x86_64
+            mex: mexitk.mexa64
+            artifact: mexitk-ubuntu-x86_64
+            required: true
+          - os: macos-13
+            label: macOS x86_64 (legacy)
+            mex: mexitk.mexmaci64
+            artifact: mexitk-macos-x86_64
+            required: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Download the built MEX
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: matlab
+
+      - name: Confirm no ITK is present on this runner
+        run: |
+          found=0
+          for p in /opt/homebrew/opt/itk /usr/local/opt/itk /usr/include/ITK-5.4 /usr/local/include/ITK-5.4; do
+            if [ -e "$p" ]; then echo "UNEXPECTED: $p exists"; found=1; fi
+          done
+          if [ "$found" = "1" ]; then
+            echo "::error::ITK is installed on this runner; it cannot prove the MEX is self-contained."
+            exit 1
+          fi
+          echo "No ITK on this runner."
+
+      - name: Re-check the downloaded artifact
+        run: ./tools/check_redistributable.sh "matlab/${{ matrix.mex }}"
+
+      - name: Set up MATLAB
+        uses: matlab-actions/setup-matlab@v3
+        with:
+          release: ${{ env.MATLAB_RELEASE }}
+          cache: true
+
+      - name: Load the MEX and run the suite with no ITK installed
+        uses: matlab-actions/run-command@v3
+        with:
+          command: >-
+            addpath('matlab');
+            assert(run_mexitk_tests('.') == 0,
+            'The downloaded MEX failed on a runner with no ITK installed.')
+
+  attach:
+    name: Attach verified binaries to the release
+    needs: [build, verify-clean-runner]
+    # Runs even when a non-required platform failed, so the release still ships
+    # what did pass and says what did not.
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download all artifacts that were produced
+        uses: actions/download-artifact@v7
+        with:
+          path: dist
+        continue-on-error: true
+
+      - name: Attach binaries and record platform status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          VERIFY_RESULT: ${{ needs.verify-clean-runner.result }}
+        run: |
+          set -euo pipefail
+          mkdir -p upload
+
+          # Only ship what cleared BOTH gates. If gate 2 did not succeed we have
+          # no evidence a downloader can load these, so attach nothing rather
+          # than ship an untested claim.
+          if [ "$VERIFY_RESULT" != "success" ]; then
+            echo "::warning::Clean-runner verification did not succeed ($VERIFY_RESULT); not attaching any binary."
+          else
+            find dist -type f -name 'mexitk.mex*' -exec cp {} upload/ \; 2>/dev/null || true
+          fi
+
+          {
+            echo ""
+            echo "---"
+            echo ""
+            echo "## Binaries in this release"
+            echo ""
+          } > notes_append.md
+
+          have_any=0
+          for entry in "mexitk.mexmaca64|macOS arm64 (maca64)" \
+                       "mexitk.mexa64|Linux x86_64 (glnxa64)" \
+                       "mexitk.mexmaci64|macOS x86_64 (maci64, legacy)"; do
+            f="${entry%%|*}"; label="${entry##*|}"
+            if [ -f "upload/$f" ]; then
+              echo "- **$label**: \`$f\` attached. Self-contained (static ITK); verified to load on a runner with no ITK installed." >> notes_append.md
+              have_any=1
+            else
+              echo "- **$label**: not supported in this release; no binary was produced or it failed verification. Build from source, see BUILDING.md." >> notes_append.md
+            fi
+          done
+          echo "- **Windows (mexw64)**: not supported. The Windows ITK toolchain is unresolved; see .github/workflows/ci.yml." >> notes_append.md
+
+          {
+            echo ""
+            echo "Binaries link ITK statically, so they require no ITK install and no package manager. They do require MATLAB ${MATLAB_RELEASE:-R2025b}-compatible runtime support for the MEX API."
+          } >> notes_append.md
+
+          if [ "$have_any" = "1" ]; then
+            gh release upload "$TAG" upload/* --clobber --repo "$GITHUB_REPOSITORY"
+          fi
+
+          # Append rather than replace: the human-written notes stay intact.
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body > notes_current.md
+          cat notes_current.md notes_append.md > notes_final.md
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes_final.md
+
+          echo "Attached:"; ls -la upload/ 2>/dev/null || echo "  (none)"
