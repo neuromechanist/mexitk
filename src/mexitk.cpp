@@ -80,9 +80,16 @@ void PrintOpcodeListing() {
     }
   }
   mexPrintf(
-      "\nStatus: 'validated' reproduces captured output from the original\n"
-      "matitk binary under test; 'smoke-tested' runs but has no reference\n"
-      "capture; 'untested' has never been run against a reference.\n");
+      "\nStatus vocabulary:\n"
+      "  validated         bit-identical to the original matitk binary,\n"
+      "                    asserted by a test against a stored reference.\n"
+      "  bounded-deviation compared against a reference and does NOT match\n"
+      "                    bit-for-bit; the difference is a measured, bounded\n"
+      "                    consequence of ITK's evolution from 2.4 to 5.x.\n"
+      "                    The bound is asserted by a test. See the note.\n"
+      "  smoke-tested      runs, but no reference capture exists.\n"
+      "  untested          never run against a reference.\n"
+      "See docs/COMPATIBILITY.md for the full record.\n");
   mexPrintf("\nExample:\n  load mri; V = squeeze(D);\n");
   mexPrintf("  b = mexitk('FCA',[5 0.0625 3.0], double(V));\n");
   mexPrintf("  [c1 c2] = mexitk('FOMT',[2 128], double(V));\n\n");
