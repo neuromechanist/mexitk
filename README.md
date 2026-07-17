@@ -1,5 +1,8 @@
 # mexitk
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21405977.svg)](https://doi.org/10.5281/zenodo.21405977)
+[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](LICENSE)
+
 A MATLAB to ITK bridge: call [ITK](https://www.itk.org) (Insight Segmentation and Registration Toolkit)
 image filters from MATLAB through a MEX interface.
 

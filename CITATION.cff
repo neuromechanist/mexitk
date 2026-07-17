@@ -24,6 +24,9 @@ repository-code: "https://github.com/neuromechanist/mexitk"
 license: BSD-3-Clause
 version: 0.1.0
 date-released: "2026-07-16"
+# Zenodo concept DOI: always resolves to the latest archived version.
+# The v0.1.0 version-specific DOI is 10.5281/zenodo.21405978.
+doi: 10.5281/zenodo.21405977
 keywords:
   - matlab
   - mex
@@ -64,7 +67,3 @@ references:
     volume: 8
     year: 2014
     doi: 10.3389/fninf.2014.00013
-
-# Zenodo mints the DOI from the GitHub release. Once v0.1.0 is archived, add a
-# top-level `doi:` field here with the minted DOI. Do not fill this in with a
-# guessed or reserved-but-unconfirmed DOI.
