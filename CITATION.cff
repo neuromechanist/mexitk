@@ -9,9 +9,9 @@ abstract: >-
   Apple Silicon build. mexitk was built to unblock MRI segmentation in NFT
   (Neuroelectromagnetic Forward Modeling Toolbox), an EEG head-modeling EEGLAB
   plugin that depends on MATITK's calling convention but can no longer run it on
-  modern, Apple Silicon-only Macs. Version 0.1.0 implements 3 of the original's
-  40 opcodes (FCA, FOMT, SWS); each opcode publishes its validation status
-  against output captured from the original binary.
+  modern, Apple Silicon-only Macs. It implements 3 of the original's 40 opcodes
+  (FCA, FOMT, SWS); each opcode publishes its validation status against output
+  captured from the original binary.
 type: software
 authors:
   - family-names: Shirazi
@@ -22,10 +22,11 @@ authors:
       ror: "https://ror.org/01bt2qm76"
 repository-code: "https://github.com/neuromechanist/mexitk"
 license: BSD-3-Clause
-version: 0.1.0
-date-released: "2026-07-16"
-# Zenodo concept DOI: always resolves to the latest archived version.
-# The v0.1.0 version-specific DOI is 10.5281/zenodo.21405978.
+version: 0.2.0
+date-released: "2026-07-17"
+# Zenodo concept DOI: always resolves to the latest archived version, so this
+# does not need bumping per release. Version-specific DOIs are minted per tag
+# and listed on the Zenodo record.
 doi: 10.5281/zenodo.21405977
 keywords:
   - matlab
