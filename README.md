@@ -72,10 +72,17 @@ Read it before relying on this for science.
 
 | Platform | State |
 |---|---|
-| macOS arm64 (`maca64`) | Builds, loads, 34/34 tests pass. MATLAB R2025b, ITK 5.4.6, Apple clang 21. |
-| Linux x86_64 (`glnxa64`) | Primary target, **not yet built or tested**. |
-| macOS x86_64 (`maci64`) | Legacy; not attempted. |
-| Windows | Best-effort only; not attempted. |
+| macOS arm64 (`maca64`) | Builds, loads, 34/34 tests pass. Verified in CI on a runner with **no ITK installed**. |
+| Linux x86_64 (`glnxa64`) | Builds, loads, 34/34 tests pass. Verified in CI on a runner with **no ITK installed**. Must be built with GCC 12 or older; see BUILDING.md. |
+| macOS x86_64 (`maci64`) | Legacy; built on a best-effort basis only. R2025b is MathWorks' final Intel-Mac release. |
+| Windows | Best-effort only; the ITK toolchain there is unresolved. Not attempted. |
+
+Binaries link ITK **statically**, so they need no ITK install and no package manager.
+"Verified on a runner with no ITK installed" means exactly that:
+CI downloads the built artifact onto a fresh machine that never installed ITK,
+loads it in MATLAB, and runs the full suite.
+A build-and-test-on-the-same-machine result cannot make that claim,
+because the toolchain is still sitting there.
 
 ## Quick start
 

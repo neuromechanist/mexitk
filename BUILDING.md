@@ -133,7 +133,7 @@ On the verified macOS arm64 build, this reports 34/34 tests passing.
 | Platform | MEX extension | Status |
 |---|---|---|
 | macOS arm64 | `mexmaca64` | Builds and tested, 34/34, against both Homebrew ITK and a static ITK. Verified on Apple M4 Pro, MATLAB R2025b, ITK 5.4.6, Apple clang 21. The static build is confirmed self-contained (no ITK or package-manager paths recorded). |
-| Linux x86_64 | `mexa64` | Builds in CI (ITK 5.4.6 from source). With a **shared** ITK the MEX compiles but fails to load: `libitkNetlibSlatec-5.4.so.1: cannot open shared object file`. The static path exists to fix exactly that; see CI for its current state rather than trusting this table. |
+| Linux x86_64 | `mexa64` | Builds and tested, 34/34, with static ITK 5.4.6 built from source. Verified in CI on a runner with no ITK installed. **Must be built with GCC 12 or older** (see Troubleshooting). |
 | macOS x86_64 | `mexmaci64` | Untried. Legacy target: R2025b is MathWorks' final Intel-Mac release. Build it if convenient, but it is never a blocker. |
 | Windows | `mexw64` | Not attempted. Best-effort only, through GitHub Actions. |
 
@@ -195,3 +195,34 @@ ITKCommon ITKAnisotropicSmoothing ITKThresholding ITKWatersheds
 If you add a filter that needs a new ITK module, add that module to the
 `COMPONENTS` list explicitly; do not switch to an unscoped
 `find_package(ITK REQUIRED)` to save the trouble of enumerating modules.
+
+### Linux: "version `GLIBCXX_3.4.32' not found" when loading the MEX
+
+MATLAB preloads its **own** `libstdc++.so.6` from `sys/os/glnxa64`, and that copy
+is usually older than a current distribution's.
+R2025b bundles `libstdc++.so.6.0.30`, which provides up to `GLIBCXX_3.4.30`
+(measured directly from a real R2025b install, not inferred).
+Ubuntu 24.04's default GCC 13 emits references to `GLIBCXX_3.4.32`,
+so the MEX compiles and links cleanly and then fails at load:
+
+```
+Invalid MEX-file 'mexitk.mexa64': .../sys/os/glnxa64/libstdc++.so.6:
+version `GLIBCXX_3.4.32' not found (required by mexitk.mexa64)
+```
+
+Build with **GCC 12 or older**, which tops out at exactly `GLIBCXX_3.4.30`:
+
+```sh
+sudo apt-get install -y gcc-12 g++-12
+export CC=gcc-12 CXX=g++-12      # set before building ITK too, so the ABI matches
+```
+
+`tools/check_redistributable.sh` fails the build if the MEX requires a newer
+`GLIBCXX` than MATLAB provides, and `CMakeLists.txt` warns at configure time.
+
+**Do not work around this with `-static-libstdc++`.**
+It was tried, and it is worse than the problem.
+It puts a second libstdc++ in the process, so the C++ exception that
+`mexErrMsgIdAndTxt` throws unwinds out of the MEX using the static copy and is
+caught by MATLAB's copy, which segfaults the entire MATLAB session.
+It appears to work, because it only crashes on the error paths.
