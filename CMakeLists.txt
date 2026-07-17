@@ -34,7 +34,19 @@ set(MEXITK_ITK_COMPONENTS
   ITKWatersheds            # SWS: WatershedImageFilter
 )
 find_package(ITK 5.4 REQUIRED COMPONENTS ${MEXITK_ITK_COMPONENTS})
-include(${ITK_USE_FILE})
+
+# Deliberately NOT include(${ITK_USE_FILE}).
+# That legacy file calls a global include_directories() with ITK's dependency
+# tree, which lands as plain -I. Anything in /opt/homebrew/include then gets
+# searched BEFORE the toolchain's own headers, and if any Homebrew package has
+# installed a stddef.h there, libc++'s <cstddef> resolves #include_next to the
+# wrong file and the build dies with "tried including <stddef.h> but didn't find
+# libc++'s <stddef.h>". Whether it breaks depends on which unrelated packages
+# happen to be installed, so it passes locally and fails on CI runners.
+# ITK 5's imported targets carry their include directories as usage
+# requirements, and CMake treats IMPORTED targets' interface includes as
+# -isystem, which keeps them after the toolchain headers where they belong.
+# Link ${ITK_LIBRARIES} and let the targets do it.
 
 set(MEXITK_SOURCES
   src/mexitk.cpp
@@ -55,7 +67,14 @@ matlab_add_mex(
   R2018a
 )
 
-target_include_directories(mexitk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${ITK_INCLUDE_DIRS})
+target_include_directories(mexitk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+# ITK's imported targets name dependency libraries (fftw3_threads and friends)
+# without absolute paths, and ITK_USE_FILE used to supply the search path via a
+# global link_directories(). Since we no longer include that file, provide the
+# link directories explicitly. This is the half of ITK_USE_FILE that is actually
+# needed; the include half is what poisoned the header search order.
+target_link_directories(mexitk PRIVATE ${ITK_LIBRARY_DIRS})
 
 if(APPLE)
   # FindMatlab.cmake links every MEX against extern/lib/<arch>/cppMexFunction.map
