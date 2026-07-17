@@ -1,0 +1,28 @@
+# Build output
+build/
+build-*/
+cmake-build-*/
+
+# CMake junk (in case of an accidental in-source configure)
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+compile_commands.json
+Testing/
+
+# Compiled MEX binaries (built artifacts, not source)
+*.mexmaca64
+*.mexa64
+*.mexmaci64
+*.mexw64
+
+# MATLAB
+*.asv
+slprj/
+
+# macOS
+.DS_Store
+
+# Note: do NOT add a blanket *.mat rule here.
+# tests/fixtures/*.mat are committed reference fixtures and must stay tracked.

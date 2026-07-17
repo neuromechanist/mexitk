@@ -1,0 +1,71 @@
+cff-version: 1.2.0
+message: >-
+  If you use mexitk in your research, please cite it using the metadata
+  below.
+title: mexitk
+type: software
+version: 0.1.0
+date-released: "2026-07-16"
+abstract: >-
+  mexitk is a MATLAB-ITK bridge: a MEX interface that lets MATLAB call ITK
+  (Insight Segmentation and Registration Toolkit) image filters directly.
+  It is a clean-room reimplementation of the calling convention of MATITK
+  (Chu and Hamarneh, 2005), which is abandoned, has no public source, no
+  licence, and no Apple Silicon build. mexitk was built to unblock MRI
+  segmentation in NFT (Neuroelectromagnetic Forward Modeling Toolbox), an
+  EEG head-modeling EEGLAB plugin that depends on MATITK's calling
+  convention but can no longer run it on modern, Apple Silicon-only Macs.
+authors:
+  - family-names: Shirazi
+    given-names: Seyed Yahya
+    orcid: "https://orcid.org/0000-0001-5557-259X"
+    email: shirazi@ieee.org
+    affiliation: >-
+      Swartz Center for Computational Neuroscience (SCCN), Institute for
+      Neural Computation (INC), University of California San Diego
+license: BSD-3-Clause
+repository-code: "https://github.com/neuromechanist/mexitk"
+keywords:
+  - MATLAB
+  - ITK
+  - MEX
+  - image segmentation
+  - medical imaging
+  - EEG
+references:
+  - type: article
+    title: "MATITK: Extending MATLAB with ITK"
+    authors:
+      - family-names: Chu
+        given-names: Vincent
+      - family-names: Hamarneh
+        given-names: Ghassan
+    journal: Insight Journal
+    year: 2005
+    notes: >-
+      Original MATITK paper. mexitk reconstructs MATITK's calling
+      convention from this paper and from the original binary's own
+      printed self-documentation; no MATITK source was available. mexitk
+      does not reuse any MATITK code and is not endorsed by its authors.
+  - type: article
+    title: "ITK: enabling reproducible research and open science"
+    authors:
+      - family-names: McCormick
+        given-names: M.
+      - family-names: Liu
+        given-names: X.
+      - family-names: Jomier
+        given-names: J.
+      - family-names: Marion
+        given-names: C.
+      - family-names: Ibanez
+        given-names: L.
+    journal: Frontiers in Neuroinformatics
+    volume: 8
+    year: 2014
+    doi: 10.3389/fninf.2014.00013
+
+# Zenodo DOI placeholder: this project has not been archived on Zenodo yet,
+# so no DOI exists. Once a release is archived, add a top-level `doi:`
+# field here with the minted DOI. Do not fill this in with a guessed or
+# reserved-but-unconfirmed DOI.
