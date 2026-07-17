@@ -26,9 +26,15 @@
 # appended to say that platform is unsupported in this release. A missing binary
 # with no explanation reads as an oversight; a stated one is information.
 #
-# Zenodo archives release assets, so whatever is attached here lands in the DOI'd
-# artifact. .zenodo.json and CITATION.cff must be committed BEFORE the tag:
-# Zenodo reads them at release time and a minted DOI cannot be cleanly retracted.
+# Zenodo and these assets: measured on v0.2.0, Zenodo's GitHub integration
+# archives ONLY the source zipball (neuromechanist/mexitk-v0.2.0.zip). The MEX
+# files attached here are NOT in the DOI'd artifact, despite being attached
+# before the release was published. Do not assume otherwise: the DOI cites the
+# source, and the source is buildable via tools/build_itk.sh. Getting binaries
+# into a Zenodo record would need a separate upload to the Zenodo API.
+#
+# .zenodo.json and CITATION.cff must still be committed BEFORE the tag: Zenodo
+# reads them at release time and a minted DOI cannot be cleanly retracted.
 # ---------------------------------------------------------------------------
 
 name: Release
