@@ -76,6 +76,22 @@ if echo "$CHECKABLE" | grep -qE '/opt/homebrew|/usr/local/opt|/opt/local|itk-ins
   status=1
 fi
 
+# 3. Linux only: no libstdc++/libgcc dependency.
+#    MATLAB preloads its own, older, libstdc++.so.6. A MEX built against a newer
+#    distro toolchain then fails at load with "version `GLIBCXX_3.4.xx' not
+#    found", which is a redistributability failure even though no ITK is
+#    involved -- checks 1 and 2 both pass while the file is unusable. CMakeLists
+#    links the C++ runtime statically on Linux to prevent this; this asserts it
+#    actually happened.
+if [ "$(uname -s)" = "Linux" ]; then
+  if echo "$CHECKABLE" | grep -qE 'libstdc\+\+|libgcc_s'; then
+    echo "FAIL: the MEX depends on the system C++ runtime. MATLAB preloads its own"
+    echo "      older libstdc++ and this will fail at load with a GLIBCXX version"
+    echo "      error. Expected -static-libstdc++ -static-libgcc at link time."
+    status=1
+  fi
+fi
+
 if [ "$status" -eq 0 ]; then
   echo "PASS: no ITK runtime dependency and no build-prefix paths."
   echo "      (This proves what is *recorded* in the binary. Loading it in"

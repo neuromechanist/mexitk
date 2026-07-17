@@ -76,6 +76,21 @@ target_include_directories(mexitk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 # needed; the include half is what poisoned the header search order.
 target_link_directories(mexitk PRIVATE ${ITK_LIBRARY_DIRS})
 
+if(UNIX AND NOT APPLE)
+  # MATLAB ships its own libstdc++.so.6 in sys/os/glnxa64 and preloads it, and
+  # that copy is older than a current distro's. A MEX built by, say, Ubuntu's
+  # gcc 13 asks for GLIBCXX_3.4.32, MATLAB's bundled libstdc++ does not provide
+  # it, and the MEX fails to load with:
+  #   version `GLIBCXX_3.4.32' not found (required by mexitk.mexa64)
+  # That would hit every Linux user whose MATLAB is older than their compiler,
+  # not just CI. Linking the C++ runtime statically removes the dependency
+  # entirely, which is the same self-containment goal that makes us link ITK
+  # statically. Safe here because the MEX is a leaf module: no C++ exception or
+  # object ever crosses its boundary (ITK exceptions are caught in mexitk.cpp
+  # and converted to MATLAB errors).
+  target_link_options(mexitk PRIVATE -static-libstdc++ -static-libgcc)
+endif()
+
 if(APPLE)
   # FindMatlab.cmake links every MEX against extern/lib/<arch>/cppMexFunction.map
   # and adds `-Wl,-U,_mexCreateMexFunction` (and friends) so a C-API MEX stays

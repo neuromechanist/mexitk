@@ -180,6 +180,12 @@ jobs:
     # cannot be made by the build job, which has ITK sitting on disk.
     name: Verify on clean runner, no ITK (${{ matrix.label }})
     needs: build
+    # `needs: build` waits on every matrix leg, so without always() one platform
+    # failing to build silently skips verification for the platform that
+    # succeeded -- hiding a real result behind an unrelated failure. Each leg
+    # here stands or falls on its own artifact; a leg whose build failed will
+    # fail at download, which is honest rather than invisible.
+    if: always()
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
