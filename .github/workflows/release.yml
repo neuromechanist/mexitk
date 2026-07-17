@@ -70,13 +70,21 @@ jobs:
             mex: mexitk.mexa64
             artifact: mexitk-ubuntu-x86_64
             required: true
-          # Legacy: R2025b is MathWorks' final Intel-Mac release. Built if it is
-          # free, never blocking.
-          - os: macos-13
-            label: macOS x86_64 (maci64, legacy)
-            mex: mexitk.mexmaci64
-            artifact: mexitk-macos-x86_64
-            required: false
+          # macOS x86_64 (maci64) is deliberately absent.
+          #
+          # It is a legacy target (R2025b is MathWorks' final Intel-Mac release)
+          # and the rule is "ship it if it is free, never block on it". It is not
+          # free: on the v0.2.0 attempt the macos-13 leg sat *queued for 26
+          # minutes and never started* -- GitHub is retiring Intel macOS runners
+          # and they no longer allocate reliably. continue-on-error does not help,
+          # because a job that never starts is neither success nor failure: it
+          # just stalls every job that `needs` it, including the attach step, so
+          # one unavailable legacy runner holds the whole release hostage.
+          #
+          # Leaving it out is not silent omission: the attach job's notes loop
+          # records every platform with no attached binary as explicitly
+          # unsupported for that release. Re-add this leg only if Intel runners
+          # become dependable again.
     env:
       ITK_PREFIX: ${{ github.workspace }}/../itk-prefix
     steps:
@@ -157,11 +165,7 @@ jobs:
             mex: mexitk.mexa64
             artifact: mexitk-ubuntu-x86_64
             required: true
-          - os: macos-13
-            label: macOS x86_64 (legacy)
-            mex: mexitk.mexmaci64
-            artifact: mexitk-macos-x86_64
-            required: false
+          # No maci64 leg; see the note in the build job's matrix.
     steps:
       - uses: actions/checkout@v7
         with:
