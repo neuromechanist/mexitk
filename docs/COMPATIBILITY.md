@@ -235,13 +235,58 @@ or refuses to reproduce a defect.
 
 ## Coverage
 
-`mexitk` currently implements **3 of the original's 40 opcodes**: FCA, FOMT and SWS.
-These are the three NFT depends on, and the only three with reference data.
-The remaining 37 are catalogued in `docs/matitk_opcode_registry.txt`
+`mexitk` currently implements **12 of the original's 40 opcodes**:
+FCA, FOMT, SWS, and the 9 smoke-tested filters FBB, FBT, FD, FDG, FF, FGA,
+FMEAN, FMEDIAN and FSN.
+FCA, FOMT and SWS are the three NFT depends on, and the only three with
+reference data; the other 9 have no captured reference (see "Smoke-tested
+opcodes" below).
+The remaining 28 are catalogued in `docs/matitk_opcode_registry.txt`
 (the original binary's own parameter dump)
 and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`,
 but they are **not implemented**.
 See the README for the current status of each.
+
+## Smoke-tested opcodes (no reference)
+
+FBB, FBT, FD, FDG, FF, FGA, FMEAN, FMEDIAN and FSN run and return plausible
+output, but no reference capture exists for them: the only captured reference
+is the 2006 MATITK binary's FCA/FOMT/SWS output (see "The reference" above),
+so there is nothing to measure these 9 against. There are no measurement
+tables for them, unlike FCA and SWS above, because there is no reference to
+measure against.
+
+| Opcode | ITK class |
+|---|---|
+| FBB | `BinomialBlurImageFilter` |
+| FBT | `BinaryThresholdImageFilter` |
+| FD | `DerivativeImageFilter` |
+| FDG | `DiscreteGaussianImageFilter` |
+| FF | `FlipImageFilter` |
+| FGA | `DiscreteGaussianImageFilter` (see below) |
+| FMEAN | `MeanImageFilter` |
+| FMEDIAN | `MedianImageFilter` |
+| FSN | `SigmoidImageFilter` |
+
+**FGA is implemented as a deliberate duplicate of FDG.** Both opcodes have the
+identical registry parameter signature (`gaussianVariance`, `maxKernelWidth`;
+see `docs/matitk_opcode_registry.txt`), and no other ITK class matches that
+parameter shape, so `mexitk` implements `FGA` as the same
+`itk::DiscreteGaussianImageFilter` `FDG` uses. Whether the 2006 binary shipped
+two genuinely distinct filters under these names is unconfirmed against
+MATITK source, since none was available; it is most likely an artifact of the
+original's Perl generator producing one entry per ITK example file. This is
+flagged, not silently assumed.
+
+**One pixel-type deviation: FD promotes `uint8` to `float`.** ITK's
+`DerivativeImageFilter` requires a signed output pixel type
+(`Concept::Signed<OutputPixelType>`), which `uint8` fails and
+`int32`/`float`/`double` satisfy. So `FD` promotes `uint8` input to `float`
+for the derivative and casts back on the way out, mirroring FCA's
+promote-and-cast-back pattern but keyed on signedness rather than
+floating-pointness. The other 8 opcodes in this table run at the native input
+pixel type for all four supported classes (`double`, `single`, `uint8`,
+`int32`); no promotion.
 
 ### `SCSS`: will not support
 
@@ -271,7 +316,5 @@ Calling `mexitk('SCSS', ...)` returns an unknown-operation error, which is the h
   and needs verification against the original binary before implementation.
 - **`FFFT`**: the VNL FFT backend was removed from ITK and rerouted via pocketfft;
   the real/complex output switch semantics are unconfirmed.
-- **`FGA`** is very likely a duplicate of `FDG` (both `DiscreteGaussianImageFilter`),
-  an artifact of the original's Perl generator.
 - **`RD`**: `SetStandardDeviations` is silently inert unless `SmoothDisplacementFieldOn()`
   is also called, a real silent-failure trap to avoid inheriting.

@@ -14,6 +14,15 @@ Status as of 2026-07-16. Version 0.1.0.
 - FCA, FOMT, SWS implemented. 34/34 tests pass on macOS arm64.
 - Agreement with the original measured and documented (`docs/COMPATIBILITY.md`).
 - README, BUILDING.md, LICENSE (BSD-3-Clause), CITATION.cff, CI workflow.
+- **Phase 1: 9 smoke-tested filter opcodes** (FMEDIAN, FMEAN, FBT, FDG, FBB,
+  FSN, FF, FD, FGA) added on top of FCA/FOMT/SWS, bringing the total to 12 of
+  40. All `Category::kFilter`, `Status::kSmokeTested`, no reference data.
+  FD promotes `uint8` to `float` (ITK's `DerivativeImageFilter` requires a
+  signed output pixel type); the other 8 run natively at all four supported
+  pixel types. FGA is a deliberate duplicate of FDG (identical registry
+  parameter signature; see `docs/COMPATIBILITY.md`). 62/62 tests pass on
+  macOS arm64 (`tests/tPhase1FilterSmoke.m` plus the existing suites, no
+  regression).
 
 ## Open decisions for the owner
 
@@ -29,8 +38,9 @@ Status as of 2026-07-16. Version 0.1.0.
    see COMPATIBILITY.md). It feeds Otsu thresholding in NFT's segmentation,
    so the downstream masks can shift slightly.
    The alternative today is that segmentation does not run at all on Apple Silicon.
-3. **How broad should the opcode surface get**, given only 3 have reference data,
-   and reference capture requires the Intel-Linux binary?
+3. **How broad should the opcode surface get?** 12 of 40 are now implemented;
+   only 3 (FCA, FOMT, SWS) have reference data, and reference capture requires
+   the Intel-Linux binary. The 9 Phase 1 opcodes ship smoke-tested only.
 
 ## Next
 
@@ -76,10 +86,10 @@ Status as of 2026-07-16. Version 0.1.0.
 
 ### Broadening the opcode surface
 
-37 opcodes remain unimplemented; parameters are known exactly
+28 opcodes remain unimplemented; parameters are known exactly
 (`docs/matitk_opcode_registry.txt`) and ITK classes are mapped.
-Suggested order: high-confidence, single-output filters first
-(FMEDIAN, FMEAN, FBT, FBD, FBE, FGA/FDG, SCT, SIC).
+Phase 1 (FMEDIAN, FMEAN, FBT, FDG, FBB, FSN, FF, FD, FGA) is done; suggested
+next order: single-output filters next (FBD, FBE, SCT, SIC).
 Each ships with an honest status; no reference data means `smoke-tested` at best.
 
 Known problem cases:
@@ -87,5 +97,4 @@ Known problem cases:
   mesh output, global static state). Recommend dropping rather than porting.
 - **FGMS** could not be pinned to an ITK class; needs verification against the binary.
 - **FFFT** VNL FFT backend was removed; rerouted via pocketfft. Output semantics unconfirmed.
-- **FGA** is likely a duplicate of FDG, an artifact of the original's Perl generator.
 - **RD** `SetStandardDeviations` is inert unless `SmoothDisplacementFieldOn()` is also called.
