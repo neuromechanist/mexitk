@@ -22,7 +22,7 @@ authors:
       ror: "https://ror.org/01bt2qm76"
 repository-code: "https://github.com/neuromechanist/mexitk"
 license: BSD-3-Clause
-version: 0.2.0
+version: 0.3.0
 date-released: "2026-07-17"
 # Zenodo concept DOI: always resolves to the latest archived version, so this
 # does not need bumping per release. Version-specific DOIs are minted per tag

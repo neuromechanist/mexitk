@@ -31,7 +31,7 @@ Keeping ITK keeps the algorithms.
 
 ## Status: honest summary
 
-This is version 0.2.0.
+This is version 0.3.0.
 **30 of the original's 40 opcodes are implemented.**
 3 of those are the ones NFT depends on, and the only 3 with captured reference data.
 The other 27 are smoke-tested (22 filters and 5 segmentation opcodes) with no reference capture.
