@@ -13,7 +13,6 @@
 #include "opcode.h"
 
 #include "itkCastImageFilter.h"
-#include "itkClampImageFilter.h"
 #include "itkGradientAnisotropicDiffusionImageFilter.h"
 
 #include <type_traits>
@@ -56,10 +55,18 @@ void RunFgad(OpContext& ctx) {
   using FilterType = itk::GradientAnisotropicDiffusionImageFilter<RealImage, RealImage>;
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(real);
-  filter->SetNumberOfIterations(CastParam<unsigned int>(p[0], "FGAD", "numberOfIterations"));
+  // SetNumberOfIterations is IdentifierType on the FiniteDifferenceImageFilter
+  // base (itkFiniteDifferenceImageFilter.h:186), same as FCA/FCF/FAAB.
+  filter->SetNumberOfIterations(
+      CastParam<itk::IdentifierType>(p[0], "FGAD", "numberOfIterations"));
   // Time-step stability: same CFL bound and warn-but-proceed behaviour as
   // FCA via the shared AnisotropicDiffusionImageFilter base; see the
-  // timeStep comment in fca.cpp.
+  // timeStep comment in fca.cpp. A negative timeStep runs the diffusion
+  // backward in time (ill-posed); rejected for the same reason as FCA's
+  // guard. timeStep == 0 stays accepted as a defined no-op.
+  if (p[1] < 0.0) {
+    throw OpcodeError("mexitk:FGAD:timeStep", "timeStep must not be negative.");
+  }
   filter->SetTimeStep(p[1]);
   filter->SetConductanceParameter(p[2]);
   filter->Update();
@@ -68,11 +75,7 @@ void RunFgad(OpContext& ctx) {
     ctx.plhs[0] = ExportVolume<RealT>(filter->GetOutput());
   } else {
     // See FcaRealType's comment in fca.cpp for the saturation rationale.
-    using ClampOut = itk::ClampImageFilter<RealImage, InImage>;
-    typename ClampOut::Pointer back = ClampOut::New();
-    back->SetInput(filter->GetOutput());
-    back->Update();
-    ctx.plhs[0] = ExportVolume<PixelT>(back->GetOutput());
+    ctx.plhs[0] = ClampExport<PixelT, RealT>(filter->GetOutput());
   }
 }
 

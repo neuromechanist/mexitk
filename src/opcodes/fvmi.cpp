@@ -14,7 +14,6 @@
 #include "opcode.h"
 
 #include "itkCastImageFilter.h"
-#include "itkClampImageFilter.h"
 #include "itkHessian3DToVesselnessMeasureImageFilter.h"
 #include "itkHessianRecursiveGaussianImageFilter.h"
 
@@ -78,11 +77,7 @@ void RunFvmi(OpContext& ctx) {
     ctx.plhs[0] = ExportVolume<RealT>(vesselness->GetOutput());
   } else {
     // See FcaRealType's comment in fca.cpp for the saturation rationale.
-    using ClampOut = itk::ClampImageFilter<RealImage, InImage>;
-    typename ClampOut::Pointer back = ClampOut::New();
-    back->SetInput(vesselness->GetOutput());
-    back->Update();
-    ctx.plhs[0] = ExportVolume<PixelT>(back->GetOutput());
+    ctx.plhs[0] = ClampExport<PixelT, RealT>(vesselness->GetOutput());
   }
 }
 

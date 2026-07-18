@@ -21,7 +21,11 @@ namespace {
 // (itkBilateralImageFilter.h:174), satisfied by all four supported types,
 // and there is no float requirement anywhere in the class documentation.
 // The output is a normalised weighted average of in-range input values, so
-// a native integral output cannot leave the input's own value range.
+// a native integral output cannot leave the input's own value range -- for
+// IN-RANGE sigma values. Out-of-range sigma is a different, more severe
+// problem: see the guards in FblOpcode::Execute below, neither of which
+// ClampExport can help with, because both failures happen INSIDE ITK's own
+// filter execution, before mexitk's export step ever runs.
 template <typename PixelT>
 void RunFbl(OpContext& ctx) {
   using InImage = Image3<PixelT>;
@@ -59,6 +63,33 @@ class FblOpcode : public Opcode {
   }
 
   void Execute(OpContext& ctx) const override {
+    const std::vector<double>& p = *ctx.params;
+    // domainSigma < 0: BilateralImageFilter::GenerateInputRequestedRegion
+    // computes its neighborhood radius as
+    // (SizeValueType)std::ceil(m_DomainMu * m_DomainSigma[i] / spacing[i])
+    // (itkBilateralImageFilter.hxx:79,145) -- a raw C-style cast of a
+    // negative double into an UNSIGNED integral type when domainSigma is
+    // negative (m_DomainMu is a fixed positive 2.5), which is undefined
+    // behaviour: a negative floating value has no representation in an
+    // unsigned type. Same family as FDG's non-positive-variance guard.
+    if (p[0] < 0.0) {
+      throw OpcodeError("mexitk:FBL:domainSigma", "domainSigma must not be negative.");
+    }
+    // rangeSigma <= 0: m_DynamicRangeUsed = m_RangeMu * m_RangeSigma
+    // (m_RangeMu is a fixed positive 4.0) becomes <= 0, which is used
+    // directly as rangeDistanceThreshold; since rangeDistance is always
+    // >= 0, the "rangeDistance < rangeDistanceThreshold" test that gates
+    // every accumulation into val/normFactor then never succeeds for any
+    // neighbour, so normFactor stays exactly 0.0 and "val /= normFactor"
+    // is 0.0/0.0 = NaN, written with a raw static_cast<OutputPixelType>
+    // straight into the (native, non-promoted) integer output buffer
+    // INSIDE ITK's own DynamicThreadedGenerateData
+    // (itkBilateralImageFilter.hxx:296-311) -- before mexitk's export step
+    // ever runs, so ClampExport cannot intervene here the way it can for
+    // the promoted opcodes.
+    if (p[1] <= 0.0) {
+      throw OpcodeError("mexitk:FBL:rangeSigma", "rangeSigma must be positive.");
+    }
     DispatchOnPixelType(mxGetClassID(ctx.volumeA),
                         [&](auto tag) { RunFbl<typename decltype(tag)::type>(ctx); });
   }

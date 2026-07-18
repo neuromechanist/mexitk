@@ -13,7 +13,6 @@
 #include "opcode.h"
 
 #include "itkCastImageFilter.h"
-#include "itkClampImageFilter.h"
 #include "itkCurvatureFlowImageFilter.h"
 
 #include <type_traits>
@@ -60,7 +59,13 @@ void RunFcf(OpContext& ctx) {
   filter->SetNumberOfIterations(
       CastParam<itk::IdentifierType>(p[0], "FCF", "numberOfIterations"));
   // 0.0625 is again exactly ITK's 3-D-stable CFL boundary value; see the
-  // timeStep comment in fca.cpp for the same arithmetic.
+  // timeStep comment in fca.cpp for the same arithmetic. A negative
+  // timeStep runs the flow backward in time (ill-posed); rejected for the
+  // same reason as FCA's guard. timeStep == 0 stays accepted as a defined
+  // no-op.
+  if (p[1] < 0.0) {
+    throw OpcodeError("mexitk:FCF:timeStep", "timeStep must not be negative.");
+  }
   filter->SetTimeStep(p[1]);
   filter->Update();
 
@@ -68,11 +73,7 @@ void RunFcf(OpContext& ctx) {
     ctx.plhs[0] = ExportVolume<RealT>(filter->GetOutput());
   } else {
     // See FcaRealType's comment in fca.cpp for the saturation rationale.
-    using ClampOut = itk::ClampImageFilter<RealImage, InImage>;
-    typename ClampOut::Pointer back = ClampOut::New();
-    back->SetInput(filter->GetOutput());
-    back->Update();
-    ctx.plhs[0] = ExportVolume<PixelT>(back->GetOutput());
+    ctx.plhs[0] = ClampExport<PixelT, RealT>(filter->GetOutput());
   }
 }
 

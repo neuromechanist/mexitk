@@ -304,5 +304,39 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             % Gaussian passes. Verified directly.
             tc.verifyError(@() mexitk('FVMI', [0 0.5 2], tc.V), 'mexitk:itkException');
         end
+
+        function fblRejectsNegativeDomainSigma(tc)
+            % negative domainSigma reaches a raw (SizeValueType)ceil(...)
+            % cast of a negative double inside ITK's own
+            % GenerateInputRequestedRegion -- undefined behaviour, not
+            % reproducible; rejected before it can happen.
+            tc.verifyError(@() mexitk('FBL', [-5 5], tc.V), 'mexitk:FBL:domainSigma');
+        end
+
+        function fblRejectsNonPositiveRangeSigma(tc)
+            % rangeSigma <= 0 collapses the accumulation loop's threshold to
+            % <= 0, so normFactor never accumulates and val /= normFactor is
+            % 0.0/0.0 = NaN, written by a raw native cast INSIDE ITK's own
+            % filter (before mexitk's export step -- ClampExport cannot
+            % help here, unlike the promoted opcodes). Verified directly.
+            tc.verifyError(@() mexitk('FBL', [2 0], tc.V), 'mexitk:FBL:rangeSigma');
+        end
+
+        function fcaRejectsNegativeTimeStep(tc)
+            % A negative timeStep runs the diffusion backward in time
+            % (ill-posed); the original's behaviour on this input is
+            % unknown, so it is rejected rather than reproduced. timeStep
+            % == 0 stays accepted as a defined no-op (not tested here, but
+            % relied upon by fixture tests elsewhere, which still pass).
+            tc.verifyError(@() mexitk('FCA', [5 -1 3], tc.V), 'mexitk:FCA:timeStep');
+        end
+
+        function fcfRejectsNegativeTimeStep(tc)
+            tc.verifyError(@() mexitk('FCF', [10 -1], tc.V), 'mexitk:FCF:timeStep');
+        end
+
+        function fgadRejectsNegativeTimeStep(tc)
+            tc.verifyError(@() mexitk('FGAD', [5 -1 3], tc.V), 'mexitk:FGAD:timeStep');
+        end
     end
 end

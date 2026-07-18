@@ -14,7 +14,6 @@
 
 #include "itkAntiAliasBinaryImageFilter.h"
 #include "itkCastImageFilter.h"
-#include "itkClampImageFilter.h"
 
 #include <type_traits>
 
@@ -74,11 +73,7 @@ void RunFaab(OpContext& ctx) {
     // See FcaRealType's comment in fca.cpp for the saturation rationale.
     // Here it is a large, expected effect, not an edge case: the entire
     // outside-negative half of the signed level set saturates to 0.
-    using ClampOut = itk::ClampImageFilter<RealImage, InImage>;
-    typename ClampOut::Pointer back = ClampOut::New();
-    back->SetInput(filter->GetOutput());
-    back->Update();
-    ctx.plhs[0] = ExportVolume<PixelT>(back->GetOutput());
+    ctx.plhs[0] = ClampExport<PixelT, RealT>(filter->GetOutput());
   }
 }
 

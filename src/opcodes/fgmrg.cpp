@@ -13,7 +13,6 @@
 #include "opcode.h"
 
 #include "itkCastImageFilter.h"
-#include "itkClampImageFilter.h"
 #include "itkGradientMagnitudeRecursiveGaussianImageFilter.h"
 
 #include <type_traits>
@@ -64,11 +63,7 @@ void RunFgmrg(OpContext& ctx) {
     ctx.plhs[0] = ExportVolume<RealT>(filter->GetOutput());
   } else {
     // See FcaRealType's comment in fca.cpp for the saturation rationale.
-    using ClampOut = itk::ClampImageFilter<RealImage, InImage>;
-    typename ClampOut::Pointer back = ClampOut::New();
-    back->SetInput(filter->GetOutput());
-    back->Update();
-    ctx.plhs[0] = ExportVolume<PixelT>(back->GetOutput());
+    ctx.plhs[0] = ClampExport<PixelT, RealT>(filter->GetOutput());
   }
 }
 
