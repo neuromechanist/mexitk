@@ -31,15 +31,43 @@ Keeping ITK keeps the algorithms.
 
 ## Status: honest summary
 
-This is version 0.1.0.
-**3 of the original's 40 opcodes are implemented.**
-Those 3 are the ones NFT depends on, and the only 3 with captured reference data.
+This is version 0.3.0.
+**30 of the original's 40 opcodes are implemented.**
+3 of those are the ones NFT depends on, and the only 3 with captured reference data.
+The other 27 are smoke-tested (22 filters and 5 segmentation opcodes) with no reference capture.
 
 | Opcode | ITK filter | Status | What that means |
 |---|---|---|---|
 | `FOMT` | `OtsuMultipleThresholdsImageFilter` | **validated** | Bit-identical to the original for `double` and `single` at N=2,3,4. `uint8` differs on ~0.2% of voxels. |
 | `FCA` | `CurvatureAnisotropicDiffusionImageFilter` | **bounded deviation** | Not bit-identical. RMS 2.6e-3, max 4.7e-2 at 1 iteration over a 0-88 range; compounds with iterations. |
 | `SWS` | `WatershedImageFilter` | **bounded deviation** | Region count matches exactly at every tested setting; label images are not bit-identical at fine levels. |
+| `FAAB` | `AntiAliasBinaryImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Output is a signed level-set field (positive inside). Integral input promotes to `float`; on `uint8` the negative (outside) half saturates to 0 on export. |
+| `FBB` | `BinomialBlurImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
+| `FBD` | `BinaryDilateImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Non-foreground output is the original input value, unchanged. |
+| `FBE` | `BinaryErodeImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Unlike `FBD`, eroded-away foreground becomes the type's min sentinel (0 for `uint8`); untouched background is unchanged. |
+| `FBL` | `BilateralImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
+| `FBT` | `BinaryThresholdImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
+| `FCF` | `CurvatureFlowImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. `uint8`/`int32` promote to `float` internally. |
+| `FD` | `DerivativeImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. `uint8` promotes to `float` internally. |
+| `FDG` | `DiscreteGaussianImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
+| `FDM` | `DanielssonDistanceMapImageFilter` (distance) | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Distance is computed in `float` and saturates at the pixel-type max on integral input. |
+| `FDMV` | `DanielssonDistanceMapImageFilter` (Voronoi) | **smoke-tested** | Voronoi accessor identification is provisional (see COMPATIBILITY). |
+| `FF` | `FlipImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
+| `FGA` | `DiscreteGaussianImageFilter` | **smoke-tested** | Duplicate of `FDG`; the registry's parameter signature for `FGA` is identical to `FDG`'s. |
+| `FGAD` | `GradientAnisotropicDiffusionImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Gradient-conductance sibling of `FCA`; `uint8`/`int32` promote to `float` internally. |
+| `FGM` | `GradientMagnitudeImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Zero parameters. Distinct algorithm from `FGMRG`. |
+| `FGMRG` | `GradientMagnitudeRecursiveGaussianImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. `uint8`/`int32` promote to `float` internally. Distinct algorithm from `FGM`. |
+| `FLS` | `LaplacianRecursiveGaussianImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Signed output; on `uint8` negative response saturates to 0 on export (`uint8`/`int32` promote to `float`). |
+| `FMEAN` | `MeanImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
+| `FMEDIAN` | `MedianImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
+| `FSN` | `SigmoidImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
+| `FVBIH` | `VotingBinaryIterativeHoleFillingImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
+| `FVMI` | `HessianRecursiveGaussianImageFilter` + `Hessian3DToVesselnessMeasureImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Two-filter vesselness pipeline; integral input promotes to `float`. |
+| `SCC` | `ConfidenceConnectedImageFilter` | **smoke-tested** | Region growing from seed(s); no reference capture exists. InitialNeighborhoodRadius left at ITK default. |
+| `SCT` | `ConnectedThresholdImageFilter` | **smoke-tested** | Region growing from seed(s); no reference capture. ReplaceValue hardcoded to 255 (inferred from ITK's example; registry exposes none). |
+| `SIC` | `IsolatedConnectedImageFilter` | **smoke-tested** | Region growing, two seed groups (first two seed points); no reference. Needs at least 2 seed points. |
+| `SNC` | `NeighborhoodConnectedImageFilter` | **smoke-tested** | Region growing from seed(s); no reference capture exists. |
+| `SOT` | `OtsuThresholdImageFilter` | **smoke-tested** | Two-valued output; no reference. Inside/outside left at ITK defaults (inside = pixel-type max, so {0,255} on uint8 but {0,realmax} on double). `numberOfHistogram` below 2 is rejected: it crashes the MATLAB process outright inside ITK's Otsu calculator. |
 
 Status vocabulary, used consistently in the code, in `mexitk('?')`, and here:
 
@@ -50,7 +78,7 @@ Status vocabulary, used consistently in the code, in `mexitk('?')`, and here:
 - **smoke-tested**: runs and returns plausible output, but no reference capture exists.
 - **untested**: implemented from the ITK mapping only; never run against a reference.
 
-The remaining 37 opcodes are **not implemented**.
+The remaining 10 opcodes are **not implemented**.
 They are catalogued in `docs/matitk_opcode_registry.txt` (the original binary's own parameter dump)
 and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`.
 
@@ -72,8 +100,8 @@ Read it before relying on this for science.
 
 | Platform | State |
 |---|---|
-| macOS arm64 (`maca64`) | Builds, loads, 34/34 tests pass. Verified in CI on a runner with **no ITK installed**. |
-| Linux x86_64 (`glnxa64`) | Builds, loads, 34/34 tests pass. Verified in CI on a runner with **no ITK installed**. Must be built with GCC 12 or older; see BUILDING.md. |
+| macOS arm64 (`maca64`) | Builds, loads, 208/208 tests pass. Verified locally against Homebrew ITK and in CI against static ITK, including the full suite on a runner with **no ITK installed**. |
+| Linux x86_64 (`glnxa64`) | Builds, loads, 208/208 tests pass. Verified in CI against static ITK, including the full suite on a runner with **no ITK installed**. Must be built with GCC 12 or older; see BUILDING.md. |
 | macOS x86_64 (`maci64`) | Legacy; built on a best-effort basis only. R2025b is MathWorks' final Intel-Mac release. |
 | Windows | Best-effort only; the ITK toolchain there is unresolved. Not attempted. |
 

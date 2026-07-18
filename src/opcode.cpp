@@ -87,8 +87,35 @@ const char* PixelTypeName(mxClassID id) {
 }
 
 // Declared by each opcode's translation unit.
+const Opcode* GetFaabOpcode();
+const Opcode* GetFbbOpcode();
+const Opcode* GetFbdOpcode();
+const Opcode* GetFbeOpcode();
+const Opcode* GetFblOpcode();
+const Opcode* GetFbtOpcode();
 const Opcode* GetFcaOpcode();
+const Opcode* GetFcfOpcode();
+const Opcode* GetFdOpcode();
+const Opcode* GetFdgOpcode();
+const Opcode* GetFdmOpcode();
+const Opcode* GetFdmvOpcode();
+const Opcode* GetFfOpcode();
+const Opcode* GetFgaOpcode();
+const Opcode* GetFgadOpcode();
+const Opcode* GetFgmOpcode();
+const Opcode* GetFgmrgOpcode();
+const Opcode* GetFlsOpcode();
+const Opcode* GetFmeanOpcode();
+const Opcode* GetFmedianOpcode();
 const Opcode* GetFomtOpcode();
+const Opcode* GetFsnOpcode();
+const Opcode* GetFvbihOpcode();
+const Opcode* GetFvmiOpcode();
+const Opcode* GetSccOpcode();
+const Opcode* GetSctOpcode();
+const Opcode* GetSicOpcode();
+const Opcode* GetSncOpcode();
+const Opcode* GetSotOpcode();
 const Opcode* GetSwsOpcode();
 
 // Registration is explicit rather than via static initialisers in each opcode
@@ -103,8 +130,35 @@ void RegisterBuiltinOpcodes() {
   }
   registered = true;
 
+  RegisterOpcode(GetFaabOpcode());
+  RegisterOpcode(GetFbbOpcode());
+  RegisterOpcode(GetFbdOpcode());
+  RegisterOpcode(GetFbeOpcode());
+  RegisterOpcode(GetFblOpcode());
+  RegisterOpcode(GetFbtOpcode());
   RegisterOpcode(GetFcaOpcode());
+  RegisterOpcode(GetFcfOpcode());
+  RegisterOpcode(GetFdOpcode());
+  RegisterOpcode(GetFdgOpcode());
+  RegisterOpcode(GetFdmOpcode());
+  RegisterOpcode(GetFdmvOpcode());
+  RegisterOpcode(GetFfOpcode());
+  RegisterOpcode(GetFgaOpcode());
+  RegisterOpcode(GetFgadOpcode());
+  RegisterOpcode(GetFgmOpcode());
+  RegisterOpcode(GetFgmrgOpcode());
+  RegisterOpcode(GetFlsOpcode());
+  RegisterOpcode(GetFmeanOpcode());
+  RegisterOpcode(GetFmedianOpcode());
   RegisterOpcode(GetFomtOpcode());
+  RegisterOpcode(GetFsnOpcode());
+  RegisterOpcode(GetFvbihOpcode());
+  RegisterOpcode(GetFvmiOpcode());
+  RegisterOpcode(GetSccOpcode());
+  RegisterOpcode(GetSctOpcode());
+  RegisterOpcode(GetSicOpcode());
+  RegisterOpcode(GetSncOpcode());
+  RegisterOpcode(GetSotOpcode());
   RegisterOpcode(GetSwsOpcode());
 }
 

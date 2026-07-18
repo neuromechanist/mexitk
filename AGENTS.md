@@ -31,7 +31,9 @@ src/
 ├── mexitk.cpp          # mexFunction entry: arg parsing, validation, dispatch, diagnostics
 ├── mexitk_common.h     # pixel-type dispatch + mxArray <-> itk::Image bridge (zero-copy import)
 ├── opcode.h/.cpp       # the opcode registry; RegisterBuiltinOpcodes() is the one list
-└── opcodes/            # one file per opcode: FCA, FOMT, SWS
+└── opcodes/            # 28 files for 30 opcodes: one file per opcode, except
+                        # fdg.cpp (FDG + FGA) and fdm.cpp (FDM + FDMV), each a
+                        # deliberate shared pair, not an accident
 matlab/                 # built MEX lands here; run_mexitk_tests.m
 tests/                  # matlab.unittest suites + committed reference fixtures
 tools/
@@ -56,7 +58,9 @@ so documented status cannot drift from what the code claims.
 
 ### Honesty about validation is the product
 
-Only 3 of 40 opcodes are implemented, and they are not equally trustworthy.
+30 of 40 opcodes are implemented, and they are not equally trustworthy:
+1 is validated, 2 have a measured bounded deviation, and the other 27 are
+smoke-tested with no reference capture.
 The status ladder is load-bearing and appears in the code, in `mexitk('?')`, and in the README:
 
 - **validated** = bit-identical to the original, asserted against a stored fixture.
@@ -64,7 +68,7 @@ The status ladder is load-bearing and appears in the code, in `mexitk('?')`, and
 - **smoke-tested** = runs, no reference.
 - **untested** = never run against a reference.
 
-Never conflate these. A README implying 40 validated filters when 3 are implemented is a lie.
+Never conflate these. A README implying 30 validated filters when only 1 is validated is a lie.
 If an opcode cannot be faithfully reproduced on modern ITK,
 mark it unsupported rather than shipping something subtly different under the same name.
 
@@ -88,10 +92,13 @@ The reference input is MATLAB's built-in `load mri`, so no imaging data is redis
 ### Reproduce the original's quirks on purpose
 
 Deviating only happens in two directions: accept strictly more, or refuse to reproduce a defect.
-Every deviation is enumerated in `docs/COMPATIBILITY.md`. Currently:
-`SWS` overthresholding errors instead of segfaulting MATLAB;
-string objects are accepted alongside char;
-console output says `mexitk`; errors carry `mexitk:*` identifiers.
+Every deviation is enumerated, numbered, and justified in `docs/COMPATIBILITY.md`
+(rows 1-12 as of this writing) — read it rather than this summary. A few
+illustrative examples: `SWS` overthresholding errors instead of segfaulting
+MATLAB; non-finite or wildly out-of-range filter results export as a defined
+saturated/zero value on integral pixel types instead of an undefined-behaviour
+cast; `FBL` rejects non-positive `domainSigma`/`rangeSigma` rather than
+silently producing `NaN` output.
 
 Quirks that ARE reproduced (do not "fix" these):
 `FOMT` returns N outputs for N thresholds and drops the top Otsu class;

@@ -53,11 +53,22 @@ void RunFca(OpContext& ctx) {
   using FilterType = itk::CurvatureAnisotropicDiffusionImageFilter<RealImage, RealImage>;
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(real);
-  filter->SetNumberOfIterations(static_cast<unsigned int>(p[0]));
+  // SetNumberOfIterations is declared IdentifierType on the
+  // FiniteDifferenceImageFilter base (itkFiniteDifferenceImageFilter.h:186),
+  // not unsigned int; matches FCF/FAAB, which take the same base's setter.
+  filter->SetNumberOfIterations(
+      CastParam<itk::IdentifierType>(p[0], "FCA", "numberOfIterations"));
   // ITK warns (itkWarningMacro) but proceeds when timeStep exceeds the
   // stability bound minSpacing/2^(dim+1), which is 0.0625 in 3-D at unit
   // spacing. The reference binary proceeds silently at that value; it is
   // exactly ITK's own 3-D default, sitting on the boundary rather than past it.
+  // A NEGATIVE timeStep is a different problem: it runs the diffusion
+  // backward in time, which is ill-posed (the original's behaviour on a
+  // negative timeStep is unknown and unreproducible), so it is rejected
+  // rather than reproduced; timeStep == 0 stays accepted as a defined no-op.
+  if (p[1] < 0.0) {
+    throw OpcodeError("mexitk:FCA:timeStep", "timeStep must not be negative.");
+  }
   filter->SetTimeStep(p[1]);
   filter->SetConductanceParameter(p[2]);
   filter->Update();
@@ -65,11 +76,13 @@ void RunFca(OpContext& ctx) {
   if constexpr (std::is_same<PixelT, RealT>::value) {
     ctx.plhs[0] = ExportVolume<RealT>(filter->GetOutput());
   } else {
-    using CastOut = itk::CastImageFilter<RealImage, InImage>;
-    typename CastOut::Pointer back = CastOut::New();
-    back->SetInput(filter->GetOutput());
-    back->Update();
-    ctx.plhs[0] = ExportVolume<PixelT>(back->GetOutput());
+    // ClampExport saturates into [lowest, max] of the target pixel type and
+    // maps non-finite values to 0, instead of itk::ClampImageFilter's plain
+    // static_cast fallthrough for NaN (undefined behaviour; reachable via
+    // an unstable timeStep). In-range values are unaffected: this is the
+    // same bounds check and the same in-range cast ITK's own Clamp functor
+    // performs. Only uint8/int32 take this path (see FcaRealType).
+    ctx.plhs[0] = ClampExport<PixelT, RealT>(filter->GetOutput());
   }
 }
 
