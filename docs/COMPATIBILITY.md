@@ -238,13 +238,13 @@ or refuses to reproduce a defect.
 
 ## Coverage
 
-`mexitk` currently implements **12 of the original's 40 opcodes**:
-FCA, FOMT, SWS, and the 9 smoke-tested filters FBB, FBT, FD, FDG, FF, FGA,
-FMEAN, FMEDIAN and FSN.
+`mexitk` currently implements **17 of the original's 40 opcodes**:
+FCA, FOMT, SWS, and the 14 smoke-tested filters FBB, FBD, FBE, FBT, FD, FDG,
+FDM, FDMV, FF, FGA, FMEAN, FMEDIAN, FSN and FVBIH.
 FCA, FOMT and SWS are the three NFT depends on, and the only three with
-reference data; the other 9 have no captured reference (see "Smoke-tested
+reference data; the other 14 have no captured reference (see "Smoke-tested
 opcodes" below).
-The remaining 28 are catalogued in `docs/matitk_opcode_registry.txt`
+The remaining 23 are catalogued in `docs/matitk_opcode_registry.txt`
 (the original binary's own parameter dump)
 and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`,
 but they are **not implemented**.
@@ -252,24 +252,29 @@ See the README for the current status of each.
 
 ## Smoke-tested opcodes (no reference)
 
-FBB, FBT, FD, FDG, FF, FGA, FMEAN, FMEDIAN and FSN run and return plausible
-output, but no reference capture exists for them: the only captured reference
-is the 2006 MATITK binary's FCA/FOMT/SWS output (see "The reference" above),
-so there is nothing to measure these 9 against. There are no measurement
-tables for them, unlike FCA and SWS above, because there is no reference to
-measure against.
+FBB, FBD, FBE, FBT, FD, FDG, FDM, FDMV, FF, FGA, FMEAN, FMEDIAN, FSN and
+FVBIH run and return plausible output, but no reference capture exists for
+them: the only captured reference is the 2006 MATITK binary's FCA/FOMT/SWS
+output (see "The reference" above), so there is nothing to measure these 14
+against. There are no measurement tables for them, unlike FCA and SWS above,
+because there is no reference to measure against.
 
 | Opcode | ITK class |
 |---|---|
 | FBB | `BinomialBlurImageFilter` |
+| FBD | `BinaryDilateImageFilter` |
+| FBE | `BinaryErodeImageFilter` |
 | FBT | `BinaryThresholdImageFilter` |
 | FD | `DerivativeImageFilter` |
 | FDG | `DiscreteGaussianImageFilter` |
+| FDM | `DanielssonDistanceMapImageFilter` (distance output) |
+| FDMV | `DanielssonDistanceMapImageFilter` (Voronoi output; see below) |
 | FF | `FlipImageFilter` |
 | FGA | `DiscreteGaussianImageFilter` (see below) |
 | FMEAN | `MeanImageFilter` |
 | FMEDIAN | `MedianImageFilter` |
 | FSN | `SigmoidImageFilter` |
+| FVBIH | `VotingBinaryIterativeHoleFillingImageFilter` |
 
 **FGA is implemented as a deliberate duplicate of FDG.** Both opcodes have the
 identical registry parameter signature (`gaussianVariance`, `maxKernelWidth`;
@@ -280,6 +285,30 @@ two genuinely distinct filters under these names is unconfirmed against
 MATITK source, since none was available; it is most likely an artifact of the
 original's Perl generator producing one entry per ITK example file. This is
 flagged, not silently assumed.
+
+**`FBD`/`FBE` write the type's `NonpositiveMin` to non-foreground output, not
+0.** `itk::BinaryDilateImageFilter`/`BinaryErodeImageFilter` default
+`BackgroundValue` to `itk::NumericTraits<PixelType>::NonpositiveMin()`, which
+is 0 for `uint8`, but `INT_MIN` for `int32` and `-realmax` for `float`/
+`double`. `mexitk` leaves `BackgroundValue` at that ITK default, matching the
+original's flat parameter list, which sets only the dilate/erode value.
+Anything comparing this output must test `== 255` (or whatever
+`ValueOverWhichDilateWillApply`/`ValueOverWhichErodeWillApply` was), never
+`== 0` or `unique(out) == [0 255]`; `tests/tPhase2MorphologySmoke.m` follows
+this convention throughout.
+
+**`FDM`/`FDMV` truncate distance into the input's own pixel type.** Both
+instantiate `itk::DanielssonDistanceMapImageFilter` at the input pixel type
+(Voronoi image type defaults to the input type too), so a Euclidean distance
+truncates for `uint8`/`int32` input. This is intentional, matching the
+original's same-pixel-type codegen, not a precision bug.
+
+**`FDMV`'s accessor identification is provisional.** The reading "V = Voronoi
+map" (via `GetVoronoiMap()`), rather than "V = Vector map" (via the same
+class's distinct `GetVectorDistanceMap()` accessor), rests on secondary
+sourcing (a Vincent Chu opcode table) and is unconfirmed against MATITK
+source. See `docs/itk_opcode_mapping.md` (FDMV, Drift/risk; confidence
+Medium). Mirrored verbatim in `FdmvOpcode::StatusNote()`.
 
 **One pixel-type deviation: FD promotes `uint8` to `float`.** ITK's
 `DerivativeImageFilter` requires a signed output pixel type
