@@ -185,6 +185,55 @@ Status as of 2026-07-16. Version 0.1.0.
   independently re-verified against a real build before commit, matching
   the review pass's own measurements. 156/156 tests pass on macOS arm64
   locally against Homebrew ITK, no regression in any existing suite.
+- **Phase 4: 8 gradient/feature filter opcodes** (FAAB, FBL, FCF, FGAD, FGM,
+  FGMRG, FLS, FVMI) added on top of the 22 from Phase 1/2/3, bringing the
+  total to 30 of 40 -- the last planned phase of this epic. All
+  `Category::kFilter`, `Status::kSmokeTested`. The promotion split was a
+  hard-vs-documented-requirement question, verified per opcode against the
+  installed headers: `FGM`/`FBL` have no float-related concept check and no
+  float wording in their docs, so they stay native at all four pixel
+  types; `FCA`/`FGAD`/`FCF`/`FAAB` are documented-only ("expects real-valued
+  types" / "must be a real number type" / "should be a real valued scalar
+  type"); `FGMRG`/`FLS`/`FVMI` have no concept check either but hardwire
+  `InternalRealType = float` internally and end in a raw narrowing cast.
+  All six promoted opcodes use the FCA-precedent promote-and-`ClampImageFilter`
+  pattern (deviation 8); none is concept-*enforced* to promote (`FD`, from
+  Phase 1, remains the only concept-forced promotion in the whole project).
+  `FVMI`'s two-filter pipeline (`HessianRecursiveGaussianImageFilter` feeding
+  `Hessian3DToVesselnessMeasureImageFilter`) needed one template-instantiation
+  question resolved: verified from headers that the Hessian filter's
+  *default* second template argument already produces the double-tensor
+  image the vesselness stage hardcodes as its input, for both `float`- and
+  `double`-real images, via `NumericTraits<T>::RealType == double` for both;
+  no explicit tensor instantiation was needed. `ITKImageGradient`,
+  `ITKCurvatureFlow` and `ITKAntiAlias` added to both `CMakeLists.txt` and
+  `tools/build_itk.sh` in the sources commit (the Phase 2 lesson held again).
+  `FAAB`'s signed level-set output was measured, not assumed: on `uint8`,
+  72.8% of output voxels saturate to exactly 0 (the entire outside-negative
+  half of the level set), and the sign pattern on `double` matches the
+  header's inside-positive/outside-negative claim on 98.5%/97.2% of
+  voxels respectively, not 100% (the remainder sit near the zero-crossing
+  surface). `FLS`'s `uint8` clamp-back was checked against the exact
+  clamp-and-truncate arithmetic and matched perfectly (0 mismatches across
+  442368 voxels) -- the plan's own flagged concern about float
+  rounding-at-bin-edges making that assertion flaky did not materialize on
+  this data, so the strong version shipped. `FGM`/`FGMRG` compute the same
+  conceptual quantity via genuinely different algorithms (central
+  differences vs. recursive Gaussian derivative) and are documented as such,
+  not silently treated as interchangeable. `FBL`'s test parameters
+  deliberately use `[2 10]`, not the registry hint `[5 5]`: measured at 5.6
+  seconds per call, `[5 5]` was too slow to use across 4 pixel types and
+  several tests, while `[2 10]` (0.25s/call) still exercises the filter
+  meaningfully; hint values are not sacred for tests. `sigma <= 0` on the
+  three recursive-Gaussian-family opcodes (`FGMRG`, `FLS`, `FVMI`) throws
+  ITK's own catchable exception (`mexitk:itkException`), verified directly
+  on all three rather than assumed from the shared base class; no custom
+  guard was added, matching the minimal-deviation policy.
+  `tests/tPhase4GradientsSmoke.m` (40 test methods) covers the 4-pixel-type
+  run for all 8 opcodes, algorithm-distinctness and monotonicity properties,
+  the exact-arithmetic and measured-sign-pattern assertions above, and the
+  paramRange/itkException error paths. 196/196 tests pass on macOS arm64
+  locally against Homebrew ITK, no regression in any existing suite.
 
 ## Open decisions for the owner
 
@@ -200,9 +249,9 @@ Status as of 2026-07-16. Version 0.1.0.
    see COMPATIBILITY.md). It feeds Otsu thresholding in NFT's segmentation,
    so the downstream masks can shift slightly.
    The alternative today is that segmentation does not run at all on Apple Silicon.
-3. **How broad should the opcode surface get?** 22 of 40 are now implemented;
+3. **How broad should the opcode surface get?** 30 of 40 are now implemented;
    only 3 (FCA, FOMT, SWS) have reference data, and reference capture requires
-   the Intel-Linux binary. The 19 Phase 1/2/3 opcodes ship smoke-tested only.
+   the Intel-Linux binary. The 27 Phase 1/2/3/4 opcodes ship smoke-tested only.
 
 ## Next
 
@@ -248,10 +297,11 @@ Status as of 2026-07-16. Version 0.1.0.
 
 ### Broadening the opcode surface
 
-18 opcodes remain unimplemented; parameters are known exactly
+10 opcodes remain unimplemented; parameters are known exactly
 (`docs/matitk_opcode_registry.txt`) and ITK classes are mapped.
 Phase 1 (FMEDIAN, FMEAN, FBT, FDG, FBB, FSN, FF, FD, FGA), Phase 2 (FBD,
-FBE, FDM, FDMV, FVBIH) and Phase 3 (SCT, SCC, SIC, SNC, SOT) are done.
+FBE, FDM, FDMV, FVBIH), Phase 3 (SCT, SCC, SIC, SNC, SOT) and Phase 4
+(FAAB, FBL, FCF, FGAD, FGM, FGMRG, FLS, FVMI) are done.
 Each ships with an honest status; no reference data means `smoke-tested` at best.
 
 Known problem cases:
