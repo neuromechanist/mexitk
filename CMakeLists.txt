@@ -30,8 +30,9 @@ find_package(Matlab REQUIRED COMPONENTS MX_LIBRARY MEX_COMPILER)
 set(MEXITK_ITK_COMPONENTS
   ITKCommon                # itk::Image, ImportImageFilter, CastImageFilter
   ITKAnisotropicSmoothing  # FCA: CurvatureAnisotropicDiffusionImageFilter
-  ITKThresholding          # FOMT: OtsuMultipleThresholds + BinaryThreshold
+  ITKThresholding          # FOMT, SOT: OtsuMultiple/Otsu + BinaryThreshold
   ITKWatersheds            # SWS: WatershedImageFilter
+  ITKRegionGrowing         # SCT, SCC, SIC, SNC: Connected/Confidence/Isolated/NeighborhoodConnected
   ITKSmoothing             # FMEDIAN, FMEAN, FDG, FGA, FBB
   ITKImageIntensity        # FSN: SigmoidImageFilter
   ITKImageGrid             # FF: FlipImageFilter
@@ -73,6 +74,11 @@ set(MEXITK_SOURCES
   src/opcodes/fomt.cpp
   src/opcodes/fsn.cpp
   src/opcodes/fvbih.cpp
+  src/opcodes/scc.cpp
+  src/opcodes/sct.cpp
+  src/opcodes/sic.cpp
+  src/opcodes/snc.cpp
+  src/opcodes/sot.cpp
   src/opcodes/sws.cpp
 )
 
