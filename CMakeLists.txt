@@ -36,6 +36,10 @@ set(MEXITK_ITK_COMPONENTS
   ITKImageIntensity        # FSN: SigmoidImageFilter
   ITKImageGrid             # FF: FlipImageFilter
   ITKImageFeature          # FD: DerivativeImageFilter
+  ITKBinaryMathematicalMorphology  # FBD, FBE (BinaryDilate/Erode; BinaryBallStructuringElement
+                                   # arrives transitively via ITKMathematicalMorphology)
+  ITKDistanceMap           # FDM, FDMV: DanielssonDistanceMapImageFilter
+  ITKLabelVoting           # FVBIH: VotingBinaryIterativeHoleFillingImageFilter
 )
 find_package(ITK 5.4 REQUIRED COMPONENTS ${MEXITK_ITK_COMPONENTS})
 
@@ -56,15 +60,19 @@ set(MEXITK_SOURCES
   src/mexitk.cpp
   src/opcode.cpp
   src/opcodes/fbb.cpp
+  src/opcodes/fbd.cpp
+  src/opcodes/fbe.cpp
   src/opcodes/fbt.cpp
   src/opcodes/fca.cpp
   src/opcodes/fd.cpp
   src/opcodes/fdg.cpp        # FDG and FGA
+  src/opcodes/fdm.cpp        # FDM and FDMV
   src/opcodes/ff.cpp
   src/opcodes/fmean.cpp
   src/opcodes/fmedian.cpp
   src/opcodes/fomt.cpp
   src/opcodes/fsn.cpp
+  src/opcodes/fvbih.cpp
   src/opcodes/sws.cpp
 )
 
