@@ -33,10 +33,13 @@ Status as of 2026-07-16. Version 0.1.0.
   guards too, just never exercised by a test before now. Fixed with a small
   `OpcodeError` type (`src/mexitk_common.h`) that carries its id through that
   catch; see `docs/COMPATIBILITY.md` deviations 5-7.
-  `tests/tPhase1FilterSmoke.m` grew from 9 to 27 test methods (stronger
+  `tests/tPhase1FilterSmoke.m` grew from 9 to 28 test methods (stronger
   per-opcode invariants, dtype coverage on all 4 supported classes, and the
-  new error paths). 80/80 tests pass on macOS arm64 locally against Homebrew
-  ITK, no regression in the existing FCA/FOMT/SWS reference suites.
+  new error paths, including `CastParam`'s float-narrowing guard: a finite
+  value beyond `float`'s range is UB to cast and now rejected, while `Inf`/
+  `NaN` still pass through since both are exactly representable in `float`).
+  81/81 tests pass on macOS arm64 locally against Homebrew ITK, no
+  regression in the existing FCA/FOMT/SWS reference suites.
 
 ## Open decisions for the owner
 
