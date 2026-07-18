@@ -1,0 +1,308 @@
+classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
+    % Smoke tests for the Phase 4 gradient/feature filter opcodes. No
+    % reference fixtures exist for these, so the suite asserts structural
+    % invariants (shape, class, smoothing/monotonicity properties, and
+    % ITK's own documented semantics) rather than bit-exactness. Every
+    % non-guaranteed assertion here was empirically confirmed against a
+    % real build before being committed; none is guessed from the ITK
+    % header evidence alone.
+    %
+    % SPDX-License-Identifier: BSD-3-Clause
+    % Copyright (c) 2026, Seyed Yahya Shirazi <shirazi@ieee.org>
+    % Swartz Center for Computational Neuroscience (SCCN),
+    % Institute for Neural Computation (INC), UC San Diego.
+
+    properties
+        V    % double volume
+        Vu   % uint8 volume (native mri class)
+    end
+
+    properties (TestParameter)
+        op      = {'FAAB', 'FBL', 'FCF', 'FGAD', 'FGM', 'FGMRG', 'FLS', 'FVMI'};
+        paramOp = {'FAAB', 'FBL', 'FCF', 'FGAD', 'FGMRG', 'FLS', 'FVMI'};  % FGM excluded: zero params
+    end
+
+    methods (TestMethodSetup)
+        function loadVolume(tc)
+            mri = load('mri');
+            tc.Vu = squeeze(mri.D);
+            tc.V  = double(tc.Vu);
+        end
+    end
+
+    methods (Static)
+        function p = validParams(op)
+            switch op
+                case 'FAAB';  p = [0.01 50 2];  % registry hints; measured 0.91s, fine
+                case 'FBL';   p = [2 10];       % NOT the registry hint [5 5]: measured
+                              % [5 5] at 5.6s/call is too slow across 4 pixel
+                              % types x several tests; [2 10] measured at
+                              % 0.25s/call and still exercises the filter
+                              % meaningfully. Hint values are not sacred for
+                              % tests (plan explicit).
+                case 'FCF';   p = [10 0.0625];  % registry hints
+                case 'FGAD';  p = [5 0.0625 3]; % mirrors the FCA test point
+                case 'FGM';   p = [];
+                case 'FGMRG'; p = 2;
+                case 'FLS';   p = 2;
+                case 'FVMI';  p = [1 0.5 2];    % sigma 1; 0.5/2.0 canonical Sato alphas
+            end
+        end
+    end
+
+    methods (Test)  % parameterized common checks
+        function runsAndPreservesShapeAndClass(tc, op)
+            % Measured: all 8 ops x all 4 classes run clean, ~4s total.
+            p = tPhase4GradientsSmoke.validParams(op);
+            for f = {@double, @single, @uint8, @int32}
+                vin = f{1}(tc.Vu);
+                out = mexitk(op, p, vin);
+                tc.verifyClass(out, class(vin));
+                tc.verifySize(out, size(vin));
+            end
+        end
+
+        function rejectsShortParamCount(tc, paramOp)
+            p = tPhase4GradientsSmoke.validParams(paramOp);
+            short = p(1:end-1);
+            tc.verifyError(@() mexitk(paramOp, short, tc.V), 'mexitk:params');
+        end
+
+        function fgmRunsWithEmptyParams(tc)
+            % Explicit zero-param check per the architecture, complementing
+            % runsAndPreservesShapeAndClass above.
+            out = mexitk('FGM', [], tc.V);
+            tc.verifyClass(out, 'double');
+            tc.verifySize(out, size(tc.V));
+        end
+    end
+
+    methods (Test)  % FGM
+        function fgmChangesInput(tc)
+            for f = {@double, @uint8}
+                vin = f{1}(tc.Vu);
+                out = mexitk('FGM', [], vin);
+                tc.verifyNotEqual(out, vin);
+            end
+        end
+
+        function fgmNonNegativeOnDouble(tc)
+            % Mathematically guaranteed for a magnitude; still measured
+            % before commit per project protocol. Verified: min = 0.
+            out = mexitk('FGM', [], tc.V);
+            tc.verifyGreaterThanOrEqual(min(out(:)), 0);
+        end
+
+        function fgmFlatRegionHasZeroGradient(tc)
+            % V(1:8,1:8,2:6) is a constant all-zero air region on this
+            % volume (verified programmatically, not assumed); the
+            % gradient magnitude at its interior (away from the block's
+            % own edges, where central differences would reach outside
+            % the constant region) must be exactly 0. Measured: holds
+            % exactly, max value in that interior is 0.
+            block = tc.V(1:8, 1:8, 2:6);
+            tc.assumeTrue(numel(unique(block)) == 1, ...
+                'Expected constant block not constant on this volume; skipping.');
+            out = mexitk('FGM', [], tc.V);
+            interior = out(2:7, 2:7, 3:5);
+            tc.verifyEqual(interior, zeros(size(interior)));
+        end
+    end
+
+    methods (Test)  % FGMRG (vs FGM)
+        function fgmrgDiffersFromFgm(tc)
+            % Different algorithms for the same conceptual quantity
+            % (recursive Gaussian derivative vs central difference); see
+            % docs/COMPATIBILITY.md "FGM vs FGMRG".
+            outFgmrg = mexitk('FGMRG', 2, tc.V);
+            outFgm = mexitk('FGM', [], tc.V);
+            tc.verifyNotEqual(outFgmrg, outFgm);
+        end
+
+        function fgmrgLargerSigmaSmoothsGradientMap(tc)
+            % Measured: std(sigma=1)=6.676, std(sigma=4)=1.643.
+            out1 = mexitk('FGMRG', 1, tc.V);
+            out4 = mexitk('FGMRG', 4, tc.V);
+            tc.verifyLessThan(std(out4(:)), std(out1(:)));
+        end
+    end
+
+    methods (Test)  % FLS
+        function flsLargerSigmaSmooths(tc)
+            % Measured: std(sigma=1)=7.279, std(sigma=4)=0.405.
+            out1 = mexitk('FLS', 1, tc.V);
+            out4 = mexitk('FLS', 4, tc.V);
+            tc.verifyLessThan(std(out4(:)), std(out1(:)));
+        end
+
+        function flsHasBothSignsOnDouble(tc)
+            % A Laplacian on real data produces both signs. Measured:
+            % min=-10.22, max=9.50 at sigma=2.
+            out = mexitk('FLS', 2, tc.V);
+            tc.verifyLessThan(min(out(:)), 0);
+            tc.verifyGreaterThan(max(out(:)), 0);
+        end
+
+        function flsUint8ClampMatchesSinglePath(tc)
+            % Strong version, per the plan: uint8 promotes to float, and
+            % single input IS float, so the internal pipelines are
+            % identical up to the export step. Measured directly: exact
+            % match, 0 mismatches out of 442368 voxels -- the float
+            % rounding-at-bin-edges concern the plan flagged did not
+            % materialize on this data, so the strong (not weakened)
+            % assertion is used.
+            outSingle = mexitk('FLS', 2, single(tc.Vu));
+            outUint8 = mexitk('FLS', 2, tc.Vu);
+            expected = uint8(floor(min(max(double(outSingle), 0), 255)));
+            tc.verifyEqual(outUint8, expected);
+        end
+    end
+
+    methods (Test)  % FBL
+        function fblSmoothsAndDiffersFromGaussian(tc)
+            % domainSigma 2 == FDG variance 4, so the domain kernels are
+            % comparable; range weighting must change the result. Measured:
+            % std decreases (30.30 -> 30.13, a small but real decrease at
+            % these params), and bit-equality with FDG (a different
+            % algorithm) is not observed.
+            out = mexitk('FBL', [2 10], tc.V);
+            tc.verifyLessThan(std(out(:)), std(tc.V(:)));
+            tc.verifyNotEqual(out, tc.V);
+            outFdg = mexitk('FDG', [4 5], tc.V);
+            tc.verifyNotEqual(out, outFdg);
+        end
+    end
+
+    methods (Test)  % FGAD (vs FCA)
+        function fgadDiffersFromFcaAtIdenticalParams(tc)
+            % Gradient vs curvature conductance should differ on real data.
+            outFgad = mexitk('FGAD', [5 0.0625 3], tc.V);
+            outFca = mexitk('FCA', [5 0.0625 3], tc.V);
+            tc.verifyNotEqual(outFgad, outFca);
+        end
+
+        function fgadSmooths(tc)
+            % Measured: std 30.30 -> 29.01.
+            out = mexitk('FGAD', [5 0.0625 3], tc.V);
+            tc.verifyLessThan(std(out(:)), std(tc.V(:)));
+        end
+    end
+
+    methods (Test)  % FCF
+        function fcfSmooths(tc)
+            % Measured: std 30.30 -> 29.20.
+            out = mexitk('FCF', [10 0.0625], tc.V);
+            tc.verifyLessThan(std(out(:)), std(tc.V(:)));
+        end
+
+        function fcfMoreIterationsSmoothMore(tc)
+            % Measured: std(iters=5)=29.52, std(iters=20)=28.82.
+            out5 = mexitk('FCF', [5 0.0625], tc.V);
+            out20 = mexitk('FCF', [20 0.0625], tc.V);
+            tc.verifyLessThan(std(out20(:)), std(out5(:)));
+        end
+    end
+
+    methods (Test)  % FAAB (measure first, assert only measured properties)
+        function faabProducesSignedLevelSetOnDouble(tc)
+            % B: 255 * double(Vu > 33), the Phase 3-measured Otsu cut
+            % intensity for this volume; any clean binarization works.
+            % Measured directly, not assumed from the header: min=-3,
+            % max=3 (both signs present); sign orientation matches the
+            % header's inside-positive/outside-negative claim on the large
+            % majority of voxels but NOT all (98.5% of foreground voxels
+            % are positive, 97.2% of background voxels are negative --
+            % the remainder sit near the estimated zero-crossing surface,
+            % which is expected for a level-set method). Only the
+            % measured majority-fraction claim is asserted, not 100%.
+            B = 255 * double(tc.Vu > 33);
+            out = mexitk('FAAB', [0.01 50 2], B);
+            tc.verifyNotEqual(out, B);
+            tc.verifyLessThan(min(out(:)), 0);
+            tc.verifyGreaterThan(max(out(:)), 0);
+            fgIdx = (B == 255);
+            bgIdx = (B == 0);
+            tc.verifyGreaterThan(mean(out(fgIdx) > 0), 0.9);
+            tc.verifyGreaterThan(mean(out(bgIdx) < 0), 0.9);
+        end
+
+        function faabUint8ClampsOutsideToZero(tc)
+            % Same binarization in uint8. Measured: class uint8, min=0,
+            % and a substantial fraction (72.8%) of voxels are exactly 0
+            % -- the outside-negative half of the level set saturating on
+            % export, exactly as documented. The cross-check against the
+            % double path's sign pattern is included since the measured
+            % correspondence (94.97% agreement) is reasonably clean, with
+            % a bound safely under the measured value.
+            Bu = uint8(255 * (tc.Vu > 33));
+            B = 255 * double(tc.Vu > 33);
+            out = mexitk('FAAB', [0.01 50 2], Bu);
+            outDouble = mexitk('FAAB', [0.01 50 2], B);
+            tc.verifyClass(out, 'uint8');
+            tc.verifyEqual(min(out(:)), uint8(0));
+            tc.verifyGreaterThan(mean(out(:) == 0), 0.5);
+            crossAgree = mean((out(:) == 0) == (outDouble(:) <= 0));
+            tc.verifyGreaterThan(crossAgree, 0.9);
+        end
+    end
+
+    methods (Test)  % FVMI
+        function fvmiRunsAndIsNonNegative(tc)
+            % Non-vessel voxels are exactly 0 by construction
+            % (itkHessian3DToVesselnessMeasureImageFilter.hxx:87);
+            % vessel-measure sign must be measured, not assumed. Measured:
+            % min=0, max=19.84, 249505 of 442368 voxels exactly 0.
+            out = mexitk('FVMI', [1 0.5 2], tc.V);
+            tc.verifyGreaterThanOrEqual(min(out(:)), 0);
+        end
+
+        function fvmiRespondsToSigma(tc)
+            out1 = mexitk('FVMI', [1 0.5 2], tc.V);
+            out3 = mexitk('FVMI', [3 0.5 2], tc.V);
+            tc.verifyNotEqual(out1, out3);
+        end
+    end
+
+    methods (Test)  % error paths (CastParam / ITK-exception)
+        % None of the 8 opcodes has a parameter whose CastParam target
+        % depends on the input pixel type (targets are only double,
+        % unsigned int, or itk::IdentifierType), unlike Phase 1/3's
+        % out-of-range-on-uint8 paramRange tests (FBT 300, SCC replace
+        % 300). There is no Phase 4 analogue of that pattern.
+        function faabRejectsNegativeIterations(tc)
+            tc.verifyError(@() mexitk('FAAB', [0.01 -1 2], tc.V), 'mexitk:paramRange');
+        end
+
+        function faabRejectsNegativeLayers(tc)
+            tc.verifyError(@() mexitk('FAAB', [0.01 50 -1], tc.V), 'mexitk:paramRange');
+        end
+
+        function fcfRejectsNegativeIterations(tc)
+            tc.verifyError(@() mexitk('FCF', [-1 0.0625], tc.V), 'mexitk:paramRange');
+        end
+
+        function fgadRejectsNegativeIterations(tc)
+            tc.verifyError(@() mexitk('FGAD', [-5 0.0625 3], tc.V), 'mexitk:paramRange');
+        end
+
+        function fgmrgRejectsNonPositiveSigma(tc)
+            % ITK's own catchable exception ("Sigma must be greater than
+            % zero.", itkRecursiveGaussianImageFilter.hxx:330-333), not a
+            % mexitk guard: this is ITK failing loudly on its own.
+            % Verified directly on the real build.
+            tc.verifyError(@() mexitk('FGMRG', 0, tc.V), 'mexitk:itkException');
+        end
+
+        function flsRejectsNonPositiveSigma(tc)
+            % Same ITK exception as FGMRG above (shared RecursiveGaussian
+            % base). Verified directly.
+            tc.verifyError(@() mexitk('FLS', 0, tc.V), 'mexitk:itkException');
+        end
+
+        function fvmiRejectsNonPositiveSigma(tc)
+            % Same underlying exception via the Hessian stage's recursive
+            % Gaussian passes. Verified directly.
+            tc.verifyError(@() mexitk('FVMI', [0 0.5 2], tc.V), 'mexitk:itkException');
+        end
+    end
+end
