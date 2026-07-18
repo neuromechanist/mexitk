@@ -71,12 +71,16 @@ MATITK_DIR=/path/to/dir MEXITK_REFCAP_OUT=/path/to/output \
 ```
 
 `s10b_faab_crash_probe.m` runs after `s10`, in its own invocation, for the
-same crash-isolation reason as `s13`: `FAAB` on raw (non-binary) `uint8`
-mri was measured (run 1) to kill the original's process with a floating
-point exception, not a catchable `itk::ExceptionObject`. `s10` itself
-only captures `FAAB` on raw `double`/`single` (which completed cleanly in
-that run) plus the `bin33` derived input; `s10b` isolates raw
-`uint8`/`int32` so a crash there cannot cost `s10`'s other 47 cases.
+same crash-isolation reason as `s13`: `FAAB` on `uint8` input was measured,
+across two campaign runs, to kill the original's process with a floating
+point exception, not a catchable `itk::ExceptionObject` — first on raw
+mri (run 1), then again on the already-binarized `bin33` input (run 2).
+The crash is about the pixel type, not the pixel value distribution:
+binarizing first does not avoid it. `s10` itself only captures `FAAB` on
+`double`/`single`, both raw and `bin33` (all of which completed cleanly
+in both runs); `s10b` isolates every integral-class `FAAB` case — raw and
+`bin33`, `uint8` and `int32` (presumed to crash the same way, not yet
+directly confirmed) — so a crash there cannot cost `s10`'s other cases.
 
 ## Two real gotchas
 

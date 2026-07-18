@@ -33,14 +33,17 @@ bin33Vals = {bin33Double, bin33Single, bin33Uint8, bin33Int32};
 bin33Recipes = {bin33RecipeDouble, bin33RecipeSingle, bin33RecipeUint8, bin33RecipeInt32};
 
 % FAAB
-% Raw mri: the shared shape/class test (runsAndPreservesShapeAndClass)
-% calls FAAB on tc.Vu-derived raw input, not the bin33 derived input
-% below. double+single only here: FAAB on raw (non-binary) uint8
-% measured to kill the original's process with a floating point
-% exception (run 1, s10, exit 137); uint8/int32 are captured in
-% isolation instead by s10b_faab_crash_probe.m.
+% double+single only here, for BOTH raw and bin33 inputs. Measured
+% against the real binary across two campaign runs: FAAB on uint8 input
+% crashes the original with a floating point exception regardless of
+% whether the input is raw (run 1) or already binarized at bin33 (run
+% 2) -- the crash is about the pixel type, not the pixel value
+% distribution. int32 is presumed to hit the same crash by extension
+% (not yet directly confirmed) and is treated the same way. Every
+% integral-class FAAB case (raw and bin33, uint8 and int32) is isolated
+% instead in s10b_faab_crash_probe.m.
 capture_classes(cfg, 'FAAB', '0p01_50_2_raw', [0.01 50 2], classNames, classVals, [1 2]);
-capture_classes_recipe(cfg, 'FAAB', '0p01_50_2_bin33', [0.01 50 2], classNames, bin33Vals, bin33Recipes, 1:4);
+capture_classes_recipe(cfg, 'FAAB', '0p01_50_2_bin33', [0.01 50 2], classNames, bin33Vals, bin33Recipes, [1 2]);
 capture_case(cfg, 'FAAB', '0p01_50_1_bin33_double', [0.01 50 1], bin33Double, struct('inputRecipe', bin33RecipeDouble));
 capture_case(cfg, 'FAAB', '0p01_50_50_bin33_double', [0.01 50 50], bin33Double, struct('inputRecipe', bin33RecipeDouble));
 
