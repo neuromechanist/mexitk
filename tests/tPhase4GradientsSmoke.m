@@ -171,6 +171,15 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             outFdg = mexitk('FDG', [4 5], tc.V);
             tc.verifyNotEqual(out, outFdg);
         end
+
+        function fblDomainAndRangeSigmaAreNotInterchangeable(tc)
+            % Catches a param-order bug where domainSigma and rangeSigma got
+            % swapped in the C++ wiring. Measured: [2 10] gives std=30.1274
+            % (< 30.2); the swapped call [10 2] gives std=30.2961 (>=
+            % 30.2), a real, measured difference, not an invented bound.
+            out = mexitk('FBL', [2 10], tc.V);
+            tc.verifyLessThan(std(out(:)), 30.2);
+        end
     end
 
     methods (Test)  % FGAD (vs FCA)
@@ -185,6 +194,28 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             % Measured: std 30.30 -> 29.01.
             out = mexitk('FGAD', [5 0.0625 3], tc.V);
             tc.verifyLessThan(std(out(:)), std(tc.V(:)));
+        end
+
+        function fgadIterationsAndConductanceAreNotInterchangeable(tc)
+            % Catches a param-order bug where numberOfIterations and
+            % conductance got swapped. Measured: [2 0.0625 40] (2 iters,
+            % conductance 40) gives std=29.0735 (> 28.5); the
+            % swapped-equivalent call (what wiring iterations<->conductance
+            % backwards would produce for this same input, i.e.
+            % [40 0.0625 2]) gives std=28.0757, comfortably below the bound.
+            out = mexitk('FGAD', [2 0.0625 40], tc.V);
+            tc.verifyGreaterThan(std(out(:)), 28.5);
+        end
+
+        function fgadTimeStepAndConductanceAreNotInterchangeable(tc)
+            % Catches a param-order bug where timeStep and conductance got
+            % swapped. Measured: [5 0.0625 10] gives std=28.3072 (< 29.5);
+            % the swapped-equivalent call ([5 10 0.0625], i.e. timeStep=10
+            % conductance=0.0625) is numerically unstable and GROWS past
+            % the input's own std (30.3218 > 30.2985), comfortably above
+            % the bound.
+            out = mexitk('FGAD', [5 0.0625 10], tc.V);
+            tc.verifyLessThan(std(out(:)), 29.5);
         end
     end
 
@@ -215,6 +246,16 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             % the remainder sit near the estimated zero-crossing surface,
             % which is expected for a level-set method). Only the
             % measured majority-fraction claim is asserted, not 100%.
+            %
+            % Residual gap, documented rather than silently ignored: a
+            % maximumRMSError<->numberOfIterations param-order swap is a
+            % KNOWN undetected case for this test file. The only signal
+            % found during review was sign-purity (100% vs the 98.5%
+            % measured above for correct wiring), which is too fragile a
+            % margin to assert reliably -- it is not backed by a
+            % comfortably-separated measured bound the way the other
+            % not-interchangeable tests in this file are, so it is not
+            % asserted here.
             B = 255 * double(tc.Vu > 33);
             out = mexitk('FAAB', [0.01 50 2], B);
             tc.verifyNotEqual(out, B);
@@ -224,6 +265,20 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             bgIdx = (B == 0);
             tc.verifyGreaterThan(mean(out(fgIdx) > 0), 0.9);
             tc.verifyGreaterThan(mean(out(bgIdx) < 0), 0.9);
+        end
+
+        function faabLayersControlsValueRange(tc)
+            % Catches a param-order bug where numberOfIterations and
+            % numberOfLayers got swapped (both are IdentifierType/unsigned
+            % int, so a swap would not be caught by CastParam). Measured on
+            % the same binarization: layers=1 gives max=2 (< 5); layers=50
+            % gives max=51 (> 20) -- numberOfLayers genuinely controls how
+            % far the level-set field extends, a real, measured effect.
+            B = 255 * double(tc.Vu > 33);
+            out1 = mexitk('FAAB', [0.01 50 1], B);
+            tc.verifyLessThan(max(out1(:)), 5);
+            out50 = mexitk('FAAB', [0.01 50 50], B);
+            tc.verifyGreaterThan(max(out50(:)), 20);
         end
 
         function faabUint8ClampsOutsideToZero(tc)
@@ -260,6 +315,16 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             out1 = mexitk('FVMI', [1 0.5 2], tc.V);
             out3 = mexitk('FVMI', [3 0.5 2], tc.V);
             tc.verifyNotEqual(out1, out3);
+        end
+
+        function fvmiAlphasAreNotInterchangeable(tc)
+            % Catches a param-order bug where alpha1 and alpha2 got
+            % swapped. Measured: [1 0.5 2] gives nnz(~=0)=192863 (> 180000);
+            % the swapped call [1 2 0.5] gives nnz(~=0)=161784, comfortably
+            % below the bound -- the vessel/non-vessel classification
+            % genuinely depends on which alpha lands on which Sato term.
+            out = mexitk('FVMI', [1 0.5 2], tc.V);
+            tc.verifyGreaterThan(nnz(out(:) ~= 0), 180000);
         end
     end
 
