@@ -32,6 +32,10 @@ set(MEXITK_ITK_COMPONENTS
   ITKAnisotropicSmoothing  # FCA: CurvatureAnisotropicDiffusionImageFilter
   ITKThresholding          # FOMT: OtsuMultipleThresholds + BinaryThreshold
   ITKWatersheds            # SWS: WatershedImageFilter
+  ITKSmoothing             # FMEDIAN, FMEAN, FDG, FGA, FBB
+  ITKImageIntensity        # FSN: SigmoidImageFilter
+  ITKImageGrid             # FF: FlipImageFilter
+  ITKImageFeature          # FD: DerivativeImageFilter
 )
 find_package(ITK 5.4 REQUIRED COMPONENTS ${MEXITK_ITK_COMPONENTS})
 
@@ -51,8 +55,16 @@ find_package(ITK 5.4 REQUIRED COMPONENTS ${MEXITK_ITK_COMPONENTS})
 set(MEXITK_SOURCES
   src/mexitk.cpp
   src/opcode.cpp
+  src/opcodes/fbb.cpp
+  src/opcodes/fbt.cpp
   src/opcodes/fca.cpp
+  src/opcodes/fd.cpp
+  src/opcodes/fdg.cpp        # FDG and FGA
+  src/opcodes/ff.cpp
+  src/opcodes/fmean.cpp
+  src/opcodes/fmedian.cpp
   src/opcodes/fomt.cpp
+  src/opcodes/fsn.cpp
   src/opcodes/sws.cpp
 )
 

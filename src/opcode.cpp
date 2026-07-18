@@ -87,8 +87,17 @@ const char* PixelTypeName(mxClassID id) {
 }
 
 // Declared by each opcode's translation unit.
+const Opcode* GetFbbOpcode();
+const Opcode* GetFbtOpcode();
 const Opcode* GetFcaOpcode();
+const Opcode* GetFdOpcode();
+const Opcode* GetFdgOpcode();
+const Opcode* GetFfOpcode();
+const Opcode* GetFgaOpcode();
+const Opcode* GetFmeanOpcode();
+const Opcode* GetFmedianOpcode();
 const Opcode* GetFomtOpcode();
+const Opcode* GetFsnOpcode();
 const Opcode* GetSwsOpcode();
 
 // Registration is explicit rather than via static initialisers in each opcode
@@ -103,8 +112,17 @@ void RegisterBuiltinOpcodes() {
   }
   registered = true;
 
+  RegisterOpcode(GetFbbOpcode());
+  RegisterOpcode(GetFbtOpcode());
   RegisterOpcode(GetFcaOpcode());
+  RegisterOpcode(GetFdOpcode());
+  RegisterOpcode(GetFdgOpcode());
+  RegisterOpcode(GetFfOpcode());
+  RegisterOpcode(GetFgaOpcode());
+  RegisterOpcode(GetFmeanOpcode());
+  RegisterOpcode(GetFmedianOpcode());
   RegisterOpcode(GetFomtOpcode());
+  RegisterOpcode(GetFsnOpcode());
   RegisterOpcode(GetSwsOpcode());
 }
 

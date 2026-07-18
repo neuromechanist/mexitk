@@ -217,6 +217,9 @@ or refuses to reproduce a defect.
 | 2 | **String objects are accepted as well as char arrays.** The original rejects `matitk("FCA", ...)` with `Opcode input field must be of type string.` because MATLAB's `string` class postdates it by a decade. | A strict superset: every call that worked against `matitk` behaves identically. Nothing changes meaning. |
 | 3 | **Console output says `mexitk`, not `MATITK`.** The original prints `executing MATITK in double mode`. | Printing another project's name would misattribute this code. Cosmetic; no caller parses it. |
 | 4 | **Errors carry `mexitk:*` identifiers.** The original throws untagged errors. | Makes failures catchable by identifier. Diagnostic text is preserved. |
+| 5 | **Out-of-range parameter values raise `mexitk:paramRange` instead of casting with undefined behaviour.** A value like `FBT`'s `upperThreshold = 300` on a `uint8` volume, or a negative radius/repetition/order count, would be an out-of-range or negative-to-unsigned cast, which is undefined behaviour in C++. The same guard also covers a finite value beyond a narrower floating type's range, e.g. `upperThreshold = 1e39` on a `single()` volume (`float`'s max is ~3.4e38); `Inf`/`NaN` are exactly representable in `float` and still pass through, matching the original. In-range values, including the original's own truncating behaviour (e.g. `255.9` &rarr; `255` on `uint8`), are unaffected. | The original's own behaviour on these inputs is unknown and unreproducible (no reference capture covers them), and reproducing undefined behaviour on purpose is not a defect worth keeping. Refusing it is a strict subset of accepted inputs, not a change to any in-range result. |
+| 6 | **`FDG`/`FGA` reject `gaussianVariance <= 0`** with `mexitk:FDG:gaussianVariance` / `mexitk:FGA:gaussianVariance`. | A non-positive variance silently produces a degenerate, non-Gaussian kernel rather than an error. In-range (positive) variance is unaffected. |
+| 7 | **`FSN` rejects `alpha == 0`** with `mexitk:FSN:alpha`. | `alpha = 0` makes `SigmoidImageFilter`'s functor divide by zero, producing `NaN` that then hits an undefined-behaviour cast into an integer pixel type. Nonzero `alpha` is unaffected. |
 
 ## Behaviour matched deliberately, including the odd bits
 
@@ -235,13 +238,58 @@ or refuses to reproduce a defect.
 
 ## Coverage
 
-`mexitk` currently implements **3 of the original's 40 opcodes**: FCA, FOMT and SWS.
-These are the three NFT depends on, and the only three with reference data.
-The remaining 37 are catalogued in `docs/matitk_opcode_registry.txt`
+`mexitk` currently implements **12 of the original's 40 opcodes**:
+FCA, FOMT, SWS, and the 9 smoke-tested filters FBB, FBT, FD, FDG, FF, FGA,
+FMEAN, FMEDIAN and FSN.
+FCA, FOMT and SWS are the three NFT depends on, and the only three with
+reference data; the other 9 have no captured reference (see "Smoke-tested
+opcodes" below).
+The remaining 28 are catalogued in `docs/matitk_opcode_registry.txt`
 (the original binary's own parameter dump)
 and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`,
 but they are **not implemented**.
 See the README for the current status of each.
+
+## Smoke-tested opcodes (no reference)
+
+FBB, FBT, FD, FDG, FF, FGA, FMEAN, FMEDIAN and FSN run and return plausible
+output, but no reference capture exists for them: the only captured reference
+is the 2006 MATITK binary's FCA/FOMT/SWS output (see "The reference" above),
+so there is nothing to measure these 9 against. There are no measurement
+tables for them, unlike FCA and SWS above, because there is no reference to
+measure against.
+
+| Opcode | ITK class |
+|---|---|
+| FBB | `BinomialBlurImageFilter` |
+| FBT | `BinaryThresholdImageFilter` |
+| FD | `DerivativeImageFilter` |
+| FDG | `DiscreteGaussianImageFilter` |
+| FF | `FlipImageFilter` |
+| FGA | `DiscreteGaussianImageFilter` (see below) |
+| FMEAN | `MeanImageFilter` |
+| FMEDIAN | `MedianImageFilter` |
+| FSN | `SigmoidImageFilter` |
+
+**FGA is implemented as a deliberate duplicate of FDG.** Both opcodes have the
+identical registry parameter signature (`gaussianVariance`, `maxKernelWidth`;
+see `docs/matitk_opcode_registry.txt`), and no other ITK class matches that
+parameter shape, so `mexitk` implements `FGA` as the same
+`itk::DiscreteGaussianImageFilter` `FDG` uses. Whether the 2006 binary shipped
+two genuinely distinct filters under these names is unconfirmed against
+MATITK source, since none was available; it is most likely an artifact of the
+original's Perl generator producing one entry per ITK example file. This is
+flagged, not silently assumed.
+
+**One pixel-type deviation: FD promotes `uint8` to `float`.** ITK's
+`DerivativeImageFilter` requires a signed output pixel type
+(`Concept::Signed<OutputPixelType>`), which `uint8` fails and
+`int32`/`float`/`double` satisfy. So `FD` promotes `uint8` input to `float`
+for the derivative and casts back on the way out, mirroring FCA's
+promote-and-cast-back pattern but keyed on signedness rather than
+floating-pointness. The other 8 opcodes in this table run at the native input
+pixel type for all four supported classes (`double`, `single`, `uint8`,
+`int32`); no promotion.
 
 ### `SCSS`: will not support
 
@@ -271,7 +319,5 @@ Calling `mexitk('SCSS', ...)` returns an unknown-operation error, which is the h
   and needs verification against the original binary before implementation.
 - **`FFFT`**: the VNL FFT backend was removed from ITK and rerouted via pocketfft;
   the real/complex output switch semantics are unconfirmed.
-- **`FGA`** is very likely a duplicate of `FDG` (both `DiscreteGaussianImageFilter`),
-  an artifact of the original's Perl generator.
 - **`RD`**: `SetStandardDeviations` is silently inert unless `SmoothDisplacementFieldOn()`
   is also called, a real silent-failure trap to avoid inheriting.

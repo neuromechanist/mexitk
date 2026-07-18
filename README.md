@@ -31,15 +31,25 @@ Keeping ITK keeps the algorithms.
 
 ## Status: honest summary
 
-This is version 0.1.0.
-**3 of the original's 40 opcodes are implemented.**
-Those 3 are the ones NFT depends on, and the only 3 with captured reference data.
+This is version 0.2.0.
+**12 of the original's 40 opcodes are implemented.**
+3 of those are the ones NFT depends on, and the only 3 with captured reference data.
+The other 9 are smoke-tested filters with no reference capture.
 
 | Opcode | ITK filter | Status | What that means |
 |---|---|---|---|
 | `FOMT` | `OtsuMultipleThresholdsImageFilter` | **validated** | Bit-identical to the original for `double` and `single` at N=2,3,4. `uint8` differs on ~0.2% of voxels. |
 | `FCA` | `CurvatureAnisotropicDiffusionImageFilter` | **bounded deviation** | Not bit-identical. RMS 2.6e-3, max 4.7e-2 at 1 iteration over a 0-88 range; compounds with iterations. |
 | `SWS` | `WatershedImageFilter` | **bounded deviation** | Region count matches exactly at every tested setting; label images are not bit-identical at fine levels. |
+| `FBB` | `BinomialBlurImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
+| `FBT` | `BinaryThresholdImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
+| `FD` | `DerivativeImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. `uint8` promotes to `float` internally. |
+| `FDG` | `DiscreteGaussianImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
+| `FF` | `FlipImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
+| `FGA` | `DiscreteGaussianImageFilter` | **smoke-tested** | Duplicate of `FDG`; the registry's parameter signature for `FGA` is identical to `FDG`'s. |
+| `FMEAN` | `MeanImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
+| `FMEDIAN` | `MedianImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
+| `FSN` | `SigmoidImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
 
 Status vocabulary, used consistently in the code, in `mexitk('?')`, and here:
 
@@ -50,7 +60,7 @@ Status vocabulary, used consistently in the code, in `mexitk('?')`, and here:
 - **smoke-tested**: runs and returns plausible output, but no reference capture exists.
 - **untested**: implemented from the ITK mapping only; never run against a reference.
 
-The remaining 37 opcodes are **not implemented**.
+The remaining 28 opcodes are **not implemented**.
 They are catalogued in `docs/matitk_opcode_registry.txt` (the original binary's own parameter dump)
 and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`.
 
@@ -72,8 +82,8 @@ Read it before relying on this for science.
 
 | Platform | State |
 |---|---|
-| macOS arm64 (`maca64`) | Builds, loads, 34/34 tests pass. Verified in CI on a runner with **no ITK installed**. |
-| Linux x86_64 (`glnxa64`) | Builds, loads, 34/34 tests pass. Verified in CI on a runner with **no ITK installed**. Must be built with GCC 12 or older; see BUILDING.md. |
+| macOS arm64 (`maca64`) | Builds, loads, 81/81 tests pass. Verified locally against Homebrew ITK and in CI against static ITK, including loading on a runner with **no ITK installed**. |
+| Linux x86_64 (`glnxa64`) | Builds, loads, 81/81 tests pass. Verified in CI against static ITK, including loading on a runner with **no ITK installed**. Must be built with GCC 12 or older; see BUILDING.md. |
 | macOS x86_64 (`maci64`) | Legacy; built on a best-effort basis only. R2025b is MathWorks' final Intel-Mac release. |
 | Windows | Best-effort only; the ITK toolchain there is unresolved. Not attempted. |
 

@@ -53,7 +53,7 @@ void RunFca(OpContext& ctx) {
   using FilterType = itk::CurvatureAnisotropicDiffusionImageFilter<RealImage, RealImage>;
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(real);
-  filter->SetNumberOfIterations(static_cast<unsigned int>(p[0]));
+  filter->SetNumberOfIterations(CastParam<unsigned int>(p[0], "FCA", "numberOfIterations"));
   // ITK warns (itkWarningMacro) but proceeds when timeStep exceeds the
   // stability bound minSpacing/2^(dim+1), which is 0.0625 in 3-D at unit
   // spacing. The reference binary proceeds silently at that value; it is
