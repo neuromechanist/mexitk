@@ -20,9 +20,23 @@ Status as of 2026-07-16. Version 0.1.0.
   FD promotes `uint8` to `float` (ITK's `DerivativeImageFilter` requires a
   signed output pixel type); the other 8 run natively at all four supported
   pixel types. FGA is a deliberate duplicate of FDG (identical registry
-  parameter signature; see `docs/COMPATIBILITY.md`). 62/62 tests pass on
-  macOS arm64 (`tests/tPhase1FilterSmoke.m` plus the existing suites, no
-  regression).
+  parameter signature; see `docs/COMPATIBILITY.md`).
+- **Phase 1 hardening**: `CastParam` (`src/mexitk_common.h`) guards every
+  narrowing param-to-pixel-type cast against undefined behaviour
+  (`mexitk:paramRange`); `FDG`/`FGA` reject non-positive `gaussianVariance`;
+  `FSN` rejects `alpha == 0` (both were silent-corruption paths, not
+  crashes). Found and fixed along the way: `mexErrMsgIdAndTxt` calls made
+  from inside `Opcode::Execute` were being caught by `mexFunction`'s own
+  outer `catch (const std::exception&)` and re-wrapped as the generic
+  `mexitk:exception`, discarding the intended specific identifier — this
+  silently affected FOMT's pre-existing `numberOfThresholds`/`numberOfBins`
+  guards too, just never exercised by a test before now. Fixed with a small
+  `OpcodeError` type (`src/mexitk_common.h`) that carries its id through that
+  catch; see `docs/COMPATIBILITY.md` deviations 5-7.
+  `tests/tPhase1FilterSmoke.m` grew from 9 to 27 test methods (stronger
+  per-opcode invariants, dtype coverage on all 4 supported classes, and the
+  new error paths). 80/80 tests pass on macOS arm64 locally against Homebrew
+  ITK, no regression in the existing FCA/FOMT/SWS reference suites.
 
 ## Open decisions for the owner
 
