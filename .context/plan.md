@@ -1,6 +1,6 @@
 # mexitk plan
 
-Status as of 2026-07-16. Version 0.1.0.
+Status as of 2026-07-18. Version 0.1.0.
 
 ## Done
 
@@ -197,7 +197,8 @@ Status as of 2026-07-16. Version 0.1.0.
   type"); `FGMRG`/`FLS`/`FVMI` have no concept check either but hardwire
   `InternalRealType = float` internally and end in a raw narrowing cast.
   All six promoted opcodes use the FCA-precedent promote-and-`ClampImageFilter`
-  pattern (deviation 8); none is concept-*enforced* to promote (`FD`, from
+  pattern (deviation 8, later replaced by `ClampExport`; see "Phase 4
+  hardening" below); none is concept-*enforced* to promote (`FD`, from
   Phase 1, remains the only concept-forced promotion in the whole project).
   `FVMI`'s two-filter pipeline (`HessianRecursiveGaussianImageFilter` feeding
   `Hessian3DToVesselnessMeasureImageFilter`) needed one template-instantiation
@@ -229,11 +230,64 @@ Status as of 2026-07-16. Version 0.1.0.
   ITK's own catchable exception (`mexitk:itkException`), verified directly
   on all three rather than assumed from the shared base class; no custom
   guard was added, matching the minimal-deviation policy.
-  `tests/tPhase4GradientsSmoke.m` (40 test methods) covers the 4-pixel-type
+  `tests/tPhase4GradientsSmoke.m` (28 test methods) covers the 4-pixel-type
   run for all 8 opcodes, algorithm-distinctness and monotonicity properties,
   the exact-arithmetic and measured-sign-pattern assertions above, and the
   paramRange/itkException error paths. 196/196 tests pass on macOS arm64
   locally against Homebrew ITK, no regression in any existing suite.
+- **Phase 4 hardening**: the largest fix batch of the epic, touching Phase
+  1-3 code too under the no-debt policy (fixture suites are the proof).
+  `itk::ClampImageFilter`'s cast-back falls through to a raw `static_cast`
+  for `NaN` (unordered comparisons skip both bounds checks), undefined
+  behaviour reachable via an unstable diffusion `timeStep` or `FVMI`'s
+  alpha `0/0` corner. Replaced project-wide with one audited helper,
+  `ClampExport<PixelT, RealT>` (`src/mexitk_common.h`): a manual buffer
+  loop matching `ClampImageFilter`'s exact in-range/out-of-range bounds
+  logic, plus an explicit `isnan` check writing `PixelT{}` (0) instead of
+  falling through. Used by all nine promoted opcodes across Phases 1-3
+  (`FCA`, `FD`, `FDM`) and 4 (`FAAB`, `FCF`, `FGAD`, `FGMRG`, `FLS`,
+  `FVMI`). `FGM`'s `int32` path was reworked to match: computation stays
+  native (verified from `itkGradientMagnitudeImageFilter.hxx` that
+  accumulation is `NumericTraits<T>::RealType`, `double` for both `uint8`
+  and `int32`), but export now goes through `GradientMagnitudeImageFilter
+  <InImage, Image3<double>>` + `ClampExport<int32_t, double>` since
+  `int32`'s native narrowing cast could overflow (`uint8`'s could not:
+  worst case ~220.9 < 255, measured 76.21 on the reference volume, so its
+  path is bit-identical before and after). Independently bit-compared
+  `FGM`'s `uint8`/`int32` outputs against a hand-derived floor-truncation
+  reconstruction: 0 mismatches across all 442368 voxels for either type.
+  `FBL` gained `domainSigma`/`rangeSigma` guards after tracing
+  `itkBilateralImageFilter.hxx` line by line: negative `domainSigma`
+  raw-casts into an unsigned radius (UB); non-positive `rangeSigma`
+  collapses `normFactor` to 0, so `val /= normFactor` writes a native
+  `0.0/0.0` `NaN` straight into the integer output buffer *inside* ITK's
+  own threaded loop, before `mexitk`'s export step runs, so `ClampExport`
+  cannot help — this one needed a pre-execution guard instead, joining
+  the `FDG`/`FGA`/`FSN` semantic-guard family. `FCA`, `FCF` and `FGAD`
+  now reject a negative `timeStep` (backward-time diffusion is ill-posed
+  and the original's behaviour there is undefined); `timeStep == 0` stays
+  accepted as a defined no-op. `FGAD`/`FCA`'s `numberOfIterations` moved
+  from `CastParam<unsigned int>` to `CastParam<itk::IdentifierType>`,
+  matching the `FCF`/`FAAB` precedent (`itkFiniteDifferenceImageFilter.h:186`).
+  Five new error-path tests cover B and D; five new param-swap-detection
+  tests (`fgadIterationsAndConductanceAreNotInterchangeable`,
+  `fgadTimeStepAndConductanceAreNotInterchangeable`,
+  `faabLayersControlsValueRange`, `fvmiAlphasAreNotInterchangeable`,
+  `fblDomainAndRangeSigmaAreNotInterchangeable`) assert specific measured
+  thresholds that only hold when parameters land in their documented
+  slots, independently re-verified rather than trusted from the review.
+  An optional FCF-uint8-large-`timeStep` test was scoped but dropped:
+  `mexitk('FCF', [10 100], uint8data)` produces huge-but-finite values on
+  the reference volume (`anyNaN=0`), not actual `NaN`, so the test's
+  precondition was never met and it was not forced to fit. `FAAB`'s
+  known blind spot (an rms<->iterations parameter swap has no reliable
+  detection signal on this data beyond a fragile 100% vs 98.5%
+  sign-purity difference) is now a documented comment at
+  `faabProducesSignedLevelSetOnDouble`, not a silently missing case.
+  `tests/tPhase4GradientsSmoke.m` grew from 28 to 38 test methods (10 new:
+  5 error-path, 5 param-swap-detection). 206/206 tests pass on macOS
+  arm64 locally against Homebrew ITK, no regression in any existing
+  suite.
 
 ## Open decisions for the owner
 
