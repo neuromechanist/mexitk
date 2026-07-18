@@ -141,6 +141,38 @@ classdef tPhase3RegionGrowingSmoke < matlab.unittest.TestCase
             out = mexitk(seededOp, p, tc.V, [], sub);
             tc.verifyNotEqual(out(far(1), far(2), far(3)), rv);
         end
+
+        function seedAtDimensionMaximumIsAccepted(tc, seededOp)
+            % [70 50 27]: z=27 is the EXACT dim-3 maximum of this
+            % 128x128x27 volume. A missing/wrong 1->0 base shift in
+            % SeedPointsToIndices would deterministically throw
+            % mexitk:seeds here (index 27 is one past the valid 0-based
+            % range 0..26), so this pins the off-by-one boundary rather
+            % than just an interior seed. Params are chosen to guarantee a
+            % clean run regardless of the voxel's own intensity (full
+            % range for SNC/SCT-equivalent bounds), not to test growth
+            % magnitude. Verified directly for all three ops before commit.
+            sub = [70 50 27];
+            switch seededOp
+                case 'SCT'; p = [20 60];
+                case 'SNC'; p = [1 1 1 0 255 255];
+                case 'SCC'; p = [2.5 5 100];
+            end
+            out = mexitk(seededOp, p, tc.V, [], sub);
+            tc.verifySize(out, size(tc.V));
+        end
+
+        function fractionalSeedTruncatesTowardZero(tc)
+            % 70.9 must behave as 70, not round to 71: matches CastParam's
+            % truncation philosophy used everywhere else in this codebase.
+            % Verified directly: mexitk('SCT',...,[70.9 50 14]) produces the
+            % bit-identical output to mexitk('SCT',...,[70 50 14]).
+            sub = tPhase3RegionGrowingSmoke.regionGrowSeed();
+            fractional = [sub(1) + 0.9, sub(2), sub(3)];
+            outInt = mexitk('SCT', [20 60], tc.V, [], sub);
+            outFrac = mexitk('SCT', [20 60], tc.V, [], fractional);
+            tc.verifyEqual(outFrac, outInt);
+        end
     end
 
     methods (Test)  % SCT-specific
@@ -195,6 +227,24 @@ classdef tPhase3RegionGrowingSmoke < matlab.unittest.TestCase
             small = mexitk('SCC', [2.5 5 100], tc.V, [], sub);
             big   = mexitk('SCC', [4 5 100], tc.V, [], sub);
             tc.verifyGreaterThanOrEqual(nnz(big == 100), nnz(small == 100));
+        end
+
+        function sccMultiplierAndIterationsAreNotInterchangeable(tc)
+            % Catches a param-order bug where multiplier and iterations got
+            % swapped in the C++ wiring (SetMultiplier(p[1]),
+            % SetNumberOfIterations(p[0]) instead of the correct
+            % SetMultiplier(p[0]), SetNumberOfIterations(p[1])). At
+            % [1.0 5 100] (multiplier=1.0, a tight confidence interval),
+            % correct wiring grows a small region: measured nnz=3. Under
+            % the hypothetical swap, this call would behave like
+            % multiplier=5/iterations=1, i.e. equivalent to calling with
+            % [5 1 100] under correct wiring, measured nnz=150674 -- five
+            % orders of magnitude larger. The bound below is set
+            % comfortably above the measured correct-wiring count (3) and
+            % comfortably below the swapped-equivalent count (150674).
+            sub = tPhase3RegionGrowingSmoke.regionGrowSeed();
+            out = mexitk('SCC', [1.0 5 100], tc.V, [], sub);
+            tc.verifyLessThan(nnz(out == 100), 1000);
         end
 
         function sccEmptySeedsAllZero(tc)
