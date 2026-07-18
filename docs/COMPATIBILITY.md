@@ -125,11 +125,15 @@ the reference tests this epic's Phase 3 will add):
   value distribution.
 - **Seed coordinates are 1-based, matrix-order (no transpose), with an
   exclusive upper bound at each dimension's own size.** A literal
-  0-based seed `[0 0 0]` is rejected with an indexing-specific error
-  (`Please note that array in matlab...`); seeds one step off a
-  known-good point in either direction behave normally. Combined with
-  the earlier, separately measured rejection of seeds sitting exactly at
-  a dimension's own extent (`[70 50 27]` on the 27-deep volume; `SIC`'s
+  0-based seed `[0 0 0]` is rejected with the original's own words:
+  `Please note that array in matlab starts from 1` — a direct statement
+  of 1-based indexing, not an inference from a truncated message (the
+  first campaign only recorded `Please note that array in matlab...`
+  before a harness bug, since fixed, cut it off; the recaptured fixture
+  has the full sentence). Seeds one step off a known-good point in
+  either direction behave normally. Combined with the earlier,
+  separately measured rejection of seeds sitting exactly at a
+  dimension's own extent (`[70 50 27]` on the 27-deep volume; `SIC`'s
   original second seed `[1 128 1]` on the 128-wide volume) — both
   rejected with `Location of seed outside volume` — the valid range for
   a dimension of size *N* is 1 to *N*-1, not 1 to *N*.
