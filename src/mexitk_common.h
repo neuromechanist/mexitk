@@ -237,8 +237,8 @@ mxArray* ExportVolume(const Image3<PixelT>* img) {
 }
 
 // Converts the flat, 1-based seed vector ([d1 d2 d3 d1 d2 d3 ...], already
-// validated centrally in mexFunction to be a multiple of kDimension in length
-// with every element >= 1) into itk::Index<kDimension> values.
+// validated centrally in mexFunction to be a multiple of kDimension in
+// length) into itk::Index<kDimension> values.
 //
 // Axis mapping is a direct, zero-transpose pass-through: seed triplet
 // (d1,d2,d3) maps onto ITK axes (0,1,2) as index {d1-1, d2-1, d3-1}. This is
@@ -249,10 +249,23 @@ mxArray* ExportVolume(const Image3<PixelT>* img) {
 // the import convention but is not verifiable against MATITK source (none
 // exists). See docs/COMPATIBILITY.md.
 //
-// A fractional seed coordinate is truncated toward zero before the 1->0 base
-// shift (static_cast<IndexValueType>(d) - 1), matching CastParam's integral
-// truncation philosophy. A seed whose resulting index falls outside the
-// volume throws OpcodeError("mexitk:seeds", ...).
+// Every coordinate is validated in the double domain BEFORE any cast to an
+// integral type; this helper does not trust the central check in
+// mexFunction (`s < 1.0`) to have established a safe domain, because it
+// hasn't: that check passes NaN and +Inf through unrejected (IEEE unordered
+// comparisons are false), and a huge-but-finite coordinate would overflow
+// itk::IndexValueType on a raw static_cast, which is undefined behaviour in
+// C++ -- platform-dependent in a way that stayed hidden until it was
+// checked on more than one architecture: ARM64's saturating convert masks
+// it locally (the garbage result still fails the old bounds check), but
+// x86 wraps to INT64_MIN, where the subsequent "-1" base shift is a second,
+// independent signed-overflow UB. So here: truncate toward zero first
+// (matching CastParam's truncation philosophy), then require the truncated
+// value to be finite and within [1, size[axis]] -- only then is it cast.
+// Anything else (non-finite, or truncating outside that range) throws
+// OpcodeError("mexitk:seeds", ...) before any cast happens, so there is one
+// identifier for every seed problem rather than splitting non-finite seeds
+// off under a different one.
 inline std::vector<itk::Index<kDimension>> SeedPointsToIndices(
     const std::vector<double>& seeds, const itk::Size<kDimension>& size) {
   std::vector<itk::Index<kDimension>> indices;
@@ -260,17 +273,16 @@ inline std::vector<itk::Index<kDimension>> SeedPointsToIndices(
   for (size_t i = 0; i + kDimension <= seeds.size(); i += kDimension) {
     itk::Index<kDimension> idx;
     for (unsigned int axis = 0; axis < kDimension; ++axis) {
-      const itk::IndexValueType v =
-          static_cast<itk::IndexValueType>(seeds[i + axis]) - 1;
-      if (v < 0 || v >= static_cast<itk::IndexValueType>(size[axis])) {
+      const double s = seeds[i + axis];
+      const double t = std::trunc(s);
+      if (!std::isfinite(s) || t < 1.0 || t > static_cast<double>(size[axis])) {
         throw OpcodeError(
             "mexitk:seeds",
             FormatMessage("Seed coordinate %g on axis %u is outside the volume "
                           "(1..%lu).",
-                          seeds[i + axis], axis + 1,
-                          static_cast<unsigned long>(size[axis])));
+                          s, axis + 1, static_cast<unsigned long>(size[axis])));
       }
-      idx[axis] = v;
+      idx[axis] = static_cast<itk::IndexValueType>(t) - 1;
     }
     indices.push_back(idx);
   }

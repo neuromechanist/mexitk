@@ -82,7 +82,14 @@ class SotOpcode : public Opcode {
     // itk::Statistics::Histogram::GetIndex. Reject before it ever reaches
     // ITK, the same severity class as the SWS overthresholding deviation
     // (docs/COMPATIBILITY.md deviation #1).
-    if ((*ctx.params)[0] < 2.0) {
+    //
+    // Written as !(x >= 2.0) rather than (x < 2.0) deliberately: NaN
+    // compares false against every ordered relational operator, so
+    // (NaN < 2.0) is false and would fall through to CastParam's generic
+    // mexitk:paramRange instead of this opcode-specific guard. !(NaN >= 2.0)
+    // is true, so this form catches NaN under the same identifier as every
+    // other too-few-bins case.
+    if (!((*ctx.params)[0] >= 2.0)) {
       throw OpcodeError("mexitk:SOT:numberOfHistogram",
                         "numberOfHistogram must be at least 2.");
     }

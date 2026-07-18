@@ -355,5 +355,36 @@ classdef tPhase3RegionGrowingSmoke < matlab.unittest.TestCase
             out = mexitk('SNC', [1 1 1 20 60 300], tc.V, [], sub);
             tc.verifySize(out, size(tc.V));
         end
+
+        function seedRejectsNanCoordinate(tc)
+            % SeedPointsToIndices validates in the double domain before any
+            % cast (src/mexitk_common.h): central validation in mexFunction
+            % (s < 1.0) passes NaN through unrejected, since NaN compares
+            % false against every ordered relational operator. Verified
+            % directly.
+            tc.verifyError(@() mexitk('SCT', [20 60], tc.V, [], [NaN 50 14]), 'mexitk:seeds');
+        end
+
+        function seedRejectsInfCoordinate(tc)
+            % Same reasoning as the NaN case: s < 1.0 is false for +Inf too.
+            tc.verifyError(@() mexitk('SCT', [20 60], tc.V, [], [Inf 50 14]), 'mexitk:seeds');
+        end
+
+        function seedRejectsHugeCoordinate(tc)
+            % A huge-but-finite coordinate would overflow itk::IndexValueType
+            % on a raw cast (undefined behaviour); the helper now bounds-checks
+            % the truncated double value before ever casting it. Verified
+            % directly.
+            tc.verifyError(@() mexitk('SCT', [20 60], tc.V, [], [1e20 50 14]), 'mexitk:seeds');
+        end
+
+        function sotRejectsNanBins(tc)
+            % The guard is written as !(x >= 2.0), not (x < 2.0), so that
+            % NaN -- which compares false against both -- is still caught
+            % under this opcode-specific identifier rather than falling
+            % through to CastParam's generic mexitk:paramRange. Verified
+            % directly.
+            tc.verifyError(@() mexitk('SOT', NaN, tc.V), 'mexitk:SOT:numberOfHistogram');
+        end
     end
 end
