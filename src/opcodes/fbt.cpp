@@ -28,10 +28,10 @@ void RunFbt(OpContext& ctx) {
   using FilterType = itk::BinaryThresholdImageFilter<InImage, InImage>;
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(input);
-  filter->SetOutsideValue(static_cast<PixelT>(p[0]));
-  filter->SetInsideValue(static_cast<PixelT>(p[1]));
-  filter->SetLowerThreshold(static_cast<PixelT>(p[2]));
-  filter->SetUpperThreshold(static_cast<PixelT>(p[3]));
+  filter->SetOutsideValue(CastParam<PixelT>(p[0], "FBT", "outsideValue"));
+  filter->SetInsideValue(CastParam<PixelT>(p[1], "FBT", "insideValue"));
+  filter->SetLowerThreshold(CastParam<PixelT>(p[2], "FBT", "lowerThreshold"));
+  filter->SetUpperThreshold(CastParam<PixelT>(p[3], "FBT", "upperThreshold"));
   filter->Update();
 
   ctx.plhs[0] = ExportVolume<PixelT>(filter->GetOutput());

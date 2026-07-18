@@ -52,8 +52,8 @@ void RunFd(OpContext& ctx) {
   using FilterType = itk::DerivativeImageFilter<RealImage, RealImage>;
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(real);
-  filter->SetOrder(static_cast<unsigned int>(p[0]));
-  filter->SetDirection(static_cast<unsigned int>(p[1]));
+  filter->SetOrder(CastParam<unsigned int>(p[0], "FD", "SETORDER"));
+  filter->SetDirection(CastParam<unsigned int>(p[1], "FD", "SETDIRECTION"));
   filter->Update();
 
   if constexpr (std::is_same<PixelT, RealT>::value) {

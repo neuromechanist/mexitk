@@ -105,13 +105,18 @@ class FomtOpcode : public Opcode {
   void Execute(OpContext& ctx) const override {
     const int nThresholds = static_cast<int>((*ctx.params)[0]);
     if (nThresholds < 1 || nThresholds > kMaxThresholds) {
-      mexErrMsgIdAndTxt("mexitk:FOMT:numberOfThresholds",
-                        "numberOfThresholds must be between 1 and %d; got %d.",
-                        kMaxThresholds, nThresholds);
+      // A plain mexErrMsgIdAndTxt call here would be caught by mexFunction's
+      // outer std::exception handler (Execute() runs inside that try) and its
+      // specific identifier discarded in favour of the generic
+      // mexitk:exception; throw OpcodeError instead so it survives. See
+      // mexitk_common.h.
+      throw OpcodeError(
+          "mexitk:FOMT:numberOfThresholds",
+          FormatMessage("numberOfThresholds must be between 1 and %d; got %d.",
+                        kMaxThresholds, nThresholds));
     }
     if (static_cast<int>((*ctx.params)[1]) < 1) {
-      mexErrMsgIdAndTxt("mexitk:FOMT:numberOfBins",
-                        "numberOfBins must be a positive integer.");
+      throw OpcodeError("mexitk:FOMT:numberOfBins", "numberOfBins must be a positive integer.");
     }
     DispatchOnPixelType(mxGetClassID(ctx.volumeA),
                         [&](auto tag) { RunFomt<typename decltype(tag)::type>(ctx); });

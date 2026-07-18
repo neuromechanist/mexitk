@@ -30,9 +30,9 @@ void RunFmedian(OpContext& ctx) {
   filter->SetInput(input);
 
   typename FilterType::RadiusType radius;
-  radius[0] = static_cast<itk::SizeValueType>(p[0]);
-  radius[1] = static_cast<itk::SizeValueType>(p[1]);
-  radius[2] = static_cast<itk::SizeValueType>(p[2]);
+  radius[0] = CastParam<itk::SizeValueType>(p[0], "FMEDIAN", "XRADIUS");
+  radius[1] = CastParam<itk::SizeValueType>(p[1], "FMEDIAN", "YRADIUS");
+  radius[2] = CastParam<itk::SizeValueType>(p[2], "FMEDIAN", "ZRADIUS");
   filter->SetRadius(radius);
   filter->Update();
 

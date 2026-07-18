@@ -16,14 +16,79 @@
 #include "itkImage.h"
 #include "itkImportImageFilter.h"
 
+#include <algorithm>
+#include <cmath>
+#include <cstdarg>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <limits>
+#include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace mexitk {
 
 constexpr unsigned int kDimension = 3;
+
+// Raised by parameter or semantic validation inside Opcode::Execute. mexFunction's
+// outer try/catch runs around Execute() to report ITK and STL failures as
+// mexitk:itkException / mexitk:exception, so a plain mexErrMsgIdAndTxt call made
+// from inside Execute() would be caught there too and its specific identifier
+// and message discarded in favour of that generic wrapper. OpcodeError carries
+// its own id through that catch instead, so callers of mexErrMsgIdAndTxt-style
+// validation from within Execute() (CastParam, per-opcode semantic checks) throw
+// this rather than calling mexErrMsgIdAndTxt directly.
+class OpcodeError : public std::runtime_error {
+ public:
+  OpcodeError(std::string id, const std::string& message)
+      : std::runtime_error(message), id_(std::move(id)) {}
+  const std::string& Id() const { return id_; }
+
+ private:
+  std::string id_;
+};
+
+// printf-style formatting into an owned std::string, for OpcodeError messages
+// (unlike mexErrMsgIdAndTxt, its constructor cannot take the format args directly).
+inline std::string FormatMessage(const char* fmt, ...) {
+  char buf[512];
+  va_list args;
+  va_start(args, fmt);
+  std::vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(args);
+  return std::string(buf);
+}
+
+// Casts a parameter (already a validated double from ToDoubleVector) down to
+// the narrower type an ITK setter expects. Floating T is unconditionally
+// representable, so it passes through unchanged. Integral T is where the
+// original's own truncating behaviour lives (e.g. 255.9 -> 255 for uint8),
+// and that in-range behaviour is preserved here; only casts that would be
+// undefined behaviour in C++ (out of range, NaN, infinite) are rejected.
+template <typename T>
+T CastParam(double v, const char* opcode, const char* param) {
+  if constexpr (std::is_floating_point<T>::value) {
+    return static_cast<T>(v);
+  } else {
+    // 2^53 is the largest integer a double represents exactly; clamping the
+    // upper bound to it keeps this comparison itself exact even when T is a
+    // 64-bit integer whose own max() a double cannot represent precisely.
+    // Only affects 64-bit T, and a value that large would fail volume
+    // allocation anyway.
+    constexpr double kMaxExactDouble = 9007199254740992.0;  // 2^53
+    const double upper =
+        std::min(static_cast<double>(std::numeric_limits<T>::max()), kMaxExactDouble);
+    const double lower = static_cast<double>(std::numeric_limits<T>::lowest());
+    if (!std::isfinite(v) || std::trunc(v) < lower || std::trunc(v) > upper) {
+      throw OpcodeError("mexitk:paramRange",
+                        FormatMessage("%s: parameter %s = %g is out of range for its target type.",
+                                      opcode, param, v));
+    }
+    return static_cast<T>(v);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Pixel types

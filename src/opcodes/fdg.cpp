@@ -21,8 +21,16 @@
 namespace mexitk {
 namespace {
 
+const std::vector<ParamSpec>& DiscreteGaussianParams() {
+  static const std::vector<ParamSpec> kParams = {
+      {"gaussianVariance", nullptr},
+      {"maxKernelWidth", nullptr},
+  };
+  return kParams;
+}
+
 template <typename PixelT>
-void RunDiscreteGaussian(OpContext& ctx) {
+void RunDiscreteGaussian(OpContext& ctx, const char* opcodeName) {
   using InImage = Image3<PixelT>;
 
   typename InImage::Pointer input = ImportVolume<PixelT>(ctx.volumeA);
@@ -33,10 +41,24 @@ void RunDiscreteGaussian(OpContext& ctx) {
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(input);
   filter->SetVariance(p[0]);
-  filter->SetMaximumKernelWidth(static_cast<unsigned int>(p[1]));
+  filter->SetMaximumKernelWidth(CastParam<unsigned int>(p[1], opcodeName, "maxKernelWidth"));
   filter->Update();
 
   ctx.plhs[0] = ExportVolume<PixelT>(filter->GetOutput());
+}
+
+// Shared by FdgOpcode and FgaOpcode. A non-positive variance silently yields
+// a degenerate, non-Gaussian kernel rather than an error, so it is rejected
+// here under the caller's own opcode name (for the error id and CastParam
+// diagnostics) before dispatching.
+void ExecuteDiscreteGaussian(OpContext& ctx, const char* opcodeName,
+                             const char* varianceErrorId) {
+  if ((*ctx.params)[0] <= 0.0) {
+    throw OpcodeError(varianceErrorId, "gaussianVariance must be positive.");
+  }
+  DispatchOnPixelType(mxGetClassID(ctx.volumeA), [&](auto tag) {
+    RunDiscreteGaussian<typename decltype(tag)::type>(ctx, opcodeName);
+  });
 }
 
 class FdgOpcode : public Opcode {
@@ -49,18 +71,10 @@ class FdgOpcode : public Opcode {
     return "runs and returns plausible output; no reference capture exists";
   }
 
-  const std::vector<ParamSpec>& Params() const override {
-    static const std::vector<ParamSpec> kParams = {
-        {"gaussianVariance", nullptr},
-        {"maxKernelWidth", nullptr},
-    };
-    return kParams;
-  }
+  const std::vector<ParamSpec>& Params() const override { return DiscreteGaussianParams(); }
 
   void Execute(OpContext& ctx) const override {
-    DispatchOnPixelType(
-        mxGetClassID(ctx.volumeA),
-        [&](auto tag) { RunDiscreteGaussian<typename decltype(tag)::type>(ctx); });
+    ExecuteDiscreteGaussian(ctx, "FDG", "mexitk:FDG:gaussianVariance");
   }
 };
 
@@ -80,18 +94,10 @@ class FgaOpcode : public Opcode {
            "source; it is most likely a Perl-generator duplicate.";
   }
 
-  const std::vector<ParamSpec>& Params() const override {
-    static const std::vector<ParamSpec> kParams = {
-        {"gaussianVariance", nullptr},
-        {"maxKernelWidth", nullptr},
-    };
-    return kParams;
-  }
+  const std::vector<ParamSpec>& Params() const override { return DiscreteGaussianParams(); }
 
   void Execute(OpContext& ctx) const override {
-    DispatchOnPixelType(
-        mxGetClassID(ctx.volumeA),
-        [&](auto tag) { RunDiscreteGaussian<typename decltype(tag)::type>(ctx); });
+    ExecuteDiscreteGaussian(ctx, "FGA", "mexitk:FGA:gaussianVariance");
   }
 };
 

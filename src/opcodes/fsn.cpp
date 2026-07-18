@@ -28,8 +28,8 @@ void RunFsn(OpContext& ctx) {
   using FilterType = itk::SigmoidImageFilter<InImage, InImage>;
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(input);
-  filter->SetOutputMinimum(static_cast<PixelT>(p[0]));
-  filter->SetOutputMaximum(static_cast<PixelT>(p[1]));
+  filter->SetOutputMinimum(CastParam<PixelT>(p[0], "FSN", "outputMinimum"));
+  filter->SetOutputMaximum(CastParam<PixelT>(p[1], "FSN", "outputMaximum"));
   filter->SetAlpha(p[2]);
   filter->SetBeta(p[3]);
   filter->Update();
@@ -58,6 +58,12 @@ class FsnOpcode : public Opcode {
   }
 
   void Execute(OpContext& ctx) const override {
+    // alpha == 0 makes SigmoidImageFilter's functor divide by zero, producing
+    // NaN that then hits an undefined-behaviour cast into an integer pixel
+    // type. Reject it rather than reproduce the corruption.
+    if ((*ctx.params)[2] == 0.0) {
+      throw OpcodeError("mexitk:FSN:alpha", "alpha must be nonzero.");
+    }
     DispatchOnPixelType(mxGetClassID(ctx.volumeA),
                         [&](auto tag) { RunFsn<typename decltype(tag)::type>(ctx); });
   }

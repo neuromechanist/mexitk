@@ -37,6 +37,7 @@ using mexitk::Category;
 using mexitk::CategoryName;
 using mexitk::FindOpcode;
 using mexitk::Opcode;
+using mexitk::OpcodeError;
 using mexitk::OpContext;
 using mexitk::ParamSpec;
 using mexitk::PixelTypeName;
@@ -287,6 +288,13 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
 
   try {
     op->Execute(ctx);
+  } catch (const OpcodeError& err) {
+    // Raised by parameter/semantic validation inside Execute() (CastParam and
+    // per-opcode checks). It already carries its own mexitk:* identifier and
+    // message, so report it verbatim rather than falling into the generic
+    // std::exception handler below, which would discard both under
+    // mexitk:exception.
+    mexErrMsgIdAndTxt(err.Id().c_str(), "%s", err.what());
   } catch (const itk::ExceptionObject& err) {
     // The original catches this same class of ITK failure and then dies: an SWS
     // overthresholding exception takes the whole MATLAB process down with a

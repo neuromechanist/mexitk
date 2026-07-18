@@ -28,7 +28,7 @@ void RunFbb(OpContext& ctx) {
   using FilterType = itk::BinomialBlurImageFilter<InImage, InImage>;
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(input);
-  filter->SetRepetitions(static_cast<unsigned int>(p[0]));
+  filter->SetRepetitions(CastParam<unsigned int>(p[0], "FBB", "repetitions"));
   filter->Update();
 
   ctx.plhs[0] = ExportVolume<PixelT>(filter->GetOutput());
