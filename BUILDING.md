@@ -132,8 +132,8 @@ On the verified macOS arm64 build, this reports 208/208 tests passing.
 
 | Platform | MEX extension | Status |
 |---|---|---|
-| macOS arm64 | `mexmaca64` | Builds and tested, 208/208, against both Homebrew ITK (locally: Apple M4 Pro, MATLAB R2025b, ITK 5.4.6, Apple clang 21) and static ITK 5.4.6 in CI. The static artifact is confirmed self-contained: CI runs the full suite on a runner with no ITK installed. |
-| Linux x86_64 | `mexa64` | Builds and tested, 208/208, with static ITK 5.4.6 built from source, verified in CI on a runner with no ITK installed. **Must be built with GCC 12 or older** (see Troubleshooting). |
+| macOS arm64 | `mexmaca64` | Builds and tested, 208/208, against Homebrew ITK (locally: Apple M4 Pro, MATLAB R2025b, ITK 5.4.6, Apple clang 21). Last CI-verified at 208/208 on the phase branch (static ITK, no-ITK-installed runner); epic-final re-verification against this tree is pending. |
+| Linux x86_64 | `mexa64` | Builds and tested with static ITK 5.4.6 built from source; last CI-verified at 208/208 on the phase branch, on a runner with no ITK installed; epic-final re-verification against this tree is pending. **Must be built with GCC 12 or older** (see Troubleshooting). |
 | macOS x86_64 | `mexmaci64` | Untried. Legacy target: R2025b is MathWorks' final Intel-Mac release. Build it if convenient, but it is never a blocker. |
 | Windows | `mexw64` | Not attempted. Best-effort only, through GitHub Actions. |
 

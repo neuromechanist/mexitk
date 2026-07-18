@@ -67,7 +67,10 @@ class FvbihOpcode : public Opcode {
   }
   Status GetStatus() const override { return Status::kSmokeTested; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists";
+    return "runs and returns plausible output; no reference capture exists. "
+           "MajorityThreshold is an offset above 50% of the neighborhood, not "
+           "an absolute vote count; a large value silently makes the filter "
+           "a no-op, matching ITK/original semantics.";
   }
 
   const std::vector<ParamSpec>& Params() const override {
