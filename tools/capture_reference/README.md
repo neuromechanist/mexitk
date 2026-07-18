@@ -314,8 +314,10 @@ locked: mexitk's committed fixtures (`tests/fixtures/`) were captured by
 their exact current text, so nothing in them may change, ever, ideally not
 even a comment. `s07`–`s13`, `s10b`, and the shared helpers
 (`capture_case.m`, `capture_classes.m`, `local_summarize.m`,
-`local_isdryrun.m`, `local_isresume.m`, `local_mark_complete.m`) are not
-under that lock yet — no fixture from them is committed as of this
-phase, fixture selection is a later phase's job — but once a fixture
-they produced is committed, this same rule starts applying to whatever
-produced it.
+`local_isdryrun.m`, `local_isresume.m`, `local_mark_complete.m`) are now
+under that same lock too: this phase committed the 256 fixtures they
+produced (guarded by `tests/tFixtureHygiene.m` and `MANIFEST.txt`), so
+per the rule above, whatever produced an already-committed fixture may
+not change. What is still a later phase's job is fixture *selection* —
+deciding which of these captures become the basis for correctness
+assertions the way FCA/FOMT/SWS's fixtures already are.

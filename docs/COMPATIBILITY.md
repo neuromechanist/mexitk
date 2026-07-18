@@ -85,15 +85,15 @@ isolation, and a script left incomplete by one run was resumed
 scratch. `tools/capture_reference/README.md` documents the full mechanism
 (completion sentinels, resume mode, dry-run validation).
 
-254 fixtures were captured: 230 successful calls, 18 recorded rejections
+256 fixtures were captured: 230 successful calls, 20 recorded rejections
 by the original (a rejection *is* the reference for that input, not a
-capture failure), and 6 cross-check summary files from `s12`. All 254
+capture failure), and 6 cross-check summary files from `s12`. All 256
 passed import verification (loads cleanly, no dry-run markers, every
 `success=true` fixture has its full output and hash, every `success=false`
 one has a non-empty error message) before being committed alongside the
 33 fixtures from the first campaign; `tests/tFixtureHygiene.m` now asserts
 this holds — including output-hash self-consistency, recomputed at test
-time — for all 287 committed fixtures on every test run.
+time — for all 289 committed fixtures on every test run.
 
 Headline facts about the original's own behaviour, measured directly, not
 assumed (none of these are `mexitk` findings; they describe only what the

@@ -307,8 +307,8 @@ Status as of 2026-07-18. Version 0.3.0.
   rule. `tests/tPhase4GradientsSmoke.m` grew from 38 to 40 test methods.
   208/208 tests pass on macOS arm64 locally against Homebrew ITK, no
   regression in any existing suite.
-- **Epic 2 Phase 1: reference-capture harness extension and first
-  campaign.** `tools/capture_reference/` extended with `s07`-`s13`
+- **Epic 2 Phase 2: reference-capture campaign and fixture import.**
+  `tools/capture_reference/` extended in Phase 1 with `s07`-`s13`
   (capturing the 30 opcodes implemented since epic 1, plus 8 cross-check
   probes and 10 unimplemented-opcode probes) and hardened across three
   fix batches: a class-matched-empty-`arg4` fix and completion sentinels
@@ -319,12 +319,12 @@ Status as of 2026-07-18. Version 0.3.0.
   settle (1-based, matrix-order, exclusive upper bound at each
   dimension's own size). The first real campaign against
   `matitk.mexa64` (3 runs, per-script crash isolation, resumed after
-  each crash) captured 254 fixtures -- 230 successful calls, 18 recorded
+  each crash) captured 256 fixtures -- 230 successful calls, 20 recorded
   original-binary rejections, 6 `s12` cross-check summaries -- all
   verified (loads cleanly, no dry-run markers, output-hash
-  self-consistency) before import into `tests/fixtures/` (33 -> 287).
+  self-consistency) before import into `tests/fixtures/` (33 -> 289).
   `tests/tFixtureHygiene.m` now asserts that self-consistency for every
-  committed fixture on every test run (208 -> 495 tests).
+  committed fixture on every test run (208 -> 498 tests).
   `docs/COMPATIBILITY.md` records the campaign's headline original-binary
   findings as measured facts, deliberately not yet opcode statuses or
   deviation-table rows -- turning them into `mexitk` compatibility
