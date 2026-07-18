@@ -13,6 +13,7 @@
 #include "opcode.h"
 
 #include "itkCastImageFilter.h"
+#include "itkClampImageFilter.h"
 #include "itkCurvatureAnisotropicDiffusionImageFilter.h"
 
 #include <type_traits>
@@ -65,8 +66,13 @@ void RunFca(OpContext& ctx) {
   if constexpr (std::is_same<PixelT, RealT>::value) {
     ctx.plhs[0] = ExportVolume<RealT>(filter->GetOutput());
   } else {
-    using CastOut = itk::CastImageFilter<RealImage, InImage>;
-    typename CastOut::Pointer back = CastOut::New();
+    // itk::ClampImageFilter saturates into [NonpositiveMin, max] of the
+    // target pixel type before the narrowing cast, which is defined
+    // behaviour, unlike itk::CastImageFilter's plain static_cast. In-range
+    // values are unaffected: clamp-then-truncate equals truncate when the
+    // value already fits. Only uint8/int32 take this path (see FcaRealType).
+    using ClampOut = itk::ClampImageFilter<RealImage, InImage>;
+    typename ClampOut::Pointer back = ClampOut::New();
     back->SetInput(filter->GetOutput());
     back->Update();
     ctx.plhs[0] = ExportVolume<PixelT>(back->GetOutput());

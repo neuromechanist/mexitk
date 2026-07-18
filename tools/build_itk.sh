@@ -41,6 +41,9 @@ ITK_MODULES=(
   Module_ITKImageIntensity=ON        # FSN
   Module_ITKImageGrid=ON             # FF
   Module_ITKImageFeature=ON          # FD
+  Module_ITKBinaryMathematicalMorphology=ON  # FBD, FBE
+  Module_ITKDistanceMap=ON                   # FDM, FDMV
+  Module_ITKLabelVoting=ON                   # FVBIH
 )
 
 WORK="${ITK_BUILD_WORKDIR:-$(mktemp -d)}"

@@ -520,7 +520,7 @@ output** (single labeled image; N binary masks are derived post-hoc via
 | Params → setters | `radiusX/Y/Z` assembled into `itk::Size<3>`, `SetRadius(InputSizeType)`; `binaryImageBackgroundColor → SetBackgroundValue(InputPixelType)`; `binaryImageForegroundColor → SetForegroundValue(InputPixelType)`; `SetMajorityThreshold → SetMajorityThreshold(unsigned int)` (literal setter name confirmed present in the header, exactly as the opcode's param name suggests); `numberOfIterations → SetMaximumNumberOfIterations(unsigned int)` |
 | Pixel constraints | requires `EqualityComparable` + `OStreamWritable`; typically binary `unsigned char` |
 | Arity | 1 input, 1 output, no seeds |
-| Drift/risk | **module moved** to `ITKLabelVoting` — a naive `find_package(ITK COMPONENTS ITKBinaryMathematicalMorphology)` guess fails to link this filter |
+| Drift/risk | **module moved** to `ITKLabelVoting` — a naive `find_package(ITK COMPONENTS ITKBinaryMathematicalMorphology)` guess fails to link this filter. `SetMajorityThreshold` is an OFFSET above 50% of the neighborhood, not an absolute vote count: internally (`itkVotingBinaryHoleFillingImageFilter.hxx`, the class this filter delegates each iteration to) `birthThreshold = floor((N-1)/2) + MajorityThreshold`, where `N` is the full neighborhood size including the center pixel (`prod(2*radius[i]+1)`), and an OFF pixel flips ON only once its ON-neighbor count reaches `birthThreshold`. A large `MajorityThreshold` silently makes the filter a no-op rather than erroring; this is the class's own documented semantics, reproduced on purpose. |
 | Confidence | High |
 
 ### `FVMI` — Vesselness (two-filter pipeline)
