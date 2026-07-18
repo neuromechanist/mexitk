@@ -285,9 +285,28 @@ Status as of 2026-07-18. Version 0.1.0.
   sign-purity difference) is now a documented comment at
   `faabProducesSignedLevelSetOnDouble`, not a silently missing case.
   `tests/tPhase4GradientsSmoke.m` grew from 28 to 38 test methods (10 new:
-  5 error-path, 5 param-swap-detection). 206/206 tests pass on macOS
-  arm64 locally against Homebrew ITK, no regression in any existing
-  suite.
+  5 error-path, 5 param-swap-detection). 206/206 tests passed on macOS
+  arm64 locally against Homebrew ITK at that point, no regression in any
+  existing suite.
+- **Phase 4 final micro-batch**: re-review found `FBL`'s `domainSigma == 0`
+  boundary case slipped past the negative-only guard above: it fails
+  through a different mechanism (`GaussianSpatialFunction::Evaluate`
+  divides by `2*sigma*sigma` while building the kernel, so every kernel
+  weight is a division by zero -- `itkGaussianSpatialFunction.hxx:44-55`),
+  silently, with no exception: confirmed live, `mexitk('FBL',[0 5],V)`
+  returned all-`NaN` on `double`, uniformly zero on `uint8`. Widened the
+  guard from `domainSigma < 0` to `domainSigma <= 0`
+  (`mexitk:FBL:domainSigma` covers both mechanisms now), documented both
+  in the code comment and `docs/COMPATIBILITY.md` deviation 11. Added
+  `fgmIntegralExportMatchesFloorOfDouble`, a value-level regression test
+  pinning the `int32`/`uint8` double-accumulate-then-`ClampExport` path
+  (`double(outInt) == floor(outDbl)`, same for `uint8`) so the bit-identity
+  guarantee from the prior fix batch cannot silently rot; verified
+  empirically first (0 mismatches across 442368 voxels for both types,
+  maxAbsDiff 0) before writing the assertion, per the never-tune-to-pass
+  rule. `tests/tPhase4GradientsSmoke.m` grew from 38 to 40 test methods.
+  208/208 tests pass on macOS arm64 locally against Homebrew ITK, no
+  regression in any existing suite.
 
 ## Open decisions for the owner
 

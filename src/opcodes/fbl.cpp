@@ -64,16 +64,29 @@ class FblOpcode : public Opcode {
 
   void Execute(OpContext& ctx) const override {
     const std::vector<double>& p = *ctx.params;
-    // domainSigma < 0: BilateralImageFilter::GenerateInputRequestedRegion
-    // computes its neighborhood radius as
-    // (SizeValueType)std::ceil(m_DomainMu * m_DomainSigma[i] / spacing[i])
-    // (itkBilateralImageFilter.hxx:79,145) -- a raw C-style cast of a
-    // negative double into an UNSIGNED integral type when domainSigma is
-    // negative (m_DomainMu is a fixed positive 2.5), which is undefined
-    // behaviour: a negative floating value has no representation in an
-    // unsigned type. Same family as FDG's non-positive-variance guard.
-    if (p[0] < 0.0) {
-      throw OpcodeError("mexitk:FBL:domainSigma", "domainSigma must not be negative.");
+    // domainSigma <= 0 fails through two distinct mechanisms:
+    //  - domainSigma < 0: BilateralImageFilter::GenerateInputRequestedRegion
+    //    computes its neighborhood radius as
+    //    (SizeValueType)std::ceil(m_DomainMu * m_DomainSigma[i] / spacing[i])
+    //    (itkBilateralImageFilter.hxx:79,145) -- a raw C-style cast of a
+    //    negative double into an UNSIGNED integral type (m_DomainMu is a
+    //    fixed positive 2.5), which is undefined behaviour: a negative
+    //    floating value has no representation in an unsigned type.
+    //  - domainSigma == 0: the filter's Gaussian kernel is populated via
+    //    GaussianSpatialFunction::Evaluate, which at every non-center
+    //    kernel position divides by "2 * m_Sigma[i] * m_Sigma[i]"
+    //    (itkGaussianSpatialFunction.hxx:44-55, the division on line 52).
+    //    With domainSigma == 0 that denominator is 0.0, and the numerator
+    //    is a nonzero squared offset, so the kernel weight itself becomes
+    //    a division producing NaN (Inf for the ratio's magnitude, but the
+    //    zero-offset center position hits 0.0/0.0 == NaN directly), which
+    //    then propagates through the filter's weighted-average
+    //    normalization -- silently, with no exception, confirmed live
+    //    (mexitk('FBL',[0 5],V) returns all-NaN on double, uniformly zero
+    //    on uint8, no error). Same family as FDG's non-positive-variance
+    //    guard either way.
+    if (p[0] <= 0.0) {
+      throw OpcodeError("mexitk:FBL:domainSigma", "domainSigma must be positive.");
     }
     // rangeSigma <= 0: m_DynamicRangeUsed = m_RangeMu * m_RangeSigma
     // (m_RangeMu is a fixed positive 4.0) becomes <= 0, which is used

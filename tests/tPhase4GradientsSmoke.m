@@ -107,6 +107,27 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             interior = out(2:7, 2:7, 3:5);
             tc.verifyEqual(interior, zeros(size(interior)));
         end
+
+        function fgmIntegralExportMatchesFloorOfDouble(tc)
+            % Pins the int32/uint8 double-accumulate-then-ClampExport path
+            % with a value-level assertion, so the bit-identity guarantee
+            % established during review cannot silently rot. Both integral
+            % exports go through the same "compute in double, static_cast
+            % back" arithmetic ITK's own native path used, which for
+            % nonnegative in-range values is exactly floor() truncation.
+            % Verified empirically before writing this assertion: on this
+            % volume gradient magnitude tops out at ~76.21 (well under
+            % both uint8's 255 and int32's range, so no saturation case is
+            % exercised here), and double(outInt)/double(outU8) equal
+            % floor(outDbl) with 0 mismatches across all 442368 voxels for
+            % both integral types.
+            outDbl = mexitk('FGM', [], tc.V);
+            outI32 = mexitk('FGM', [], int32(tc.Vu));
+            outU8  = mexitk('FGM', [], tc.Vu);
+
+            tc.verifyEqual(double(outI32), floor(outDbl));
+            tc.verifyEqual(double(outU8), floor(outDbl));
+        end
     end
 
     methods (Test)  % FGMRG (vs FGM)
@@ -376,6 +397,17 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             % GenerateInputRequestedRegion -- undefined behaviour, not
             % reproducible; rejected before it can happen.
             tc.verifyError(@() mexitk('FBL', [-5 5], tc.V), 'mexitk:FBL:domainSigma');
+        end
+
+        function fblRejectsZeroDomainSigma(tc)
+            % domainSigma == 0 is a distinct failure from the negative
+            % case: GaussianSpatialFunction::Evaluate divides by
+            % 2*sigma*sigma while building the kernel, so every non-center
+            % kernel weight is a division by zero and the center itself is
+            % 0.0/0.0 -- both NaN, silently: no exception, all-NaN output
+            % on double, uniformly zero on uint8. Verified directly before
+            % this guard existed.
+            tc.verifyError(@() mexitk('FBL', [0 5], tc.V), 'mexitk:FBL:domainSigma');
         end
 
         function fblRejectsNonPositiveRangeSigma(tc)
