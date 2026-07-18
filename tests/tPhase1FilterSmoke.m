@@ -232,9 +232,12 @@ classdef tPhase1FilterSmoke < matlab.unittest.TestCase
         end
 
         function binomialBlurRunsWithOneRepetition(tc)
-            out = mexitk('FBB', 1, tc.V);
-            tc.verifySize(out, size(tc.V));
-            tc.verifyNotEqual(out, tc.V);
+            for f = {@double, @uint8}
+                vin = f{1}(tc.Vu);
+                out = mexitk('FBB', 1, vin);
+                tc.verifySize(out, size(vin));
+                tc.verifyNotEqual(out, vin);
+            end
         end
     end
 
