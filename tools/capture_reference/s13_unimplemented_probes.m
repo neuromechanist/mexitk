@@ -78,4 +78,5 @@ capture_case(cfg, 'SGAC', 'sgac_volB_seedS1_double', [1 1 1 0.02 50], Vd, ...
 % prior results.
 capture_case(cfg, 'SCSS', 'scss_20_60_10_seedS1_double', [20 60 10], Vd, struct('seedArg', S1));
 
+local_mark_complete(cfg, 's13');
 diary off;

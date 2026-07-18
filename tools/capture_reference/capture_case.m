@@ -12,6 +12,19 @@ end
 hasSeed = isfield(opts, 'seedArg');
 hasArg4 = isfield(opts, 'arg4');
 
+outfile = fullfile(cfg.fixturesDir, sprintf('%s_%s.mat', lower(opcode), tag));
+
+% RESUME MODE: skip this case entirely (no hashing, no matitk call) when
+% it was already captured by an earlier, interrupted run. Loads and
+% returns the existing fixture so callers that use the return value
+% (e.g. s12's cross-check probes) keep working across a resumed campaign.
+if local_isresume() && isfile(outfile)
+    fprintf('  [resume] %s: already captured, skipping\n', tag);
+    loaded = load(outfile, 'fixture');
+    fixture = loaded.fixture;
+    return;
+end
+
 fixture = struct();
 fixture.opcode = opcode;
 fixture.params = params;
@@ -31,8 +44,6 @@ if hasArg4
     end
 end
 
-outfile = fullfile(cfg.fixturesDir, sprintf('%s_%s.mat', lower(opcode), tag));
-
 if local_isdryrun()
     fixture.success = false;
     fixture.errmsg = 'dryrun';
@@ -45,6 +56,15 @@ end
 arg4 = []; %#ok<NASGU>
 if hasArg4
     arg4 = opts.arg4; %#ok<NASGU>
+elseif hasSeed
+    % The original type-checks arg4 against the input class even when
+    % arg4 is conceptually absent: a bare double [] mismatches uint8/
+    % single/int32 input with "Both images (inputArrays) must be of the
+    % same data type." (measured directly against the real binary on
+    % seeded calls). Pass an empty of the INPUT's class instead whenever
+    % a seed is present but no real second image is; a no-op for double
+    % input (cast([], 'double') is still []).
+    arg4 = cast([], class(input)); %#ok<NASGU>
 end
 seedArg = [];
 if hasSeed

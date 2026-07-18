@@ -22,7 +22,12 @@ V = squeeze(D);
 Vd = double(V);
 
 S1 = [70 50 14];
-S2 = [1 128 1];
+% S2 was originally the dim-max background seed [1 128 1]; measured
+% against the real binary (run 1) to universally error with "Location of
+% seed outside volume" (0- vs 1-based indexing unresolved, but out of
+% range either way). Replaced with an in-range value under BOTH
+% interpretations; see s09's identical fix and comment.
+S2 = [2 120 2];
 S3 = [64 64 20];
 
 val = double(Vd(70, 50, 14));
@@ -41,10 +46,12 @@ probe2_fdmv_accessor(cfg, binDouble, binRecipeDouble, labDouble, labRecipeDouble
 probe3_sct_replace_value(cfg, Vd, S1, band, isDryRun);
 probe5_sot_polarity(cfg, Vd, V);
 probe6_seed_convention(cfg, Vd, S1, band);
+probe9_seed_base_indexing(cfg, Vd, S1, band);
 probe7_nargout_arity(cfg, Vd, S1, isDryRun);
 probe8_fbd_fbe_closing(cfg, binDouble, binRecipeDouble, isDryRun);
 probe4_sic_seed_split(cfg, Vd, S1, S2, S3, isDryRun);  % crash-prone; runs last
 
+local_mark_complete(cfg, 's12');
 diary off;
 
 function probe1_fga_fdg_identity(cfg, Vd, Vu8, isDryRun)
@@ -159,6 +166,27 @@ function probe6_seed_convention(cfg, Vd, S1, band)
 capture_case(cfg, 'SCT', 'seed_70_50_14_double', band, Vd, struct('seedArg', S1));
 transposedSeed = [S1(2) S1(1) S1(3)];
 capture_case(cfg, 'SCT', 'seed_50_70_14_double', band, Vd, struct('seedArg', transposedSeed));
+end
+
+function probe9_seed_base_indexing(cfg, Vd, S1, band)
+% The load-bearing question run 1 raised: is the original's seed
+% coordinate 0-based or 1-based (or does its bounds check exclude the
+% last valid index either way)? [70 50 27] and SIC's old [1 128 1] both
+% sat exactly at a dimension maximum and both errored with "Location of
+% seed outside volume" -- consistent with several different indexing
+% rules, so this probe brackets S1 = [70 50 14] by -1/0/+1 on every axis
+% at once and lets the original's own response (a real output vs. the
+% outside-volume error) answer the question. seed=[0 0 0] is the sharp
+% test: valid only if the original reads coordinates as literal 0-based
+% ITK indices with no MATLAB-side "-1" conversion; either outcome (an
+% output, or the error) is itself the answer, not a probe failure.
+% seed=S1=[70 50 14] itself is NOT re-captured here: it already exists as
+% probe6's seed_70_50_14_double fixture above.
+capture_case(cfg, 'SCT', 'base0_double', band, Vd, struct('seedArg', [0 0 0]));
+capture_case(cfg, 'SCT', 'off_minus1_double', band, Vd, struct('seedArg', S1 - 1));
+capture_case(cfg, 'SCT', 'off_plus1_double', band, Vd, struct('seedArg', S1 + 1));
+capture_case(cfg, 'SCC', 'off_minus1_double', [2.5 5 100], Vd, struct('seedArg', S1 - 1));
+capture_case(cfg, 'SCC', 'off_plus1_double', [2.5 5 100], Vd, struct('seedArg', S1 + 1));
 end
 
 function probe7_nargout_arity(cfg, Vd, S1, isDryRun)

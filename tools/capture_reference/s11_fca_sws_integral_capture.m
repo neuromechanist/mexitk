@@ -21,4 +21,5 @@ capture_classes(cfg, 'FCA', '1_0p0625_3', [1 0.0625 3], classNames, classVals, 1
 % SWS (matches the primary s04 fixture params: sws_level0p05_thresh0p01_*)
 capture_classes(cfg, 'SWS', '0p05_0p01', [0.05 0.01], classNames, classVals, 1:2);
 
+local_mark_complete(cfg, 's11');
 diary off;

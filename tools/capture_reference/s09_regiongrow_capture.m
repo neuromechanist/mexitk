@@ -18,7 +18,14 @@ classNames = {'double', 'single', 'uint8', 'int32'};
 classVals = {Vd, Vs, V, Vi};
 
 S1 = [70 50 14];
-S2 = [1 128 1];
+% S2 was originally the dim-max background seed [1 128 1] (dim 2 = 128,
+% the volume's own y-extent). Measured directly against the real binary
+% (run 1): the original rejects it with "Location of seed outside
+% volume" regardless of 0- vs 1-based indexing, since it sits exactly at
+% (or past) the boundary either way. Replaced with an in-range value
+% valid under BOTH interpretations, so SIC's multi-seed captures actually
+% run instead of universally erroring.
+S2 = [2 120 2];
 val = double(Vd(70, 50, 14));
 band = [val - 5, val + 5];
 wide = [val - 15, val + 15];
@@ -61,6 +68,7 @@ capture_classes(cfg, 'SOT', '128', 128, classNames, classVals, 1:4);
 % FOMT (N=1 cross-check for the SOT/FOMT comparison)
 capture_classes(cfg, 'FOMT', '1_128', [1 128], classNames, classVals, [1 3]);
 
+local_mark_complete(cfg, 's09');
 diary off;
 
 function capture_classes_seeded(cfg, opcode, tagPrefix, params, classNames, classVals, useIdx, seedArg)

@@ -33,10 +33,13 @@ bin33Vals = {bin33Double, bin33Single, bin33Uint8, bin33Int32};
 bin33Recipes = {bin33RecipeDouble, bin33RecipeSingle, bin33RecipeUint8, bin33RecipeInt32};
 
 % FAAB
-% Raw mri at all four classes: the shared shape/class test
-% (runsAndPreservesShapeAndClass) calls FAAB on tc.Vu-derived raw input,
-% not the bin33 derived input below.
-capture_classes(cfg, 'FAAB', '0p01_50_2_raw', [0.01 50 2], classNames, classVals, 1:4);
+% Raw mri: the shared shape/class test (runsAndPreservesShapeAndClass)
+% calls FAAB on tc.Vu-derived raw input, not the bin33 derived input
+% below. double+single only here: FAAB on raw (non-binary) uint8
+% measured to kill the original's process with a floating point
+% exception (run 1, s10, exit 137); uint8/int32 are captured in
+% isolation instead by s10b_faab_crash_probe.m.
+capture_classes(cfg, 'FAAB', '0p01_50_2_raw', [0.01 50 2], classNames, classVals, [1 2]);
 capture_classes_recipe(cfg, 'FAAB', '0p01_50_2_bin33', [0.01 50 2], classNames, bin33Vals, bin33Recipes, 1:4);
 capture_case(cfg, 'FAAB', '0p01_50_1_bin33_double', [0.01 50 1], bin33Double, struct('inputRecipe', bin33RecipeDouble));
 capture_case(cfg, 'FAAB', '0p01_50_50_bin33_double', [0.01 50 50], bin33Double, struct('inputRecipe', bin33RecipeDouble));
@@ -84,6 +87,7 @@ capture_classes(cfg, 'FVMI', '1_0p5_2', [1 0.5 2], classNames, classVals, 1:4);
 capture_case(cfg, 'FVMI', '3_0p5_2_double', [3 0.5 2], Vd);
 capture_case(cfg, 'FVMI', '1_2_0p5_double', [1 2 0.5], Vd);
 
+local_mark_complete(cfg, 's10');
 diary off;
 
 function capture_classes_recipe(cfg, opcode, tagPrefix, params, classNames, classVals, classRecipes, useIdx)
