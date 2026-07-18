@@ -42,12 +42,12 @@ The other 14 are smoke-tested filters with no reference capture.
 | `FCA` | `CurvatureAnisotropicDiffusionImageFilter` | **bounded deviation** | Not bit-identical. RMS 2.6e-3, max 4.7e-2 at 1 iteration over a 0-88 range; compounds with iterations. |
 | `SWS` | `WatershedImageFilter` | **bounded deviation** | Region count matches exactly at every tested setting; label images are not bit-identical at fine levels. |
 | `FBB` | `BinomialBlurImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
-| `FBD` | `BinaryDilateImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Non-foreground output uses the type's min sentinel (0 for `uint8`). |
-| `FBE` | `BinaryErodeImageFilter` | **smoke-tested** | Same note as `FBD`. |
+| `FBD` | `BinaryDilateImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Non-foreground output is the original input value, unchanged. |
+| `FBE` | `BinaryErodeImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Unlike `FBD`, eroded-away foreground becomes the type's min sentinel (0 for `uint8`); untouched background is unchanged. |
 | `FBT` | `BinaryThresholdImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
 | `FD` | `DerivativeImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. `uint8` promotes to `float` internally. |
 | `FDG` | `DiscreteGaussianImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
-| `FDM` | `DanielssonDistanceMapImageFilter` (distance) | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Distance truncates into integral input types. |
+| `FDM` | `DanielssonDistanceMapImageFilter` (distance) | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Distance is computed in `float` and saturates at the pixel-type max on integral input. |
 | `FDMV` | `DanielssonDistanceMapImageFilter` (Voronoi) | **smoke-tested** | Voronoi accessor identification is provisional (see COMPATIBILITY). |
 | `FF` | `FlipImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
 | `FGA` | `DiscreteGaussianImageFilter` | **smoke-tested** | Duplicate of `FDG`; the registry's parameter signature for `FGA` is identical to `FDG`'s. |
@@ -87,8 +87,8 @@ Read it before relying on this for science.
 
 | Platform | State |
 |---|---|
-| macOS arm64 (`maca64`) | Builds, loads, 103/103 tests pass. Verified locally against Homebrew ITK; CI re-verification against the Phase 2 opcodes (static ITK, no-ITK-installed runner) is pending. |
-| Linux x86_64 (`glnxa64`) | Builds, loads. Last CI-verified at 81/81, before the Phase 2 opcodes; re-verification against the current 103-test suite on a runner with **no ITK installed** is pending. Must be built with GCC 12 or older; see BUILDING.md. |
+| macOS arm64 (`maca64`) | Builds, loads, 108/108 tests pass locally against Homebrew ITK. CI confirmed 103/103 (static ITK, no-ITK-installed runner) before this batch's 5 additional tests; re-verification against the current suite is pending. |
+| Linux x86_64 (`glnxa64`) | Builds, loads. Last CI-verified at 103/103 on a runner with **no ITK installed**, before this batch's 5 additional tests; re-verification against the current 108-test suite is pending. Must be built with GCC 12 or older; see BUILDING.md. |
 | macOS x86_64 (`maci64`) | Legacy; built on a best-effort basis only. R2025b is MathWorks' final Intel-Mac release. |
 | Windows | Best-effort only; the ITK toolchain there is unresolved. Not attempted. |
 

@@ -38,6 +38,17 @@ void RunFvbih(OpContext& ctx) {
       CastParam<PixelT>(p[3], "FVBIH", "binaryImageBackgroundColor"));
   filter->SetForegroundValue(
       CastParam<PixelT>(p[4], "FVBIH", "binaryImageForegroundColor"));
+  // MajorityThreshold is an OFFSET above 50% of the neighborhood, not an
+  // absolute vote count. Internally (itkVotingBinaryHoleFillingImageFilter.hxx):
+  // let N = full neighborhood size including the center pixel, i.e.
+  // prod(2*radius[i]+1); birthThreshold = floor((N-1)/2) + MajorityThreshold,
+  // and an OFF pixel flips ON only once its ON-neighbor count reaches
+  // birthThreshold. So for radius [1 1 1] (N=27), MajorityThreshold=1 needs
+  // floor(26/2)+1 = 14 ON neighbors out of 26. A large MajorityThreshold
+  // silently makes the filter a no-op (birthThreshold exceeds any achievable
+  // neighbor count) rather than erroring; this is legitimate ITK/original
+  // semantics and is reproduced on purpose, not a bug. See the same formula
+  // recorded in docs/itk_opcode_mapping.md (FVBIH).
   filter->SetMajorityThreshold(
       CastParam<unsigned int>(p[5], "FVBIH", "SetMajorityThreshold"));
   filter->SetMaximumNumberOfIterations(

@@ -26,6 +26,14 @@ void RunFbd(OpContext& ctx) {
 
   const std::vector<double>& p = *ctx.params;
 
+  // The ball structuring element is dense, not sparse: SetRadius allocates a
+  // (2r+1)^3-element buffer, and CreateStructuringElement builds a second,
+  // separate (2r+1)^3 itk::FlatStructuringElement internally and copies it
+  // in (itkBinaryBallStructuringElement.hxx). There is no upper bound on the
+  // radius parameter, so a huge value means a multi-GB allocation and O(r^3)
+  // work with no cap, matching the original's own unbounded parameter (the
+  // same policy as FD's unbounded derivative order): the radius is a plain
+  // user-supplied number, not something mexitk clamps.
   using KernelType = itk::BinaryBallStructuringElement<PixelT, kDimension>;
   KernelType kernel;
   kernel.SetRadius(CastParam<itk::SizeValueType>(p[0], "FBD", "DilationRadius"));
