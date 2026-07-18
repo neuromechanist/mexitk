@@ -24,9 +24,11 @@ end
 if hasSeed
     fixture.seedArg = opts.seedArg;
 end
-if hasArg4 && isfield(opts, 'arg4Recipe') && ~isempty(opts.arg4Recipe)
-    fixture.arg4Recipe = opts.arg4Recipe;
+if hasArg4
     fixture.arg4Hash = local_md5(opts.arg4);
+    if isfield(opts, 'arg4Recipe') && ~isempty(opts.arg4Recipe)
+        fixture.arg4Recipe = opts.arg4Recipe;
+    end
 end
 
 outfile = fullfile(cfg.fixturesDir, sprintf('%s_%s.mat', lower(opcode), tag));

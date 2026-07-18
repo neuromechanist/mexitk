@@ -33,6 +33,10 @@ bin33Vals = {bin33Double, bin33Single, bin33Uint8, bin33Int32};
 bin33Recipes = {bin33RecipeDouble, bin33RecipeSingle, bin33RecipeUint8, bin33RecipeInt32};
 
 % FAAB
+% Raw mri at all four classes: the shared shape/class test
+% (runsAndPreservesShapeAndClass) calls FAAB on tc.Vu-derived raw input,
+% not the bin33 derived input below.
+capture_classes(cfg, 'FAAB', '0p01_50_2_raw', [0.01 50 2], classNames, classVals, 1:4);
 capture_classes_recipe(cfg, 'FAAB', '0p01_50_2_bin33', [0.01 50 2], classNames, bin33Vals, bin33Recipes, 1:4);
 capture_case(cfg, 'FAAB', '0p01_50_1_bin33_double', [0.01 50 1], bin33Double, struct('inputRecipe', bin33RecipeDouble));
 capture_case(cfg, 'FAAB', '0p01_50_50_bin33_double', [0.01 50 50], bin33Double, struct('inputRecipe', bin33RecipeDouble));
@@ -56,6 +60,14 @@ capture_case(cfg, 'FGAD', '5_10_0p0625_double', [5 10 0.0625], Vd);  % swapped-p
 
 % FGM
 capture_classes(cfg, 'FGM', 'raw', [], classNames, classVals, 1:4);
+
+% FGMRG, FLS, FVMI: sigma<=0 is deliberately NOT captured here. mexitk
+% adds no custom guard for it on these three (RecursiveGaussian-family)
+% opcodes; it throws ITK's own catchable exception, which was present in
+% ITK 2.4 (the original's own ITK version) as well as today, so there is
+% no undefined-behaviour or divergent-guard question to resolve by
+% capturing it. Skipped here for crash/runtime budget reasons, not an
+% oversight.
 
 % FGMRG
 capture_classes(cfg, 'FGMRG', '2', 2, classNames, classVals, 1:4);

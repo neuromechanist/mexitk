@@ -44,7 +44,8 @@ labUint8 = eval(labRecipeUint8); %#ok<EVLCS>
 % trailing ';' appended only to suppress console echo of the whole
 % volume, not altering the recipe's semantics) and their result is read
 % back from the recipe's own named result variable, b. A consumer
-% re-evaluating fixture.inputRecipe (Phase 3's mexitkFixture extension)
+% re-evaluating fixture.inputRecipe (this epic's Phase 3 -- reference
+% tests, not the opcode epic's Phase 3 -- mexitkFixture extension)
 % will need the same two-step pattern for these two recipes; a naive
 % `vin = eval(fixture.inputRecipe)` fails identically. See README.
 holeRecipe = ['b=double(V>30)*255; c=convn(double(b==255),ones(3,3,3),''same''); ' ...
@@ -65,6 +66,10 @@ zeroDouble = eval(zeroRecipeDouble); %#ok<EVLCS>
 capture_classes(cfg, 'FBD', '1_255', [1 255], classNames, classVals, 1:4);
 capture_case(cfg, 'FBD', '1_255_bin_double', [1 255], binDouble, struct('inputRecipe', binRecipeDouble));
 capture_case(cfg, 'FBD', '1_7_bin7_double', [1 7], bin7Double, struct('inputRecipe', bin7RecipeDouble));
+% Boundary: value=300 is out of uint8 range but valid on double (mexitk's
+% guard is per-target-type, not a blanket cap). Mirrors
+% fbdRejectsOutOfRangeValueOnIntegralType/fbdAcceptsOutOfRangeValueOnDouble.
+capture_classes(cfg, 'FBD', '1_300', [1 300], classNames, classVals, [1 3]);
 
 % FBE
 capture_classes(cfg, 'FBE', '1_255', [1 255], classNames, classVals, 1:4);
@@ -74,6 +79,10 @@ capture_case(cfg, 'FBE', '1_255_bin_int32', [1 255], binInt32, struct('inputReci
 
 % FVBIH
 capture_classes(cfg, 'FVBIH', '1_1_1_0_255_1_1', [1 1 1 0 255 1 1], classNames, classVals, 1:4);
+% Boundary: foreground=300 is out of uint8 range but valid on double.
+% Mirrors fvbihRejectsOutOfRangeForegroundOnIntegralType/
+% fvbihAcceptsOutOfRangeForegroundOnDouble.
+capture_classes(cfg, 'FVBIH', '1_1_1_0_300_1_1', [1 1 1 0 300 1 1], classNames, classVals, [1 3]);
 capture_case(cfg, 'FVBIH', 'baseline_hole_double', [1 1 1 0 255 1 1], holeDouble, struct('inputRecipe', holeRecipe));
 capture_case(cfg, 'FVBIH', 'distinct_hole_double', [2 1 1 0 255 3 2], holeDouble, struct('inputRecipe', holeRecipe));
 capture_case(cfg, 'FVBIH', 'baseline_hole50_double', [1 1 1 0 255 1 1], hole50Double, struct('inputRecipe', hole50Recipe));

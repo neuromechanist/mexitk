@@ -118,8 +118,9 @@ image). These carry an `inputRecipe` field (or, for a second image,
 `arg4Recipe`): a `char` MATLAB expression whose only free variable is
 `V`. The capture script builds the actual input by `eval`-ing the exact
 string it then stores — one source of truth, so the recipe and the
-captured `inputHash` can never drift apart. A consumer (Phase 3's
-`mexitkFixture` extension) rebuilds the same input by evaluating
+captured `inputHash` can never drift apart. A consumer (this **epic's**
+Phase 3 — reference tests — not the opcode epic's Phase 3, `mexitkFixture`
+extension) rebuilds the same input by evaluating
 `fixture.inputRecipe` with `V = squeeze(mri.D)` in scope, then asserts
 `local_md5(vin) == fixture.inputHash`.
 
@@ -151,6 +152,26 @@ it), and every probe saves its own `.mat` immediately so a crash only
 loses whatever that one probe was doing, never any earlier result. Run
 `s13` in its own invocation, never combined with another script, and
 don't be alarmed if the MATLAB process it runs in doesn't exit cleanly.
+The `diary` log is written incrementally too, so it survives a crash up
+to its last flushed line — check it first if you need to know exactly
+where a run stopped.
+
+**After any crash, verify every `.mat` in `fixturesDir` loads before
+trusting or committing anything from that run.** A crash mid-`save` can
+leave a partially written or corrupt `.mat` file behind; a load-check
+catches that immediately instead of surfacing it later, silently, in
+Phase 2's fixture selection or Phase 3's tests:
+
+```matlab
+files = dir(fullfile(cfg.fixturesDir, '*.mat'));
+for i = 1:numel(files)
+    try
+        load(fullfile(files(i).folder, files(i).name));
+    catch me
+        fprintf('CORRUPT: %s (%s)\n', files(i).name, me.message);
+    end
+end
+```
 
 ## Runtimes are unknown but logged
 

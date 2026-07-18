@@ -41,6 +41,9 @@ capture_case(cfg, 'SCC', '2p5_5_100_dimmax_double', [2.5 5 100], Vd, struct('see
 
 % SNC
 capture_classes_seeded(cfg, 'SNC', '1_1_1_20_60_255_seedS1', [1 1 1 20 60 255], classNames, classVals, 1:4, S1);
+% radius [1 1 1] with the tight seed-band: the exact combination
+% seedConventionIsNotTransposed/disconnectedVoxelNotLabeled exercise.
+capture_case(cfg, 'SNC', '1_1_1_band_seedS1_double', [1 1 1 band(1) band(2) 255], Vd, struct('seedArg', S1));
 capture_case(cfg, 'SNC', 'r0_band_seedS1_double', [0 0 0 band(1) band(2) 255], Vd, struct('seedArg', S1));
 capture_case(cfg, 'SNC', 'r2_band_seedS1_double', [2 2 2 band(1) band(2) 255], Vd, struct('seedArg', S1));
 capture_case(cfg, 'SNC', 'rx_wide_seedS1_double', [3 1 1 wide(1) wide(2) 255], Vd, struct('seedArg', S1));

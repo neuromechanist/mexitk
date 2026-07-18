@@ -1,4 +1,5 @@
-% Epic 2 Phase 1: inference probes for cross-checks Phase 3 needs that are
+% Epic 2 Phase 1: inference probes for cross-checks this epic's Phase 3
+% (reference tests, not the opcode epic's Phase 3) needs that are
 % not simple per-opcode fixtures (identity/accessor/polarity/seed-order
 % relationships). Deliberate deviation from s05's single end-of-script
 % save: several probes store full volumes and probe 4 (SIC single-seed)
@@ -177,7 +178,7 @@ for i = 1:numel(opcodes)
     else
         input = Vd; %#ok<NASGU>
         cmd = ['try; [o1,o2] = matitk(opcode, params, input); ' ...
-               'errored=true; catch me2; disp(["CAUGHT ERROR: " me2.message]); errored=true; end'];
+               'errored=false; catch me2; disp(["CAUGHT ERROR: " me2.message]); errored=true; end'];
     end
     if isDryRun
         fprintf('  [dryrun] nargout probe %s skipped\n', opcode);
