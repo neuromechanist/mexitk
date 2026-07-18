@@ -253,6 +253,15 @@ classdef tPhase1FilterSmoke < matlab.unittest.TestCase
             tc.verifySize(out, size(tc.V));
         end
 
+        function binaryThresholdRejectsOutOfRangeOnSingle(tc)
+            % 1e39 is finite and fits a double, but exceeds float's range
+            % (~3.4e38); casting it to float is undefined behaviour, distinct
+            % from the integral-type case above.
+            tc.verifyError(@() mexitk('FBT', [0 1 20 1e39], single(tc.Vu)), 'mexitk:paramRange');
+            out = mexitk('FBT', [0 1 20 1e39], tc.V);
+            tc.verifySize(out, size(tc.V));
+        end
+
         function medianRejectsNegativeRadius(tc)
             tc.verifyError(@() mexitk('FMEDIAN', [-1 1 1], tc.V), 'mexitk:paramRange');
         end

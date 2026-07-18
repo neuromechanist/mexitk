@@ -62,14 +62,25 @@ inline std::string FormatMessage(const char* fmt, ...) {
 }
 
 // Casts a parameter (already a validated double from ToDoubleVector) down to
-// the narrower type an ITK setter expects. Floating T is unconditionally
-// representable, so it passes through unchanged. Integral T is where the
-// original's own truncating behaviour lives (e.g. 255.9 -> 255 for uint8),
-// and that in-range behaviour is preserved here; only casts that would be
-// undefined behaviour in C++ (out of range, NaN, infinite) are rejected.
+// the narrower type an ITK setter expects. Integral T is where the original's
+// own truncating behaviour lives (e.g. 255.9 -> 255 for uint8), and that
+// in-range behaviour is preserved here; only casts that would be undefined
+// behaviour in C++ (out of range, NaN, infinite) are rejected. Floating T
+// mostly passes through unchanged: a double is always in range of itself,
+// but casting a finite double beyond a narrower float's range (T = float) is
+// itself undefined behaviour per the standard, so that one case is guarded
+// too. Inf and NaN are both exactly representable in float, unlike an
+// out-of-range finite value, so they deliberately pass through unrejected,
+// matching what the original accepted.
 template <typename T>
 T CastParam(double v, const char* opcode, const char* param) {
   if constexpr (std::is_floating_point<T>::value) {
+    if (std::isfinite(v) && (v < static_cast<double>(std::numeric_limits<T>::lowest()) ||
+                             v > static_cast<double>(std::numeric_limits<T>::max()))) {
+      throw OpcodeError("mexitk:paramRange",
+                        FormatMessage("%s: parameter %s = %g is out of range for its target type.",
+                                      opcode, param, v));
+    }
     return static_cast<T>(v);
   } else {
     // 2^53 is the largest integer a double represents exactly; clamping the
