@@ -1,0 +1,359 @@
+classdef tPhase3RegionGrowingSmoke < matlab.unittest.TestCase
+    % Smoke tests for the Phase 3 region-growing + single-Otsu opcodes. No
+    % reference fixtures exist for these, so the suite asserts structural
+    % invariants (shape, class, parameter validation, connectivity, and
+    % monotonicity properties) rather than bit-exactness. Every non-guaranteed
+    % assertion here was empirically confirmed against a real build before
+    % being committed; none is guessed from the ITK header evidence alone.
+    %
+    % SPDX-License-Identifier: BSD-3-Clause
+    % Copyright (c) 2026, Seyed Yahya Shirazi <shirazi@ieee.org>
+    % Swartz Center for Computational Neuroscience (SCCN),
+    % Institute for Neural Computation (INC), UC San Diego.
+
+    properties
+        V    % double volume
+        Vu   % uint8 volume (native mri class)
+    end
+
+    properties (TestParameter)
+        seededOp = {'SCT', 'SCC', 'SNC'};                % share the seed-convention machinery
+        allOp    = {'SCT', 'SCC', 'SNC', 'SIC', 'SOT'};
+    end
+
+    methods (TestMethodSetup)
+        function loadVolume(tc)
+            mri = load('mri');
+            tc.Vu = squeeze(mri.D);
+            tc.V  = double(tc.Vu);
+        end
+    end
+
+    methods (Static)
+        function p = validParams(op)
+            switch op
+                case 'SCT'; p = [20 60];             % lower, upper
+                case 'SCC'; p = [2.5 5 100];          % multiplier, iters, replace
+                case 'SNC'; p = [1 1 1 20 60 255];    % rx ry rz lower upper replace
+                case 'SIC'; p = [20 255];             % lower, replace
+                case 'SOT'; p = 128;                  % bins
+            end
+        end
+
+        function sub = regionGrowSeed()
+            % [70 50 14], value 68. Deliberately NOT the volume's global-max
+            % voxel: the literal brightest voxel [91 21 1] sits in a huge
+            % (19638-voxel) saturated plateau at the image's z=1 edge slice,
+            % and measured empirically, SCC's confidence interval from that
+            % seed explodes to fill 100% of the volume even at the
+            % registry's default multiplier (2.5) -- a degenerate,
+            % uninteresting case for testing "did the region grow a bounded
+            % subset". This seed was chosen instead because its local
+            % 3x3x3 neighbourhood has low intensity variance (std ~3.75),
+            % giving SCC a bounded, non-trivial region (~21% of the volume
+            % at multiplier 2.5). All three subscripts are distinct
+            % (asymmetric), so a transposed axis in SeedPointsToIndices or
+            % SNC's radius would land on a different voxel.
+            sub = [70 50 14];
+        end
+
+        function sub = disconnectedSameBandVoxel()
+            % [118 60 1], value 64: inside the same [63 73] intensity band
+            % as regionGrowSeed's voxel (68) but 50.7 grid units away.
+            % Verified empirically that SCT/SNC/SCC's region grown from
+            % regionGrowSeed at that band does NOT reach this voxel, i.e.
+            % it is genuinely disconnected, not merely out of range.
+            sub = [118 60 1];
+        end
+
+        function sub = isolatedBackgroundSeed()
+            % [1 128 1], value 0: SIC's second seed group. A mid-band
+            % candidate (value ~40, still bright brain tissue) was tried
+            % first and empirically FAILED to isolate: ITK's internal
+            % binary search could not find a separating threshold between
+            % it and regionGrowSeed's band, so both seeds came back
+            % unlabelled. Pure background is far enough in intensity that
+            % isolation succeeds. Verified, not assumed.
+            sub = [1 128 1];
+        end
+    end
+
+    methods (Test)  % parameterized common checks
+        function runsAndPreservesShapeAndClass(tc, allOp)
+            p = tPhase3RegionGrowingSmoke.validParams(allOp);
+            sub1 = tPhase3RegionGrowingSmoke.regionGrowSeed();
+            sub2 = tPhase3RegionGrowingSmoke.isolatedBackgroundSeed();
+            switch allOp
+                case {'SCT', 'SCC', 'SNC'}; seeds = sub1;
+                case 'SIC';                 seeds = [sub1, sub2];
+                case 'SOT';                 seeds = [];
+            end
+            for f = {@double, @single, @uint8, @int32}
+                vin = f{1}(tc.Vu);
+                if isempty(seeds)
+                    out = mexitk(allOp, p, vin);
+                else
+                    out = mexitk(allOp, p, vin, [], seeds);
+                end
+                tc.verifyClass(out, class(vin));
+                tc.verifySize(out, size(vin));
+            end
+        end
+
+        function rejectsShortParamCount(tc, allOp)
+            p = tPhase3RegionGrowingSmoke.validParams(allOp);
+            short = p(1:end-1);
+            tc.verifyError(@() mexitk(allOp, short, tc.V), 'mexitk:params');
+        end
+    end
+
+    methods (Test)  % seed-convention pin (the load-bearing test)
+        function seedConventionIsNotTransposed(tc, seededOp)
+            % An axis transposition (mapping sub(1) -> ITK axis 2, say)
+            % would place ReplaceValue at a different MATLAB voxel; the
+            % exact-voxel equality below fails in that case. This is the
+            % primary defense for SeedPointsToIndices and SNC's radius
+            % order.
+            sub = tPhase3RegionGrowingSmoke.regionGrowSeed();
+            val = tc.V(sub(1), sub(2), sub(3));
+            switch seededOp
+                case 'SCT'; p = [val - 5, val + 5];              rv = 255;
+                case 'SNC'; p = [1 1 1, val - 5, val + 5, 255];  rv = 255;
+                case 'SCC'; p = [2.5 5 100];                     rv = 100;
+            end
+            out = mexitk(seededOp, p, tc.V, [], sub);
+            tc.verifyEqual(out(sub(1), sub(2), sub(3)), rv);
+        end
+
+        function disconnectedVoxelNotLabeled(tc, seededOp)
+            % Catches a "label everything in range" bug that a pure
+            % threshold (not an actual region grow) would exhibit: the far
+            % voxel is in the same intensity band as the seed but not
+            % connected to it, so it must NOT receive ReplaceValue.
+            sub = tPhase3RegionGrowingSmoke.regionGrowSeed();
+            far = tPhase3RegionGrowingSmoke.disconnectedSameBandVoxel();
+            val = tc.V(sub(1), sub(2), sub(3));
+            switch seededOp
+                case 'SCT'; p = [val - 5, val + 5];              rv = 255;
+                case 'SNC'; p = [1 1 1, val - 5, val + 5, 255];  rv = 255;
+                case 'SCC'; p = [2.5 5 100];                     rv = 100;
+            end
+            out = mexitk(seededOp, p, tc.V, [], sub);
+            tc.verifyNotEqual(out(far(1), far(2), far(3)), rv);
+        end
+    end
+
+    methods (Test)  % SCT-specific
+        function sctOutputIsTwoValued(tc)
+            % Uses the seed's own band (not the generic validParams [20
+            % 60], which excludes this seed's value of 68 and would
+            % degenerate to an all-zero, only-trivially-two-valued output)
+            % so growth genuinely happens and both values are exercised.
+            sub = tPhase3RegionGrowingSmoke.regionGrowSeed();
+            val = tc.V(sub(1), sub(2), sub(3));
+            out = mexitk('SCT', [val - 5, val + 5], tc.V, [], sub);
+            tc.verifyEmpty(setdiff(unique(double(out(:))), [0 255]));
+            tc.verifyGreaterThan(nnz(out == 0), 0);
+            tc.verifyGreaterThan(nnz(out == 255), 0);
+        end
+
+        function sctThresholdMonotonicity(tc)
+            % Widening [lower,upper] never shrinks the labeled set for a
+            % fixed seed. Verified: 36595 -> 88105 voxels.
+            sub = tPhase3RegionGrowingSmoke.regionGrowSeed();
+            val = tc.V(sub(1), sub(2), sub(3));
+            narrow = mexitk('SCT', [val - 5, val + 5], tc.V, [], sub);
+            wide   = mexitk('SCT', [val - 15, val + 15], tc.V, [], sub);
+            tc.verifyGreaterThanOrEqual(nnz(wide == 255), nnz(narrow == 255));
+        end
+
+        function sctEmptySeedsAllBackground(tc)
+            % Defined behaviour (itkFloodFilledFunctionConditionalConstIterator
+            % reports IsAtEnd immediately with no seed inside), not a crash
+            % or error. Verified.
+            out = mexitk('SCT', [20 60], tc.V, [], []);
+            tc.verifyEqual(nnz(out), 0);
+        end
+    end
+
+    methods (Test)  % SCC-specific
+        function sccSeedLabeledWithReplaceValue(tc)
+            % Asserts the ReplaceValue param is actually wired, not
+            % hardcoded to some other value: covered structurally by
+            % seedConventionIsNotTransposed(seededOp='SCC') above, which
+            % checks == 100 (the registry's ReplaceValue hint), not 255.
+            sub = tPhase3RegionGrowingSmoke.regionGrowSeed();
+            out = mexitk('SCC', [2.5 5 100], tc.V, [], sub);
+            tc.verifyEqual(out(sub(1), sub(2), sub(3)), 100);
+        end
+
+        function sccLargerMultiplierGrowsOrEqual(tc)
+            % Verified: 93645 -> 442368 (saturates to the full volume at
+            % multiplier 4 on this data; still a valid >= comparison since
+            % it did not start there).
+            sub = tPhase3RegionGrowingSmoke.regionGrowSeed();
+            small = mexitk('SCC', [2.5 5 100], tc.V, [], sub);
+            big   = mexitk('SCC', [4 5 100], tc.V, [], sub);
+            tc.verifyGreaterThanOrEqual(nnz(big == 100), nnz(small == 100));
+        end
+
+        function sccEmptySeedsAllZero(tc)
+            % Defined in ITK 5.4 (itkConfidenceConnectedImageFilter.hxx:
+            % "no seeds result in zero image"). Verified.
+            out = mexitk('SCC', [2.5 5 100], tc.V, [], []);
+            tc.verifyEqual(nnz(out), 0);
+        end
+    end
+
+    methods (Test)  % SNC-specific
+        function sncRadiusZeroVsTwoDiffer(tc)
+            sub = tPhase3RegionGrowingSmoke.regionGrowSeed();
+            val = tc.V(sub(1), sub(2), sub(3));
+            r0 = mexitk('SNC', [0 0 0, val - 5, val + 5, 255], tc.V, [], sub);
+            r2 = mexitk('SNC', [2 2 2, val - 5, val + 5, 255], tc.V, [], sub);
+            tc.verifyNotEqual(r0, r2);
+        end
+
+        function sncRadiusAxisOrderMatters(tc)
+            % Verified empirically: at the tight [val-5 val+5] band both
+            % asymmetric-radius outputs coincidentally collapse to a
+            % single voxel each (indistinguishable), so this uses the
+            % wider [val-15 val+15] band instead, which does discriminate
+            % (18963 vs 5261 foreground voxels).
+            sub = tPhase3RegionGrowingSmoke.regionGrowSeed();
+            val = tc.V(sub(1), sub(2), sub(3));
+            rx = mexitk('SNC', [3 1 1, val - 15, val + 15, 255], tc.V, [], sub);
+            rz = mexitk('SNC', [1 1 3, val - 15, val + 15, 255], tc.V, [], sub);
+            tc.verifyNotEqual(rx, rz);
+        end
+
+        function sncEmptySeedsAllZero(tc)
+            out = mexitk('SNC', [1 1 1 20 60 255], tc.V, [], []);
+            tc.verifyEqual(nnz(out), 0);
+        end
+    end
+
+    methods (Test)  % SIC-specific
+        function sicRejectsSinglePoint(tc)
+            sub = tPhase3RegionGrowingSmoke.regionGrowSeed();
+            tc.verifyError(@() mexitk('SIC', [20 255], tc.V, [], sub), 'mexitk:SIC:seeds');
+        end
+
+        function sicTwoBandsIsolate(tc)
+            sub1 = tPhase3RegionGrowingSmoke.regionGrowSeed();
+            sub2 = tPhase3RegionGrowingSmoke.isolatedBackgroundSeed();
+            out = mexitk('SIC', [20 255], tc.V, [], [sub1, sub2]);
+            tc.verifyEqual(out(sub1(1), sub1(2), sub1(3)), 255);
+            tc.verifyNotEqual(out(sub2(1), sub2(2), sub2(3)), 255);
+        end
+
+        function sicOutOfBoundsSeedRejected(tc)
+            tc.verifyError(@() mexitk('SIC', [20 255], tc.V, [], [9999 9999 9999, 1 1 1]), ...
+                'mexitk:seeds');
+        end
+
+        function sicIgnoresOutOfBoundsExtraSeed(tc)
+            % Lead override of this plan's own default: SIC bounds-checks
+            % ONLY the two consumed seed points, not ignored extras (the
+            % original never read past the second point, so rejecting an
+            % out-of-bounds ignored point would accept strictly less than
+            % the original did). A third, wildly out-of-bounds seed must
+            % NOT raise an error.
+            sub1 = tPhase3RegionGrowingSmoke.regionGrowSeed();
+            sub2 = tPhase3RegionGrowingSmoke.isolatedBackgroundSeed();
+            out = mexitk('SIC', [20 255], tc.V, [], [sub1, sub2, 9999 9999 9999]);
+            tc.verifySize(out, size(tc.V));
+        end
+    end
+
+    methods (Test)  % SOT-specific + FOMT cross-check
+        function sotIsTwoValuedUint8(tc)
+            out = mexitk('SOT', 128, tc.Vu);
+            tc.verifyEmpty(setdiff(unique(out(:)), uint8([0 255])));
+        end
+
+        function sotDoubleInsideValueIsRealmax(tc)
+            % Pins the "ITK default inside value" claim: catches an
+            % accidental hardcode to 255 on a double volume, where the
+            % correct default is the pixel type's own max.
+            out = mexitk('SOT', 128, tc.V);
+            u = unique(out(:));
+            tc.verifyEqual(numel(u), 2);
+            tc.verifyEqual(max(u), realmax('double'));
+        end
+
+        function sotMatchesFomtSingleThreshold(tc)
+            % Both label the low side (<=threshold) of a single Otsu cut,
+            % so the partitions should nearly match, but OtsuThresholdImageFilter
+            % (SOT) and OtsuMultipleThresholdsImageFilter at N=1 (FOMT) use
+            % different calculators and may pick threshold values differing
+            % by up to one bin edge. MEASURED on this data (not invented,
+            % not tuned): agreement is 0.997542769821 (441281 of 442368
+            % voxels agree), NOT exactly 1, so per the plan's protocol this
+            % asserts the measured bound rather than equality. Every
+            % disagreeing voxel has intensity exactly 33, consistent with a
+            % one-bin-edge difference between the two calculators' chosen
+            % thresholds. See docs/COMPATIBILITY.md.
+            sot = mexitk('SOT', 128, tc.Vu);
+            fomt = mexitk('FOMT', [1 128], tc.Vu);
+            sotInside = (sot ~= 0);
+            fomtClass0 = (fomt == 255);
+            agree = nnz(sotInside == fomtClass0) / numel(sot);
+            tc.verifyGreaterThan(agree, 0.997);
+        end
+    end
+
+    methods (Test)  % error paths
+        function sncRejectsNegativeRadius(tc)
+            sub = tPhase3RegionGrowingSmoke.regionGrowSeed();
+            tc.verifyError(@() mexitk('SNC', [-1 1 1 20 60 255], tc.V, [], sub), ...
+                'mexitk:paramRange');
+        end
+
+        function sccRejectsNegativeIterations(tc)
+            sub = tPhase3RegionGrowingSmoke.regionGrowSeed();
+            tc.verifyError(@() mexitk('SCC', [2.5 -1 100], tc.V, [], sub), 'mexitk:paramRange');
+        end
+
+        function sotRejectsZeroBins(tc)
+            % Measured, not assumed, and load-bearing: 0 histogram bins
+            % crash the MATLAB PROCESS OUTRIGHT inside ITK's Otsu histogram
+            % calculator (a bus error / SIGSEGV, not a catchable
+            % itk::ExceptionObject) -- confirmed directly before adding the
+            % guard in src/opcodes/sot.cpp. mexitk now rejects
+            % numberOfHistogram < 2 up front (mexitk:SOT:numberOfHistogram),
+            % the same severity class as the SWS-overthresholding deviation
+            % in docs/COMPATIBILITY.md.
+            tc.verifyError(@() mexitk('SOT', 0, tc.V), 'mexitk:SOT:numberOfHistogram');
+        end
+
+        function sotRejectsOneBin(tc)
+            % Also crashes (a separate bus error, confirmed independently
+            % from the 0-bins case), also caught by the same guard.
+            tc.verifyError(@() mexitk('SOT', 1, tc.V), 'mexitk:SOT:numberOfHistogram');
+        end
+
+        function sotRejectsNegativeBins(tc)
+            % Deviates from the plan's own expectation of mexitk:paramRange
+            % here: the numberOfHistogram < 2 crash-guard (added after
+            % finding the 0/1-bin MATLAB crash, not anticipated by the
+            % plan) checks the raw parameter BEFORE CastParam runs, so it
+            % catches negative values too, under its own more specific
+            % identifier. Verified directly, not assumed from the plan text.
+            tc.verifyError(@() mexitk('SOT', -1, tc.V), 'mexitk:SOT:numberOfHistogram');
+        end
+
+        function sccRejectsOutOfRangeReplaceOnUint8(tc)
+            sub = tPhase3RegionGrowingSmoke.regionGrowSeed();
+            tc.verifyError(@() mexitk('SCC', [2.5 5 300], tc.Vu, [], sub), 'mexitk:paramRange');
+        end
+
+        function sncAcceptsOutOfRangeReplaceOnDouble(tc)
+            % 300 is out of uint8 range but valid for double: the guard is
+            % per-target-type, not a blanket cap.
+            sub = tPhase3RegionGrowingSmoke.regionGrowSeed();
+            out = mexitk('SNC', [1 1 1 20 60 300], tc.V, [], sub);
+            tc.verifySize(out, size(tc.V));
+        end
+    end
+end
