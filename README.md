@@ -32,9 +32,9 @@ Keeping ITK keeps the algorithms.
 ## Status: honest summary
 
 This is version 0.2.0.
-**17 of the original's 40 opcodes are implemented.**
+**22 of the original's 40 opcodes are implemented.**
 3 of those are the ones NFT depends on, and the only 3 with captured reference data.
-The other 14 are smoke-tested filters with no reference capture.
+The other 19 are smoke-tested (14 filters and 5 segmentation opcodes) with no reference capture.
 
 | Opcode | ITK filter | Status | What that means |
 |---|---|---|---|
@@ -55,6 +55,11 @@ The other 14 are smoke-tested filters with no reference capture.
 | `FMEDIAN` | `MedianImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
 | `FSN` | `SigmoidImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
 | `FVBIH` | `VotingBinaryIterativeHoleFillingImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
+| `SCC` | `ConfidenceConnectedImageFilter` | **smoke-tested** | Region growing from seed(s); no reference capture exists. InitialNeighborhoodRadius left at ITK default. |
+| `SCT` | `ConnectedThresholdImageFilter` | **smoke-tested** | Region growing from seed(s); no reference capture. ReplaceValue hardcoded to 255 (inferred from ITK's example; registry exposes none). |
+| `SIC` | `IsolatedConnectedImageFilter` | **smoke-tested** | Region growing, two seed groups (first two seed points); no reference. Needs at least 2 seed points. |
+| `SNC` | `NeighborhoodConnectedImageFilter` | **smoke-tested** | Region growing from seed(s); no reference capture exists. |
+| `SOT` | `OtsuThresholdImageFilter` | **smoke-tested** | Two-valued output; no reference. Inside/outside left at ITK defaults (inside = pixel-type max, so {0,255} on uint8 but {0,realmax} on double). `numberOfHistogram` below 2 is rejected: it crashes the MATLAB process outright inside ITK's Otsu calculator. |
 
 Status vocabulary, used consistently in the code, in `mexitk('?')`, and here:
 
@@ -65,7 +70,7 @@ Status vocabulary, used consistently in the code, in `mexitk('?')`, and here:
 - **smoke-tested**: runs and returns plausible output, but no reference capture exists.
 - **untested**: implemented from the ITK mapping only; never run against a reference.
 
-The remaining 23 opcodes are **not implemented**.
+The remaining 18 opcodes are **not implemented**.
 They are catalogued in `docs/matitk_opcode_registry.txt` (the original binary's own parameter dump)
 and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`.
 
@@ -87,8 +92,8 @@ Read it before relying on this for science.
 
 | Platform | State |
 |---|---|
-| macOS arm64 (`maca64`) | Builds, loads, 108/108 tests pass. Verified locally against Homebrew ITK and in CI against static ITK, including loading on a runner with **no ITK installed**. |
-| Linux x86_64 (`glnxa64`) | Builds, loads, 108/108 tests pass. Verified in CI against static ITK, including loading on a runner with **no ITK installed**. Must be built with GCC 12 or older; see BUILDING.md. |
+| macOS arm64 (`maca64`) | Builds, loads, 147/147 tests pass locally against Homebrew ITK. CI confirmed 108/108 (static ITK, no-ITK-installed runner) before the Phase 3 opcodes; re-verification against the current suite is pending. |
+| Linux x86_64 (`glnxa64`) | Builds, loads. Last CI-verified at 108/108 on a runner with **no ITK installed**, before the Phase 3 opcodes; re-verification against the current 147-test suite is pending. Must be built with GCC 12 or older; see BUILDING.md. |
 | macOS x86_64 (`maci64`) | Legacy; built on a best-effort basis only. R2025b is MathWorks' final Intel-Mac release. |
 | Windows | Best-effort only; the ITK toolchain there is unresolved. Not attempted. |
 

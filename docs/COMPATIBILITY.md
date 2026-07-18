@@ -221,6 +221,7 @@ or refuses to reproduce a defect.
 | 6 | **`FDG`/`FGA` reject `gaussianVariance <= 0`** with `mexitk:FDG:gaussianVariance` / `mexitk:FGA:gaussianVariance`. | A non-positive variance silently produces a degenerate, non-Gaussian kernel rather than an error. In-range (positive) variance is unaffected. |
 | 7 | **`FSN` rejects `alpha == 0`** with `mexitk:FSN:alpha`. | `alpha = 0` makes `SigmoidImageFilter`'s functor divide by zero, producing `NaN` that then hits an undefined-behaviour cast into an integer pixel type. Nonzero `alpha` is unaffected. |
 | 8 | **Out-of-range filter *results* saturate to the target pixel type's range on export, instead of an undefined-behaviour cast.** `FCA`/`FD`'s promoted (`uint8`/`int32`) paths and `FDM`'s integral-input distance output export via `itk::ClampImageFilter` rather than `itk::CastImageFilter`. Deterministically reachable: `FDM` on an all-zero `uint8` volume computes distances measured at roughly 294 to 443 across the volume, all past `uint8`'s 255 max, so the plain cast back was undefined behaviour, not merely lossy. | Refuse to reproduce undefined behaviour; the original's behaviour on these exact inputs was undefined, not reproducible even in principle, so there is nothing to match. In-range results are unaffected: clamp-then-truncate equals truncate when the value already fits, so this changes no previously-defined output. |
+| 9 | **`SOT` rejects `numberOfHistogram < 2`** with `mexitk:SOT:numberOfHistogram`, instead of running ITK's Otsu calculator. Measured directly, not assumed: 0 or 1 histogram bins crash the whole MATLAB process (a bus error / SIGSEGV inside `itk::Statistics::Histogram::GetIndex`), not a catchable `itk::ExceptionObject`. `numberOfHistogram >= 2` is unaffected. | Same severity class as deviation 1 (`SWS` overthresholding): taking down the user's MATLAB session is not behaviour worth preserving, and there is no reference capture for a crashing call to match against in the first place. |
 
 ## Behaviour matched deliberately, including the odd bits
 
@@ -239,13 +240,14 @@ or refuses to reproduce a defect.
 
 ## Coverage
 
-`mexitk` currently implements **17 of the original's 40 opcodes**:
-FCA, FOMT, SWS, and the 14 smoke-tested filters FBB, FBD, FBE, FBT, FD, FDG,
-FDM, FDMV, FF, FGA, FMEAN, FMEDIAN, FSN and FVBIH.
+`mexitk` currently implements **22 of the original's 40 opcodes**:
+FCA, FOMT, SWS, the 14 smoke-tested filters FBB, FBD, FBE, FBT, FD, FDG,
+FDM, FDMV, FF, FGA, FMEAN, FMEDIAN, FSN and FVBIH, and the 5 smoke-tested
+segmentation opcodes SCC, SCT, SIC, SNC and SOT.
 FCA, FOMT and SWS are the three NFT depends on, and the only three with
-reference data; the other 14 have no captured reference (see "Smoke-tested
+reference data; the other 19 have no captured reference (see "Smoke-tested
 opcodes" below).
-The remaining 23 are catalogued in `docs/matitk_opcode_registry.txt`
+The remaining 18 are catalogued in `docs/matitk_opcode_registry.txt`
 (the original binary's own parameter dump)
 and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`,
 but they are **not implemented**.
@@ -253,12 +255,13 @@ See the README for the current status of each.
 
 ## Smoke-tested opcodes (no reference)
 
-FBB, FBD, FBE, FBT, FD, FDG, FDM, FDMV, FF, FGA, FMEAN, FMEDIAN, FSN and
-FVBIH run and return plausible output, but no reference capture exists for
-them: the only captured reference is the 2006 MATITK binary's FCA/FOMT/SWS
-output (see "The reference" above), so there is nothing to measure these 14
-against. There are no measurement tables for them, unlike FCA and SWS above,
-because there is no reference to measure against.
+FBB, FBD, FBE, FBT, FD, FDG, FDM, FDMV, FF, FGA, FMEAN, FMEDIAN, FSN,
+FVBIH, SCC, SCT, SIC, SNC and SOT run and return plausible output, but no
+reference capture exists for them: the only captured reference is the 2006
+MATITK binary's FCA/FOMT/SWS output (see "The reference" above), so there
+is nothing to measure these 19 against. There are no measurement tables for
+them, unlike FCA and SWS above, because there is no reference to measure
+against.
 
 | Opcode | ITK class |
 |---|---|
@@ -276,6 +279,11 @@ because there is no reference to measure against.
 | FMEDIAN | `MedianImageFilter` |
 | FSN | `SigmoidImageFilter` |
 | FVBIH | `VotingBinaryIterativeHoleFillingImageFilter` |
+| SCC | `ConfidenceConnectedImageFilter` |
+| SCT | `ConnectedThresholdImageFilter` |
+| SIC | `IsolatedConnectedImageFilter` |
+| SNC | `NeighborhoodConnectedImageFilter` |
+| SOT | `OtsuThresholdImageFilter` |
 
 **FGA is implemented as a deliberate duplicate of FDG.** Both opcodes have the
 identical registry parameter signature (`gaussianVariance`, `maxKernelWidth`;
@@ -338,6 +346,91 @@ apart silently:
 
 The underlying sourcing is in `docs/itk_opcode_mapping.md` (FDMV, Drift/risk;
 confidence Medium).
+
+### Seed coordinate convention
+
+`SCT`, `SCC`, `SNC` and `SIC` all take seed points through the existing
+`seed(s)Array` argument (`[d1 d2 d3 d1 d2 d3 ...]`, 1-based). Each triplet
+maps onto image axes in dimension order with **no transpose**: `(d1,d2,d3)`
+becomes ITK index `(d1-1,d2-1,d3-1)`, the same convention `ImportVolume`
+already uses for the volume itself (MATLAB's column-major layout lines up
+with ITK's fastest-varying-first buffer order with no transpose needed).
+This is an interpretation, not a confirmed fact: it is consistent with the
+import convention, but MATITK source was not available to verify it
+directly. Out-of-bounds seed coordinates raise `mexitk:seeds`. The shared
+helper is `SeedPointsToIndices` in `src/mexitk_common.h`.
+
+### SCT ReplaceValue is inferred
+
+The registry exposes no `ReplaceValue` parameter for `SCT`
+(`docs/matitk_opcode_registry.txt` lists only `LowerThreshold`,
+`UpperThreshold`), and ITK's own `ConnectedThresholdImageFilter` default is
+`1`, not `255`. `mexitk` hardcodes `255`, inferred from the ITK 2.4
+`Examples/Segmentation/ConnectedThresholdImageFilter.cxx` the original was
+generated from, which hardcodes exactly that value. This is an inference
+from the generator's source example, not a confirmed fact about MATITK
+itself.
+
+### SIC two-seed split and isolation-failure flag
+
+`SIC` (`IsolatedConnectedImageFilter`) needs two seed *groups*, but the
+calling convention supplies one flat `seedsArray`. `mexitk` splits it: the
+first point becomes seed group 1 (the region to keep), the second becomes
+seed group 2 (the region to isolate from), matching the two-seed shape of
+the ITK 2.4 example the original was generated from. Any further points are
+ignored. Fewer than two points is rejected with `mexitk:SIC:seeds` before
+reaching ITK (which would otherwise throw `"Seeds1/Seeds2 container is
+empty"` from `Update()`).
+
+**Bounds-checking applies only to the two consumed points, not ignored
+extras.** `SeedPointsToIndices` is called on a slice containing only the
+first two triplets, so a malformed or out-of-bounds third-or-later point is
+never validated and never raises an error. This is a deliberate lead
+decision: the original never read anything past the second seed point, so
+rejecting a call over an out-of-bounds point the original would have simply
+ignored would accept *strictly less* than the original did.
+
+`GetThresholdingFailed()` exists on the ITK filter but is deliberately not
+surfaced to the caller: the ITK 2.4 example the original was generated from
+never checks it, so surfacing it would be behaviour the original never had.
+If the two seed regions cannot be isolated (no separating threshold found
+by ITK's internal binary search), the practical symptom is that seed
+group 1 itself comes back unlabelled; measured directly (a mid-band second
+seed, value 40, against a bright first seed, value 68, failed to isolate on
+the reference volume this way), not merely inferred.
+
+### SOT inside/outside defaults and polarity
+
+`SOT` (`OtsuThresholdImageFilter`) leaves `InsideValue` and `OutsideValue`
+at ITK's own defaults: inside = the pixel type's max, outside = `0`. The
+registry exposes neither parameter, and both the ITK 2.4 constructor and
+the 5.4 `HistogramThresholdImageFilter` base agree on this default, so
+leaving it alone matches the original's own behaviour, not a choice mexitk
+made. Threshold polarity is unchanged 2.4-to-5.4 too: intensity in
+`[min, otsuThreshold]` receives `InsideValue`, i.e. the **low side** of the
+Otsu cut becomes inside. Consequence: the two-valued output is `{0,255}` on
+`uint8` but `{0,realmax('double')}` &asymp; `{0, 1.8e308}` on `double`
+(`{0,realmax('single')}` &asymp; `{0, 3.4e38}` on `single`). This is ITK's
+faithful default, not a bug, and is flagged loudly rather than silently
+"fixed" to `{0,255}`. Bins are always set explicitly
+(`filter->SetNumberOfHistogramBins(...)`), since ITK's base default (256)
+disagrees with MATITK's own hint (128).
+
+**`numberOfHistogram` below 2 crashes MATLAB outright** and is rejected
+before reaching ITK; see deliberate deviation 9 above.
+
+**SOT vs FOMT agreement is measured, not assumed, and is not exactly 1.**
+`SOT` (`OtsuThresholdImageFilter`) and `FOMT` at N=1
+(`OtsuMultipleThresholdsImageFilter`) both label the low side of a single
+Otsu cut, so their partitions should nearly match, but the two classes use
+different histogram/threshold calculators internally and can pick a
+threshold differing by up to one bin edge. Measured on the reference volume
+at 128 bins, `uint8`: agreement is **0.997542769821** (441281 of 442368
+voxels), not exactly 1. Every one of the 1087 disagreeing voxels has
+intensity exactly 33, consistent with the two calculators landing on
+threshold values one bin edge apart. `tests/tPhase3RegionGrowingSmoke.m`
+asserts the measured bound (`agree > 0.997`), not equality, per project
+policy: the number is measured, not invented or tuned to pass.
 
 **One pixel-type deviation: FD promotes `uint8` to `float`.** ITK's
 `DerivativeImageFilter` requires a signed output pixel type
