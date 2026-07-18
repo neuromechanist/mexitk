@@ -37,6 +37,10 @@ ITK_MODULES=(
   Module_ITKAnisotropicSmoothing=ON  # FCA
   Module_ITKThresholding=ON          # FOMT
   Module_ITKWatersheds=ON            # SWS
+  Module_ITKSmoothing=ON             # FMEDIAN, FMEAN, FDG, FGA, FBB
+  Module_ITKImageIntensity=ON        # FSN
+  Module_ITKImageGrid=ON             # FF
+  Module_ITKImageFeature=ON          # FD
 )
 
 WORK="${ITK_BUILD_WORKDIR:-$(mktemp -d)}"
