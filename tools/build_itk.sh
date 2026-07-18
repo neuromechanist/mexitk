@@ -44,6 +44,7 @@ ITK_MODULES=(
   Module_ITKBinaryMathematicalMorphology=ON  # FBD, FBE
   Module_ITKDistanceMap=ON                   # FDM, FDMV
   Module_ITKLabelVoting=ON                   # FVBIH
+  Module_ITKRegionGrowing=ON                 # SCT, SCC, SIC, SNC
 )
 
 WORK="${ITK_BUILD_WORKDIR:-$(mktemp -d)}"

@@ -236,6 +236,47 @@ mxArray* ExportVolume(const Image3<PixelT>* img) {
   return out;
 }
 
+// Converts the flat, 1-based seed vector ([d1 d2 d3 d1 d2 d3 ...], already
+// validated centrally in mexFunction to be a multiple of kDimension in length
+// with every element >= 1) into itk::Index<kDimension> values.
+//
+// Axis mapping is a direct, zero-transpose pass-through: seed triplet
+// (d1,d2,d3) maps onto ITK axes (0,1,2) as index {d1-1, d2-1, d3-1}. This is
+// the same convention ImportVolume uses (MATLAB column-major lines up with
+// ITK's fastest-varying-first buffer order with no transpose, so a MATLAB
+// subscript (r,c,p) is ITK index (r-1,c-1,p-1)). The axis order matching the
+// volume's own dimension order is an interpretation: it is consistent with
+// the import convention but is not verifiable against MATITK source (none
+// exists). See docs/COMPATIBILITY.md.
+//
+// A fractional seed coordinate is truncated toward zero before the 1->0 base
+// shift (static_cast<IndexValueType>(d) - 1), matching CastParam's integral
+// truncation philosophy. A seed whose resulting index falls outside the
+// volume throws OpcodeError("mexitk:seeds", ...).
+inline std::vector<itk::Index<kDimension>> SeedPointsToIndices(
+    const std::vector<double>& seeds, const itk::Size<kDimension>& size) {
+  std::vector<itk::Index<kDimension>> indices;
+  indices.reserve(seeds.size() / kDimension);
+  for (size_t i = 0; i + kDimension <= seeds.size(); i += kDimension) {
+    itk::Index<kDimension> idx;
+    for (unsigned int axis = 0; axis < kDimension; ++axis) {
+      const itk::IndexValueType v =
+          static_cast<itk::IndexValueType>(seeds[i + axis]) - 1;
+      if (v < 0 || v >= static_cast<itk::IndexValueType>(size[axis])) {
+        throw OpcodeError(
+            "mexitk:seeds",
+            FormatMessage("Seed coordinate %g on axis %u is outside the volume "
+                          "(1..%lu).",
+                          seeds[i + axis], axis + 1,
+                          static_cast<unsigned long>(size[axis])));
+      }
+      idx[axis] = v;
+    }
+    indices.push_back(idx);
+  }
+  return indices;
+}
+
 }  // namespace mexitk
 
 #endif  // MEXITK_COMMON_H

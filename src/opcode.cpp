@@ -103,6 +103,11 @@ const Opcode* GetFmedianOpcode();
 const Opcode* GetFomtOpcode();
 const Opcode* GetFsnOpcode();
 const Opcode* GetFvbihOpcode();
+const Opcode* GetSccOpcode();
+const Opcode* GetSctOpcode();
+const Opcode* GetSicOpcode();
+const Opcode* GetSncOpcode();
+const Opcode* GetSotOpcode();
 const Opcode* GetSwsOpcode();
 
 // Registration is explicit rather than via static initialisers in each opcode
@@ -133,6 +138,11 @@ void RegisterBuiltinOpcodes() {
   RegisterOpcode(GetFomtOpcode());
   RegisterOpcode(GetFsnOpcode());
   RegisterOpcode(GetFvbihOpcode());
+  RegisterOpcode(GetSccOpcode());
+  RegisterOpcode(GetSctOpcode());
+  RegisterOpcode(GetSicOpcode());
+  RegisterOpcode(GetSncOpcode());
+  RegisterOpcode(GetSotOpcode());
   RegisterOpcode(GetSwsOpcode());
 }
 
