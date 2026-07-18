@@ -202,11 +202,11 @@ for i = 1:numel(opcodes)
         seedArg = S1; %#ok<NASGU>
         input = Vd; %#ok<NASGU>
         cmd = ['try; [o1,o2] = matitk(opcode, params, input, [], seedArg); ' ...
-               'errored=false; catch me2; disp(["CAUGHT ERROR: " me2.message]); errored=true; end'];
+               'errored=false; catch me2; disp([''CAUGHT ERROR: '' me2.message]); errored=true; end'];
     else
         input = Vd; %#ok<NASGU>
         cmd = ['try; [o1,o2] = matitk(opcode, params, input); ' ...
-               'errored=false; catch me2; disp(["CAUGHT ERROR: " me2.message]); errored=true; end'];
+               'errored=false; catch me2; disp([''CAUGHT ERROR: '' me2.message]); errored=true; end'];
     end
     if isDryRun
         fprintf('  [dryrun] nargout probe %s skipped\n', opcode);

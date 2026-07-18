@@ -73,14 +73,19 @@ end
 ok = true;
 o = [];
 
+% Char concatenation (single-quoted, s05's pattern), NOT double-quoted:
+% disp(["CAUGHT ERROR: " me2.message]) would promote the whole thing to a
+% 1x2 string array (mixing a string literal with a char via []), which
+% MATLAB truncates with an ellipsis on display for long messages --
+% silently losing data in the very field the campaign exists to capture.
 if hasSeed && ischar(seedArg) && strcmp(seedArg, 'OMIT')
-    cmd = 'try; o = matitk(opcode, params, input); ok=true; catch me2; disp(["CAUGHT ERROR: " me2.message]); ok=false; end';
+    cmd = 'try; o = matitk(opcode, params, input); ok=true; catch me2; disp([''CAUGHT ERROR: '' me2.message]); ok=false; end';
 elseif hasSeed
-    cmd = 'try; o = matitk(opcode, params, input, arg4, seedArg); ok=true; catch me2; disp(["CAUGHT ERROR: " me2.message]); ok=false; end';
+    cmd = 'try; o = matitk(opcode, params, input, arg4, seedArg); ok=true; catch me2; disp([''CAUGHT ERROR: '' me2.message]); ok=false; end';
 elseif hasArg4
-    cmd = 'try; o = matitk(opcode, params, input, arg4); ok=true; catch me2; disp(["CAUGHT ERROR: " me2.message]); ok=false; end';
+    cmd = 'try; o = matitk(opcode, params, input, arg4); ok=true; catch me2; disp([''CAUGHT ERROR: '' me2.message]); ok=false; end';
 else
-    cmd = 'try; o = matitk(opcode, params, input); ok=true; catch me2; disp(["CAUGHT ERROR: " me2.message]); ok=false; end';
+    cmd = 'try; o = matitk(opcode, params, input); ok=true; catch me2; disp([''CAUGHT ERROR: '' me2.message]); ok=false; end';
 end
 
 fprintf('\n===== %s %s (params=%s, class=%s) =====\n', opcode, tag, mat2str(params), class(input));
