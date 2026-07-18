@@ -61,7 +61,11 @@ class SotOpcode : public Opcode {
            "the low side of the Otsu threshold (intensity <= threshold) "
            "becomes inside. Two-valued output is {0,255} on uint8 but "
            "{0,realmax} on double/single. Bins are always set explicitly "
-           "(ITK base default is 256).";
+           "(ITK base default is 256). numberOfHistogram below 2 is "
+           "rejected (mexitk:SOT:numberOfHistogram): ITK's Otsu calculator "
+           "crashes the MATLAB process outright at 0 or 1 bins (measured, "
+           "not a catchable exception), since bipartitioning a histogram "
+           "into inside/outside needs at least 2 bins.";
   }
 
   const std::vector<ParamSpec>& Params() const override {
@@ -72,6 +76,16 @@ class SotOpcode : public Opcode {
   }
 
   void Execute(OpContext& ctx) const override {
+    // ITK's Otsu histogram calculator crashes the whole MATLAB process (not
+    // a catchable itk::ExceptionObject) at 0 or 1 histogram bins: measured
+    // directly, a bus error / SIGSEGV inside
+    // itk::Statistics::Histogram::GetIndex. Reject before it ever reaches
+    // ITK, the same severity class as the SWS overthresholding deviation
+    // (docs/COMPATIBILITY.md deviation #1).
+    if ((*ctx.params)[0] < 2.0) {
+      throw OpcodeError("mexitk:SOT:numberOfHistogram",
+                        "numberOfHistogram must be at least 2.");
+    }
     DispatchOnPixelType(mxGetClassID(ctx.volumeA),
                         [&](auto tag) { RunSot<typename decltype(tag)::type>(ctx); });
   }
