@@ -109,18 +109,30 @@ why these are named `s00_...`, `s01_...`, etc. rather than `00_...`.
 ## No fixture may embed a path or hostname
 
 This is a public repo, so **no fixture may contain any absolute path,
-hostname, or `cfg.matitkDir` value.** `s07`–`s13` add no path-bearing
-field at all — every value they save is either a captured array, a hash,
-a parameter, or a recipe string whose only free variable is `V` (the
-`mri` base volume). `s06_provenance.m` is the one script that ever
-embeds a path (`provenance.binaryPath`, `provenance.md5sumRaw`), and only
-because provenance is the point of that script; the **committed**
-`tests/fixtures/provenance.mat` replaces the real path with the literal
-placeholder string `$MATITK_DIR` before it is committed — that
-substitution happens by hand at commit time, not automatically by the
-script, so if you ever re-run `s06` and commit its output, repeat the
+hostname, or `cfg.matitkDir` value belonging to *this project's own
+infrastructure*** — the capture machine, `MATITK_DIR`, or anything else
+under this harness's control. `s07`–`s13` add no such path-bearing field
+at all — every value they save is either a captured array, a hash, a
+parameter, or a recipe string whose only free variable is `V` (the `mri`
+base volume). `s06_provenance.m` is the one script that ever embeds one
+of *this project's* paths (`provenance.binaryPath`, `provenance.md5sumRaw`),
+and only because provenance is the point of that script; the
+**committed** `tests/fixtures/provenance.mat` replaces the real path with
+the literal placeholder string `$MATITK_DIR` before it is committed —
+that substitution happens by hand at commit time, not automatically by
+the script, so if you ever re-run `s06` and commit its output, repeat the
 substitution. See the project's public-repo rule: never expose internal
 cluster paths or hostnames.
+
+This rule does **not** apply to the original binary's own strings.
+`consoleText`/`errmsg` routinely preserve paths the *2006 binary itself*
+has compiled in — e.g. `itkGaussianOperator`'s warnings cite
+`/cs/guests/vwchu/myfiles/LinuxBuildMATITK64/InsightToolkit-2.8.1/...`,
+the original author's own SFU build tree from 2006. That is authentic
+captured output, not a leak: the rule concerns this project's
+infrastructure, and scrubbing the reference binary's own embedded
+strings would falsify the very console text the campaign exists to
+record faithfully.
 
 ## Derived-input recipe convention
 

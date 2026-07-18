@@ -6,13 +6,19 @@
 % type, not the pixel value distribution, so every integral-class FAAB
 % case (raw and bin33, uint8 and int32) is isolated here rather than in
 % s10, which keeps only FAAB double/single (both completed cleanly in
-% both runs). int32 is presumed to hit the same crash by extension but
-% is not yet directly confirmed -- captured first below so a run that
-% dies partway still yields that new information before repeating the
-% already-confirmed uint8 crash.
+% both runs). int32 was ordered first below on the assumption it might
+% hit the same crash by extension; measured outcome (run 3): it does
+% NOT -- both raw_int32 and bin33_int32 completed cleanly, and the
+% crash only happens on the uint8 cases that follow. The ordering
+% (int32 first) is kept as-is: it is still the right choice on general
+% principle (an uncertain case ahead of a confirmed one so a partial run
+% yields new information first), it simply turned out int32 was never
+% actually in doubt once measured.
 %
-% This script may crash the MATLAB process, likely on its first case.
-% Run it in its OWN matlab -batch invocation, after s10_gradients_capture,
+% This script may crash the MATLAB process -- measured (run 3) to
+% happen on its third case (raw_uint8), not necessarily its first, since
+% the two int32 cases precede it and both complete. Run it in its OWN
+% matlab -batch invocation, after s10_gradients_capture,
 % never combined with another script. capture_case's inner try/catch
 % cannot prevent a real process crash, only an itk::ExceptionObject: a
 % crash happens mid-matitk-call, before that case's own save() runs, so

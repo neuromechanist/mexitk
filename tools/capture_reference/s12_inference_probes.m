@@ -47,6 +47,8 @@ probe3_sct_replace_value(cfg, Vd, S1, band, isDryRun);
 probe5_sot_polarity(cfg, Vd, V);
 probe6_seed_convention(cfg, Vd, S1, band);
 probe9_seed_base_indexing(cfg, Vd, S1, band);
+probe10_arg4_class_mismatch(cfg, V, S1);
+probe11_dimmax_second_seed(cfg, Vd, S1);
 probe7_nargout_arity(cfg, Vd, S1, isDryRun);
 probe8_fbd_fbe_closing(cfg, binDouble, binRecipeDouble, isDryRun);
 probe4_sic_seed_split(cfg, Vd, S1, S2, S3, isDryRun);  % crash-prone; runs last
@@ -187,6 +189,33 @@ capture_case(cfg, 'SCT', 'off_minus1_double', band, Vd, struct('seedArg', S1 - 1
 capture_case(cfg, 'SCT', 'off_plus1_double', band, Vd, struct('seedArg', S1 + 1));
 capture_case(cfg, 'SCC', 'off_minus1_double', [2.5 5 100], Vd, struct('seedArg', S1 - 1));
 capture_case(cfg, 'SCC', 'off_plus1_double', [2.5 5 100], Vd, struct('seedArg', S1 + 1));
+end
+
+function probe10_arg4_class_mismatch(cfg, Vu8, S1)
+% Deliberately reproduces the original's type-check rejection of a
+% seeded call on non-double input when arg4 is a PLAIN double empty,
+% not class-matched to the input. capture_case's arg4 setup is:
+%   if hasArg4, arg4 = opts.arg4; elseif hasSeed, arg4 = cast([], class(input)); end
+% Passing opts.arg4 = [] explicitly makes hasArg4 true, so the given
+% (plain double) arg4 is used AS-IS and the class-matching `elseif`
+% branch -- added specifically to avoid this failure mode on every
+% other seeded capture in this harness -- never runs. The exact latent
+% edge case the failure-mode review identified becomes, here, the
+% deliberate mechanism for capturing the original's own rejection
+% message as reference data. Expect success=false with "Both images
+% (inputArrays) must be of the same data type."
+capture_case(cfg, 'SCT', 'arg4_mismatch_uint8', [20 60], Vu8, struct('seedArg', S1, 'arg4', []));
+end
+
+function probe11_dimmax_second_seed(cfg, Vd, S1)
+% Captures the original's rejection of SIC's ORIGINAL second seed
+% [1 128 1], which sits exactly at the volume's y-extent (128) -- the
+% same class of dimension-maximum rejection as SCT's old dimmax probe
+% and probe9's seed-indexing bracket. Fixed everywhere else in the
+% harness (see s09/s12's S2 = [2 120 2] replacement and its comment),
+% but the rejection itself was never captured as reference data until
+% now. Expect "Location of seed outside volume".
+capture_case(cfg, 'SIC', 'dimmax_double', [20 255], Vd, struct('seedArg', [S1 1 128 1]));
 end
 
 function probe7_nargout_arity(cfg, Vd, S1, isDryRun)

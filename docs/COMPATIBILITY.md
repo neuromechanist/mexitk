@@ -107,7 +107,14 @@ the reference tests this epic's Phase 3 will add):
   of the same data type.` — the original checks the default (empty)
   `arg4` against the primary input's class even when no second image is
   conceptually being passed. `double` input was unaffected (an empty
-  `double` `[]` happens to match).
+  `double` `[]` happens to match). This was run 1's observed behaviour,
+  not something any committed fixture demonstrates on its own: the fix it
+  drove (`capture_case`'s class-matched-empty `arg4`) means every other
+  seeded capture in the committed set now *succeeds* instead of
+  reproducing it. `s12`'s `probe10_arg4_class_mismatch` deliberately
+  bypasses that fix (an explicit `arg4 = []`) to keep this claim
+  fixture-backed — **[fixture: `sct_arg4_mismatch_uint8.mat`, pending
+  re-import]**.
 - **`FD` rejects `uint8` and `int32` input outright**, both with `This
   method is not supported with this data type! Try converting to double
   first.`, regardless of parameters.
@@ -133,10 +140,15 @@ the reference tests this epic's Phase 3 will add):
   has the full sentence). Seeds one step off a known-good point in
   either direction behave normally. Combined with the earlier,
   separately measured rejection of seeds sitting exactly at a
-  dimension's own extent (`[70 50 27]` on the 27-deep volume; `SIC`'s
-  original second seed `[1 128 1]` on the 128-wide volume) — both
-  rejected with `Location of seed outside volume` — the valid range for
-  a dimension of size *N* is 1 to *N*-1, not 1 to *N*.
+  dimension's own extent (`[70 50 27]` on the 27-deep volume, backed by
+  `sct_20_60_dimmax_double.mat`; `SIC`'s original second seed `[1 128 1]`
+  on the 128-wide volume) — both rejected with `Location of seed outside
+  volume` — the valid range for a dimension of size *N* is 1 to *N*-1,
+  not 1 to *N*. `[1 128 1]` was replaced everywhere in the harness once
+  this was found (`S2 = [2 120 2]` in `s09`/`s12`), so like the `arg4`
+  finding above, no committed fixture demonstrated it on its own; `s12`'s
+  `probe11_dimmax_second_seed` captures it deliberately — **[fixture:
+  `sic_dimmax_double.mat`, pending re-import]**.
 - **The original binary can corrupt its own heap at MATLAB exit**, after
   every case in a script's table has already completed and saved
   (`munmap_chunk(): invalid pointer` / `double free or corruption (out)`,

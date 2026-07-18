@@ -38,7 +38,20 @@ if hasSeed
     fixture.seedArg = opts.seedArg;
 end
 if hasArg4
-    fixture.arg4Hash = local_md5(opts.arg4);
+    if isempty(opts.arg4)
+        % local_md5 (locked; not modifiable here) hits Java's
+        % MessageDigest.update(byte[]) via MATLAB's automatic overload
+        % dispatch, which fails on ANY empty array -- "A Non-scalar
+        % value was passed for a scalar argument" -- because MATLAB
+        % cannot disambiguate a 0-element array from the scalar
+        % update(byte) overload. Use the well-known, independently
+        % verified MD5-of-zero-bytes constant instead of calling
+        % local_md5 on an empty arg4 (confirmed directly:
+        % `printf '' | md5sum` -> d41d8cd98f00b204e9800998ecf8427e).
+        fixture.arg4Hash = 'd41d8cd98f00b204e9800998ecf8427e';
+    else
+        fixture.arg4Hash = local_md5(opts.arg4);
+    end
     if isfield(opts, 'arg4Recipe') && ~isempty(opts.arg4Recipe)
         fixture.arg4Recipe = opts.arg4Recipe;
     end
