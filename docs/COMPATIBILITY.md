@@ -113,8 +113,7 @@ the reference tests this epic's Phase 3 will add):
   seeded capture in the committed set now *succeeds* instead of
   reproducing it. `s12`'s `probe10_arg4_class_mismatch` deliberately
   bypasses that fix (an explicit `arg4 = []`) to keep this claim
-  fixture-backed — **[fixture: `sct_arg4_mismatch_uint8.mat`, pending
-  re-import]**.
+  fixture-backed: `sct_arg4_mismatch_uint8.mat`.
 - **`FD` rejects `uint8` and `int32` input outright**, both with `This
   method is not supported with this data type! Try converting to double
   first.`, regardless of parameters.
@@ -147,8 +146,8 @@ the reference tests this epic's Phase 3 will add):
   not 1 to *N*. `[1 128 1]` was replaced everywhere in the harness once
   this was found (`S2 = [2 120 2]` in `s09`/`s12`), so like the `arg4`
   finding above, no committed fixture demonstrated it on its own; `s12`'s
-  `probe11_dimmax_second_seed` captures it deliberately — **[fixture:
-  `sic_dimmax_double.mat`, pending re-import]**.
+  `probe11_dimmax_second_seed` captures it deliberately:
+  `sic_dimmax_double.mat`.
 - **The original binary can corrupt its own heap at MATLAB exit**, after
   every case in a script's table has already completed and saved
   (`munmap_chunk(): invalid pointer` / `double free or corruption (out)`,

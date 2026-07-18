@@ -30,6 +30,12 @@ classdef tFixtureHygiene < matlab.unittest.TestCase
     %     this test does not own their contract) -- checked only for
     %     variable-name presence against a known schema per file.
     %
+    % A separate, non-parameterized test (manifestMatchesDirectory) guards
+    % the fixture SET itself: tests/fixtures/MANIFEST.txt must list
+    % exactly the .mat files present, symmetrically -- a deletion (listed
+    % but missing) and a stray addition (present but unlisted) are two
+    % independent failures, not one aggregate count check.
+    %
     % SPDX-License-Identifier: BSD-3-Clause
     % Copyright (c) 2026, Seyed Yahya Shirazi <shirazi@ieee.org>
     % Swartz Center for Computational Neuroscience (SCCN),
@@ -102,6 +108,36 @@ classdef tFixtureHygiene < matlab.unittest.TestCase
                      'namedShapeSchemas or probeSummaryNames/checkProbeSummaryContent.'], ...
                     fixtureFile, strjoin(fieldnames(data), ',')));
             end
+        end
+
+        function manifestMatchesDirectory(tc)
+            % Symmetric guard on the fixture set itself, not any one
+            % file's content: MANIFEST.txt (sorted filenames, one per
+            % line, generated from the committed set) must list exactly
+            % the .mat files present in tests/fixtures/ -- no more, no
+            % less. Catches a fixture silently deleted (present in the
+            % manifest, missing from the directory) and a fixture added
+            % without updating the manifest (present in the directory,
+            % missing from the manifest) as two independent failures,
+            % not just one aggregate "counts differ" check.
+            here = fileparts(mfilename('fullpath'));
+            manifestPath = fullfile(here, 'fixtures', 'MANIFEST.txt');
+            tc.assertTrue(isfile(manifestPath), 'tests/fixtures/MANIFEST.txt is missing');
+
+            manifestText = fileread(manifestPath);
+            manifestNames = strtrim(strsplit(manifestText, {'\n', '\r'}));
+            manifestNames = manifestNames(~cellfun(@isempty, manifestNames));
+
+            actualNames = tFixtureHygiene.listFixtureNames();
+
+            missing = setdiff(manifestNames, actualNames);
+            stray = setdiff(actualNames, manifestNames);
+            tc.verifyEmpty(missing, sprintf( ...
+                'Listed in MANIFEST.txt but missing from tests/fixtures/: %s', ...
+                strjoin(missing, ', ')));
+            tc.verifyEmpty(stray, sprintf( ...
+                'Present in tests/fixtures/ but not listed in MANIFEST.txt: %s', ...
+                strjoin(stray, ', ')));
         end
     end
 
@@ -233,6 +269,14 @@ classdef tFixtureHygiene < matlab.unittest.TestCase
                         tc.verifyClass(p.opcode, 'char');
                         tc.verifyClass(p.errored, 'logical');
                         tc.verifyClass(p.text, 'char');
+                        % This exact file was recaptured once already after
+                        % being deleted for the errmsg-truncation bug (see
+                        % capture_case.m's char-vs-string catch-handler
+                        % fix); cheap and permanent to keep checking for
+                        % the ellipsis marker here specifically.
+                        tc.verifyFalse(contains(p.text, char(8230)), sprintf( ...
+                            '%s: probes(%d).text (%s) contains an ellipsis -- truncated message', ...
+                            name, i, p.opcode));
                     end
 
                 case 's12_closing_fbd_fbe.mat'
