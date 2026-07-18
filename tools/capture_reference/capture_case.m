@@ -38,20 +38,7 @@ if hasSeed
     fixture.seedArg = opts.seedArg;
 end
 if hasArg4
-    if isempty(opts.arg4)
-        % local_md5 (locked; not modifiable here) hits Java's
-        % MessageDigest.update(byte[]) via MATLAB's automatic overload
-        % dispatch, which fails on ANY empty array -- "A Non-scalar
-        % value was passed for a scalar argument" -- because MATLAB
-        % cannot disambiguate a 0-element array from the scalar
-        % update(byte) overload. Use the well-known, independently
-        % verified MD5-of-zero-bytes constant instead of calling
-        % local_md5 on an empty arg4 (confirmed directly:
-        % `printf '' | md5sum` -> d41d8cd98f00b204e9800998ecf8427e).
-        fixture.arg4Hash = 'd41d8cd98f00b204e9800998ecf8427e';
-    else
-        fixture.arg4Hash = local_md5(opts.arg4);
-    end
+    fixture.arg4Hash = hash_or_empty(opts.arg4);
     if isfield(opts, 'arg4Recipe') && ~isempty(opts.arg4Recipe)
         fixture.arg4Recipe = opts.arg4Recipe;
     end
@@ -119,4 +106,26 @@ else
     fprintf('  FAILED (captured above)\n');
 end
 save(outfile, 'fixture', '-v7');
+end
+
+function h = hash_or_empty(x)
+% local_md5 (locked; not modifiable here) hits Java's
+% MessageDigest.update(byte[]) via MATLAB's automatic overload dispatch,
+% which fails on ANY empty array -- "A Non-scalar value was passed for a
+% scalar argument" -- because MATLAB cannot disambiguate a 0-element
+% array from the scalar update(byte) overload. Returns the well-known,
+% independently verified MD5-of-zero-bytes constant for an empty input
+% instead of calling local_md5 on it (confirmed directly: `printf '' |
+% md5sum` -> d41d8cd98f00b204e9800998ecf8427e); calls local_md5
+% otherwise. The single point of truth for every place in this harness
+% an empty array can reach a hash call, so a future one can't diverge
+% from this one -- currently that is capture_case's own arg4Hash, when
+% opts.arg4 is explicitly an empty array (s12's probe10 does this on
+% purpose). input/output are never empty on any capture_case call in
+% this harness, so they still call local_md5 directly.
+if isempty(x)
+    h = 'd41d8cd98f00b204e9800998ecf8427e';
+else
+    h = local_md5(x);
+end
 end
