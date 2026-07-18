@@ -92,8 +92,8 @@ Read it before relying on this for science.
 
 | Platform | State |
 |---|---|
-| macOS arm64 (`maca64`) | Builds, loads, 147/147 tests pass locally against Homebrew ITK. CI confirmed 108/108 (static ITK, no-ITK-installed runner) before the Phase 3 opcodes; re-verification against the current suite is pending. |
-| Linux x86_64 (`glnxa64`) | Builds, loads. Last CI-verified at 108/108 on a runner with **no ITK installed**, before the Phase 3 opcodes; re-verification against the current 147-test suite is pending. Must be built with GCC 12 or older; see BUILDING.md. |
+| macOS arm64 (`maca64`) | Builds, loads, 156/156 tests pass locally against Homebrew ITK. CI confirmed 108/108 (static ITK, no-ITK-installed runner) before the Phase 3 opcodes; re-verification against the current suite is pending. |
+| Linux x86_64 (`glnxa64`) | Builds, loads. Last CI-verified at 108/108 on a runner with **no ITK installed**, before the Phase 3 opcodes; re-verification against the current 156-test suite is pending. Must be built with GCC 12 or older; see BUILDING.md. |
 | macOS x86_64 (`maci64`) | Legacy; built on a best-effort basis only. R2025b is MathWorks' final Intel-Mac release. |
 | Windows | Best-effort only; the ITK toolchain there is unresolved. Not attempted. |
 

@@ -222,6 +222,7 @@ or refuses to reproduce a defect.
 | 7 | **`FSN` rejects `alpha == 0`** with `mexitk:FSN:alpha`. | `alpha = 0` makes `SigmoidImageFilter`'s functor divide by zero, producing `NaN` that then hits an undefined-behaviour cast into an integer pixel type. Nonzero `alpha` is unaffected. |
 | 8 | **Out-of-range filter *results* saturate to the target pixel type's range on export, instead of an undefined-behaviour cast.** `FCA`/`FD`'s promoted (`uint8`/`int32`) paths and `FDM`'s integral-input distance output export via `itk::ClampImageFilter` rather than `itk::CastImageFilter`. Deterministically reachable: `FDM` on an all-zero `uint8` volume computes distances measured at roughly 294 to 443 across the volume, all past `uint8`'s 255 max, so the plain cast back was undefined behaviour, not merely lossy. | Refuse to reproduce undefined behaviour; the original's behaviour on these exact inputs was undefined, not reproducible even in principle, so there is nothing to match. In-range results are unaffected: clamp-then-truncate equals truncate when the value already fits, so this changes no previously-defined output. |
 | 9 | **`SOT` rejects `numberOfHistogram < 2`** with `mexitk:SOT:numberOfHistogram`, instead of running ITK's Otsu calculator. Measured directly, not assumed: 0 or 1 histogram bins crash the whole MATLAB process (a bus error / SIGSEGV inside `itk::Statistics::Histogram::GetIndex`), not a catchable `itk::ExceptionObject`. `numberOfHistogram >= 2` is unaffected. | Same severity class as deviation 1 (`SWS` overthresholding): taking down the user's MATLAB session is not behaviour worth preserving, and there is no reference capture for a crashing call to match against in the first place. |
+| 10 | **Non-finite or wildly out-of-range seed coordinates raise `mexitk:seeds` instead of casting with undefined behaviour.** `SeedPointsToIndices` (`SCT`/`SCC`/`SNC`/`SIC`) validates every coordinate as a finite `double` truncating into `[1, size(axis)]` before casting to an ITK index. `NaN`/`Inf` previously passed central validation's `s < 1.0` check unrejected (an IEEE unordered comparison, false for both) and then hit a raw cast; a huge finite coordinate overflowed `itk::IndexValueType` on that same cast. Both are undefined behaviour in C++, and the overflow case was platform-dependent in a way that stayed hidden on one architecture: ARM64's saturating convert masked it (the garbage result still failed the old bounds check), but x86 wrapped to `INT64_MIN`, where the following `-1` base shift was a second, independent signed-overflow UB. In-range values, including fractional truncation (`70.9` behaves as `70`), are unaffected. | Same rationale as deviation 5: the original's behaviour on these exact inputs is unknown and unreproducible, and reproducing undefined behaviour on purpose is not a defect worth keeping. One identifier (`mexitk:seeds`) covers both the non-finite and out-of-range cases deliberately, rather than splitting non-finite seeds off under `mexitk:paramRange`. |
 
 ## Behaviour matched deliberately, including the odd bits
 
@@ -357,8 +358,26 @@ already uses for the volume itself (MATLAB's column-major layout lines up
 with ITK's fastest-varying-first buffer order with no transpose needed).
 This is an interpretation, not a confirmed fact: it is consistent with the
 import convention, but MATITK source was not available to verify it
-directly. Out-of-bounds seed coordinates raise `mexitk:seeds`. The shared
-helper is `SeedPointsToIndices` in `src/mexitk_common.h`.
+directly. The shared helper is `SeedPointsToIndices` in
+`src/mexitk_common.h`.
+
+A fractional coordinate truncates toward zero (`70.9` behaves as `70`),
+matching `CastParam`'s truncation philosophy used everywhere else in this
+codebase; in-range truncation behaviour is unaffected by anything below.
+Out-of-range coordinates, and non-finite coordinates (`NaN`, `Inf`), both
+raise `mexitk:seeds` before any value is cast to an index. The two cases
+share one identifier deliberately, rather than splitting non-finite seeds
+off under a different one: `SeedPointsToIndices` validates every
+coordinate in the `double` domain first (finite, and truncates into
+`[1, size(axis)]`) and only casts a value already proven to fit. This
+replaced an earlier version that only rejected `s < 1.0` in central
+validation (`mexFunction`) and then cast unconditionally inside the
+helper, which was undefined behaviour for `NaN`/`Inf` (both compare false
+against `s < 1.0`, an IEEE unordered comparison, so they passed that check)
+and for huge finite coordinates (overflowing `itk::IndexValueType` on the
+raw cast) — refusing to reproduce that undefined behaviour rather than
+letting a malformed seed silently corrupt an index is the same policy
+already applied to parameter casts (deviation 5).
 
 ### SCT ReplaceValue is inferred
 

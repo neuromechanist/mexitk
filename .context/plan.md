@@ -158,6 +158,33 @@ Status as of 2026-07-16. Version 0.1.0.
   to isolate; a background seed was used instead), and the SOT/FOMT
   cross-check. 147/147 tests pass on macOS arm64 locally against Homebrew
   ITK, no regression in any existing suite.
+- **Phase 3 hardening**: `SeedPointsToIndices` had the same class of UB as
+  the pre-`CastParam` narrowing casts, found by two reviewers converging
+  independently, one with a compiled repro. Central seed validation
+  (`s < 1.0` in `mexFunction`) let `NaN`/`+Inf` through (IEEE unordered
+  comparisons are false against `<`), which then hit a raw
+  `static_cast<itk::IndexValueType>`; a huge finite coordinate overflowed
+  that same cast. Both are UB, and the overflow case was platform-dependent
+  in a way that had stayed invisible on one architecture: ARM64's
+  saturating convert masked it (the garbage index still failed the old
+  bounds check), but x86 wrapped to `INT64_MIN`, where the following `-1`
+  base shift was a second, independent signed-overflow UB. Fixed by moving
+  all validation into the `double` domain, before any cast: a coordinate is
+  truncated, then checked finite and in `[1, size(axis)]`, and only then
+  cast — one identifier (`mexitk:seeds`) for every seed problem, not split
+  by finiteness. New deviation row 10 in `docs/COMPATIBILITY.md`.
+  Companion fix: `SOT`'s bins guard changed from `(x < 2.0)` to
+  `!(x >= 2.0)` so `NaN` bins are caught under `mexitk:SOT:numberOfHistogram`
+  instead of falling through to the generic `mexitk:paramRange`.
+  `tests/tPhase3RegionGrowingSmoke.m` grew from 39 to 44 test methods:
+  NaN/Inf/huge-coordinate and NaN-bins error paths for the two fixes above,
+  a seed pinned at the exact dim-3 maximum (z=27) for SCT/SNC/SCC (an
+  off-by-one boundary check, not just an interior seed), fractional-seed
+  truncation, and an SCC multiplier/iterations swap-order check (measured:
+  correct wiring nnz=3, the swapped-equivalent nnz=150674). Every number
+  independently re-verified against a real build before commit, matching
+  the review pass's own measurements. 156/156 tests pass on macOS arm64
+  locally against Homebrew ITK, no regression in any existing suite.
 
 ## Open decisions for the owner
 
