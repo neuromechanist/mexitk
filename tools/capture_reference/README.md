@@ -216,7 +216,8 @@ byte-for-byte identical; only path plumbing should ever change here.
 locked: mexitk's committed fixtures (`tests/fixtures/`) were captured by
 their exact current text, so nothing in them may change, ever, ideally not
 even a comment. `s07`–`s13` and the shared helpers (`capture_case.m`,
-`local_summarize.m`, `local_isdryrun.m`) are not under that lock yet —
-no fixture from them is committed as of this phase, fixture selection is
-a later phase's job — but once a fixture they produced is committed,
-this same rule starts applying to whatever produced it.
+`capture_classes.m`, `local_summarize.m`, `local_isdryrun.m`) are not
+under that lock yet — no fixture from them is committed as of this
+phase, fixture selection is a later phase's job — but once a fixture
+they produced is committed, this same rule starts applying to whatever
+produced it.

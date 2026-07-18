@@ -63,15 +63,6 @@ capture_classes(cfg, 'FOMT', '1_128', [1 128], classNames, classVals, [1 3]);
 
 diary off;
 
-function capture_classes(cfg, opcode, tagPrefix, params, classNames, classVals, useIdx)
-% Run capture_case for opcode/params across a subset of {classNames,
-% classVals} selected by useIdx, tagging each <tagPrefix>_<className>.
-for k = useIdx
-    tag = sprintf('%s_%s', tagPrefix, classNames{k});
-    capture_case(cfg, opcode, tag, params, classVals{k});
-end
-end
-
 function capture_classes_seeded(cfg, opcode, tagPrefix, params, classNames, classVals, useIdx, seedArg)
 % Same as capture_classes, but every call carries the same seedArg.
 for k = useIdx

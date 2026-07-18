@@ -22,12 +22,3 @@ capture_classes(cfg, 'FCA', '1_0p0625_3', [1 0.0625 3], classNames, classVals, 1
 capture_classes(cfg, 'SWS', '0p05_0p01', [0.05 0.01], classNames, classVals, 1:2);
 
 diary off;
-
-function capture_classes(cfg, opcode, tagPrefix, params, classNames, classVals, useIdx)
-% Run capture_case for opcode/params across a subset of {classNames,
-% classVals} selected by useIdx, tagging each <tagPrefix>_<className>.
-for k = useIdx
-    tag = sprintf('%s_%s', tagPrefix, classNames{k});
-    capture_case(cfg, opcode, tag, params, classVals{k});
-end
-end

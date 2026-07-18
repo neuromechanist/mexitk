@@ -86,15 +86,6 @@ capture_case(cfg, 'FVMI', '1_2_0p5_double', [1 2 0.5], Vd);
 
 diary off;
 
-function capture_classes(cfg, opcode, tagPrefix, params, classNames, classVals, useIdx)
-% Run capture_case for opcode/params across a subset of {classNames,
-% classVals} selected by useIdx, tagging each <tagPrefix>_<className>.
-for k = useIdx
-    tag = sprintf('%s_%s', tagPrefix, classNames{k});
-    capture_case(cfg, opcode, tag, params, classVals{k});
-end
-end
-
 function capture_classes_recipe(cfg, opcode, tagPrefix, params, classNames, classVals, classRecipes, useIdx)
 % Same as capture_classes, but each class's input carries its own
 % inputRecipe (derived-input provenance; see README).
