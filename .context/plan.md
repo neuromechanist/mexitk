@@ -307,6 +307,29 @@ Status as of 2026-07-18. Version 0.3.0.
   rule. `tests/tPhase4GradientsSmoke.m` grew from 38 to 40 test methods.
   208/208 tests pass on macOS arm64 locally against Homebrew ITK, no
   regression in any existing suite.
+- **Epic 2 Phase 1: reference-capture harness extension and first
+  campaign.** `tools/capture_reference/` extended with `s07`-`s13`
+  (capturing the 30 opcodes implemented since epic 1, plus 8 cross-check
+  probes and 10 unimplemented-opcode probes) and hardened across three
+  fix batches: a class-matched-empty-`arg4` fix and completion sentinels
+  for the original's exit-time heap corruption (both driven by measured
+  campaign failures, not guessed), an isolated `s10b` for `FAAB`'s
+  `uint8`-specific process crash, and a `probe9` resolving the seed
+  0-based-vs-1-based indexing question the first run raised but did not
+  settle (1-based, matrix-order, exclusive upper bound at each
+  dimension's own size). The first real campaign against
+  `matitk.mexa64` (3 runs, per-script crash isolation, resumed after
+  each crash) captured 254 fixtures -- 230 successful calls, 18 recorded
+  original-binary rejections, 6 `s12` cross-check summaries -- all
+  verified (loads cleanly, no dry-run markers, output-hash
+  self-consistency) before import into `tests/fixtures/` (33 -> 287).
+  `tests/tFixtureHygiene.m` now asserts that self-consistency for every
+  committed fixture on every test run (208 -> 495 tests).
+  `docs/COMPATIBILITY.md` records the campaign's headline original-binary
+  findings as measured facts, deliberately not yet opcode statuses or
+  deviation-table rows -- turning them into `mexitk` compatibility
+  claims is epic 2 Phase 3's job, once the reference tests exist to
+  measure `mexitk` against them.
 
 ## Open decisions for the owner
 

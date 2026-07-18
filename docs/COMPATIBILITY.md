@@ -69,6 +69,83 @@ The fixtures are committed rather than generated
 because regenerating them requires the 2006 binary,
 which is Intel-Linux-only and has no public source.
 
+### Second capture campaign (2026-07-18)
+
+Epic 2 Phase 1 extended the harness to the 30 opcodes `mexitk` has since
+implemented (`s07`-`s11`), a set of cross-check probes (`s12`), and the 10
+still-unimplemented opcodes (`s13`), then ran it against the same binary
+used for the first campaign, re-verified: `matitk.mexa64`,
+`c7d1432080e9edc6795a38717f5ab628`. Captured on the same machine class as
+the first campaign — MATLAB R2025b Update 2 on an Intel-Linux machine, no
+hostname or path identifying it beyond that. The campaign took 3 runs:
+several scripts crash the original's process (see below), so each
+`s07`-`s13` script runs in its own `matlab -batch` invocation for crash
+isolation, and a script left incomplete by one run was resumed
+(`MEXITK_REFCAP_RESUME=1`) in the next rather than re-captured from
+scratch. `tools/capture_reference/README.md` documents the full mechanism
+(completion sentinels, resume mode, dry-run validation).
+
+254 fixtures were captured: 230 successful calls, 18 recorded rejections
+by the original (a rejection *is* the reference for that input, not a
+capture failure), and 6 cross-check summary files from `s12`. All 254
+passed import verification (loads cleanly, no dry-run markers, every
+`success=true` fixture has its full output and hash, every `success=false`
+one has a non-empty error message) before being committed alongside the
+33 fixtures from the first campaign; `tests/tFixtureHygiene.m` now asserts
+this holds — including output-hash self-consistency, recomputed at test
+time — for all 287 committed fixtures on every test run.
+
+Headline facts about the original's own behaviour, measured directly, not
+assumed (none of these are `mexitk` findings; they describe only what the
+2006 binary itself does — no opcode's validated/bounded-deviation status
+changes here, and no deviation-table row is added, because that requires
+the reference tests this epic's Phase 3 will add):
+
+- **Seeded calls type-check an absent second image against the input
+  class.** `SCT`/`SCC`/`SNC`/`SIC` calls without a real `arg4` failed on
+  `single`/`uint8`/`int32` input with `Both images (inputArrays) must be
+  of the same data type.` — the original checks the default (empty)
+  `arg4` against the primary input's class even when no second image is
+  conceptually being passed. `double` input was unaffected (an empty
+  `double` `[]` happens to match).
+- **`FD` rejects `uint8` and `int32` input outright**, both with `This
+  method is not supported with this data type! Try converting to double
+  first.`, regardless of parameters.
+- **`FDG`/`FGA` on `uint8` warn then throw; on `int32` they only warn.**
+  Both emit `itkGaussianOperator`'s kernel-width-truncation warning on
+  every non-`double`/`single` class at `gaussianVariance=4`, but `uint8`
+  additionally throws `Unexpected Standard exception` afterward, while
+  `int32` completes (and, on `int32`, `FGA` and `FDG` produce
+  bit-identical output — consistent with `mexitk`'s FGA=FDG choice).
+- **`FAAB` crashes the original's process on `uint8` input specifically —
+  `int32` completes.** A floating point exception, not a catchable
+  `itk::ExceptionObject`, on both raw and already-binarized `uint8`
+  input; `int32` (raw and binarized) captured successfully in the same
+  campaign, isolating the crash to the pixel type rather than the pixel
+  value distribution.
+- **Seed coordinates are 1-based, matrix-order (no transpose), with an
+  exclusive upper bound at each dimension's own size.** A literal
+  0-based seed `[0 0 0]` is rejected with an indexing-specific error
+  (`Please note that array in matlab...`); seeds one step off a
+  known-good point in either direction behave normally. Combined with
+  the earlier, separately measured rejection of seeds sitting exactly at
+  a dimension's own extent (`[70 50 27]` on the 27-deep volume; `SIC`'s
+  original second seed `[1 128 1]` on the 128-wide volume) — both
+  rejected with `Location of seed outside volume` — the valid range for
+  a dimension of size *N* is 1 to *N*-1, not 1 to *N*.
+- **The original binary can corrupt its own heap at MATLAB exit**, after
+  every case in a script's table has already completed and saved
+  (`munmap_chunk(): invalid pointer` / `double free or corruption (out)`,
+  observed after `s09` and `s13` respectively finished their last case).
+  This is why completion sentinels exist: a nonzero exit code alone does
+  not mean a script lost data.
+
+These are recorded here as what the campaign found, not as `mexitk`
+compatibility claims — turning any of them into a promotion, a new
+deviation-table row, or a documented guard is this epic's Phase 3 (the
+reference tests), once mexitk's own behavior at these points is measured
+against them.
+
 ## Why exact agreement is the bar
 
 The reason to reimplement MATITK rather than switch to MATLAB's Image Processing Toolbox
