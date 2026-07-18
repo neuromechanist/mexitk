@@ -29,18 +29,21 @@ find_package(Matlab REQUIRED COMPONENTS MX_LIBRARY MEX_COMPILER)
 # Every module added here must be justified by an opcode that needs it.
 set(MEXITK_ITK_COMPONENTS
   ITKCommon                # itk::Image, ImportImageFilter, CastImageFilter
-  ITKAnisotropicSmoothing  # FCA: CurvatureAnisotropicDiffusionImageFilter
+  ITKAnisotropicSmoothing  # FCA, FGAD: (Curvature|Gradient)AnisotropicDiffusionImageFilter
   ITKThresholding          # FOMT, SOT: OtsuMultiple/Otsu + BinaryThreshold
   ITKWatersheds            # SWS: WatershedImageFilter
   ITKRegionGrowing         # SCT, SCC, SIC, SNC: Connected/Confidence/Isolated/NeighborhoodConnected
   ITKSmoothing             # FMEDIAN, FMEAN, FDG, FGA, FBB
   ITKImageIntensity        # FSN: SigmoidImageFilter
   ITKImageGrid             # FF: FlipImageFilter
-  ITKImageFeature          # FD: DerivativeImageFilter
+  ITKImageFeature          # FD, FBL, FLS, FVMI: Derivative/Bilateral/LaplacianRecursiveGaussian/Hessian+Vesselness
   ITKBinaryMathematicalMorphology  # FBD, FBE (BinaryDilate/Erode; BinaryBallStructuringElement
                                    # arrives transitively via ITKMathematicalMorphology)
   ITKDistanceMap           # FDM, FDMV: DanielssonDistanceMapImageFilter
   ITKLabelVoting           # FVBIH: VotingBinaryIterativeHoleFillingImageFilter
+  ITKImageGradient         # FGM, FGMRG: GradientMagnitude(RecursiveGaussian)ImageFilter
+  ITKCurvatureFlow         # FCF: CurvatureFlowImageFilter
+  ITKAntiAlias             # FAAB: AntiAliasBinaryImageFilter (pulls ITKLevelSets transitively)
 )
 find_package(ITK 5.4 REQUIRED COMPONENTS ${MEXITK_ITK_COMPONENTS})
 
@@ -60,20 +63,28 @@ find_package(ITK 5.4 REQUIRED COMPONENTS ${MEXITK_ITK_COMPONENTS})
 set(MEXITK_SOURCES
   src/mexitk.cpp
   src/opcode.cpp
+  src/opcodes/faab.cpp
   src/opcodes/fbb.cpp
   src/opcodes/fbd.cpp
   src/opcodes/fbe.cpp
+  src/opcodes/fbl.cpp
   src/opcodes/fbt.cpp
   src/opcodes/fca.cpp
+  src/opcodes/fcf.cpp
   src/opcodes/fd.cpp
   src/opcodes/fdg.cpp        # FDG and FGA
   src/opcodes/fdm.cpp        # FDM and FDMV
   src/opcodes/ff.cpp
+  src/opcodes/fgad.cpp
+  src/opcodes/fgm.cpp
+  src/opcodes/fgmrg.cpp
+  src/opcodes/fls.cpp
   src/opcodes/fmean.cpp
   src/opcodes/fmedian.cpp
   src/opcodes/fomt.cpp
   src/opcodes/fsn.cpp
   src/opcodes/fvbih.cpp
+  src/opcodes/fvmi.cpp
   src/opcodes/scc.cpp
   src/opcodes/sct.cpp
   src/opcodes/sic.cpp

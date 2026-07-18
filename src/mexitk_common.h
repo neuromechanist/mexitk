@@ -236,6 +236,66 @@ mxArray* ExportVolume(const Image3<PixelT>* img) {
   return out;
 }
 
+// Exports a floating-point (RealT) itk::Image into a freshly allocated
+// MATLAB array of an integral PixelT, saturating out-of-range values and
+// mapping non-finite ones to zero instead of casting them with undefined
+// behaviour. This is the export half of every promote-and-clamp opcode
+// (see FcaRealType's comment in fca.cpp): it replaces the earlier
+// itk::ClampImageFilter-based cast-back, whose own Functor::Clamp falls
+// through to a plain static_cast for NaN (itkClampImageFilter.h:96-106:
+// `dA < m_LowerBound` and `dA > m_UpperBound` are both false for NaN, since
+// every ordered comparison against NaN is false, so neither bound triggers
+// and the raw cast runs) -- undefined behaviour, reachable in practice via
+// an unstable diffusion timeStep or a 0/0 in FVMI's vesselness measure.
+//
+// The bounds comparison below mirrors ITK's own Functor::Clamp exactly
+// (promote to double, compare against the target type's bounds promoted to
+// double, cast the ORIGINAL RealT value on the in-range path), with only
+// one addition: an explicit isnan check ahead of it. This keeps every
+// in-range result bit-identical to the previous ClampImageFilter-based
+// path; only the previously-undefined non-finite case changes, and it
+// changes from UB to a defined, documented 0. +Inf/-Inf are not "non-finite"
+// in the sense that matters here: they still compare ordered against the
+// bounds (dA < lowerBound is true for -Inf, dA > upperBound is true for
+// +Inf), so they saturate to lowest()/max() through the same bounds checks
+// as any other out-of-range finite value, and only actual NaN takes the
+// explicit zero path.
+template <typename PixelT, typename RealT>
+mxArray* ClampExport(const Image3<RealT>* img) {
+  static_assert(std::is_integral<PixelT>::value,
+               "ClampExport is for the integral cast-back path only; native "
+               "float/double export uses ExportVolume directly, where NaN "
+               "staying NaN is defined and faithful.");
+
+  const auto size = img->GetLargestPossibleRegion().GetSize();
+  const mwSize dims[kDimension] = {static_cast<mwSize>(size[0]),
+                                   static_cast<mwSize>(size[1]),
+                                   static_cast<mwSize>(size[2])};
+  mxArray* out =
+      mxCreateNumericArray(kDimension, dims, PixelTraits<PixelT>::kClassId, mxREAL);
+  const itk::SizeValueType numPixels =
+      static_cast<itk::SizeValueType>(size[0]) * size[1] * size[2];
+
+  const RealT* src = img->GetBufferPointer();
+  PixelT* dst = static_cast<PixelT*>(mxGetData(out));
+  const double lowerBound = static_cast<double>(std::numeric_limits<PixelT>::lowest());
+  const double upperBound = static_cast<double>(std::numeric_limits<PixelT>::max());
+  for (itk::SizeValueType i = 0; i < numPixels; ++i) {
+    const RealT v = src[i];
+    const double dv = static_cast<double>(v);
+    if (std::isnan(dv)) {
+      dst[i] = PixelT{};
+    } else if (dv < lowerBound) {
+      dst[i] = std::numeric_limits<PixelT>::lowest();
+    } else if (dv > upperBound) {
+      dst[i] = std::numeric_limits<PixelT>::max();
+    } else {
+      dst[i] = static_cast<PixelT>(v);
+    }
+  }
+  return out;
+}
+
 // Converts the flat, 1-based seed vector ([d1 d2 d3 d1 d2 d3 ...], already
 // validated centrally in mexFunction to be a multiple of kDimension in
 // length) into itk::Index<kDimension> values.

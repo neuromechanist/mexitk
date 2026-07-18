@@ -220,9 +220,11 @@ or refuses to reproduce a defect.
 | 5 | **Out-of-range parameter values raise `mexitk:paramRange` instead of casting with undefined behaviour.** A value like `FBT`'s `upperThreshold = 300` on a `uint8` volume, or a negative radius/repetition/order count, would be an out-of-range or negative-to-unsigned cast, which is undefined behaviour in C++. The same guard also covers a finite value beyond a narrower floating type's range, e.g. `upperThreshold = 1e39` on a `single()` volume (`float`'s max is ~3.4e38); `Inf`/`NaN` are exactly representable in `float` and still pass through, matching the original. In-range values, including the original's own truncating behaviour (e.g. `255.9` &rarr; `255` on `uint8`), are unaffected. | The original's own behaviour on these inputs is unknown and unreproducible (no reference capture covers them), and reproducing undefined behaviour on purpose is not a defect worth keeping. Refusing it is a strict subset of accepted inputs, not a change to any in-range result. |
 | 6 | **`FDG`/`FGA` reject `gaussianVariance <= 0`** with `mexitk:FDG:gaussianVariance` / `mexitk:FGA:gaussianVariance`. | A non-positive variance silently produces a degenerate, non-Gaussian kernel rather than an error. In-range (positive) variance is unaffected. |
 | 7 | **`FSN` rejects `alpha == 0`** with `mexitk:FSN:alpha`. | `alpha = 0` makes `SigmoidImageFilter`'s functor divide by zero, producing `NaN` that then hits an undefined-behaviour cast into an integer pixel type. Nonzero `alpha` is unaffected. |
-| 8 | **Out-of-range filter *results* saturate to the target pixel type's range on export, instead of an undefined-behaviour cast.** `FCA`/`FD`'s promoted (`uint8`/`int32`) paths and `FDM`'s integral-input distance output export via `itk::ClampImageFilter` rather than `itk::CastImageFilter`. Deterministically reachable: `FDM` on an all-zero `uint8` volume computes distances measured at roughly 294 to 443 across the volume, all past `uint8`'s 255 max, so the plain cast back was undefined behaviour, not merely lossy. | Refuse to reproduce undefined behaviour; the original's behaviour on these exact inputs was undefined, not reproducible even in principle, so there is nothing to match. In-range results are unaffected: clamp-then-truncate equals truncate when the value already fits, so this changes no previously-defined output. |
+| 8 | **Out-of-range or non-finite filter *results* export as a defined value on integral pixel types, instead of an undefined-behaviour cast.** Every promoted opcode (`FCA`, `FD`, `FDM` from Phase 1-3; `FAAB`, `FCF`, `FGAD`, `FGMRG`, `FLS`, `FVMI` from Phase 4) exports its `uint8`/`int32` result through `ClampExport` (`src/mexitk_common.h`), which saturates out-of-range finite values into `[lowest, max]` of the target type and maps non-finite values (`NaN`) to `0`. `FGM`'s `int32` path additionally exports through the same helper for the same reason, though `FGM` itself is not a promoted opcode (see its own note below). `ClampExport` replaced an earlier `itk::ClampImageFilter`-based cast-back: that filter's own `Functor::Clamp` falls through to a plain `static_cast` for `NaN`, because `NaN` compares false against both of its bounds checks (`itkClampImageFilter.h:96-106`) — undefined behaviour, reachable in practice via an unstable diffusion `timeStep` or a `0/0` in `FVMI`'s vesselness measure. Deterministically reachable even for the out-of-range (non-`NaN`) case: `FDM` on an all-zero `uint8` volume computes distances measured at roughly 294 to 443 across the volume, all past `uint8`'s 255 max, so the plain cast back was undefined behaviour, not merely lossy. | Refuse to reproduce undefined behaviour; the original's behaviour on these exact inputs was undefined, not reproducible even in principle, so there is nothing to match. In-range results are unaffected: `ClampExport`'s bounds comparison and in-range cast mirror ITK's own `Functor::Clamp` exactly, so clamp-then-truncate equals truncate when the value already fits — this changes no previously-defined output, verified by the full fixture suite staying green across the swap and by an explicit bit-compare on `FGM`'s `uint8`/`int32` paths (0 mismatches on the reference volume). |
 | 9 | **`SOT` rejects `numberOfHistogram < 2`** with `mexitk:SOT:numberOfHistogram`, instead of running ITK's Otsu calculator. Measured directly, not assumed: 0 or 1 histogram bins crash the whole MATLAB process (a bus error / SIGSEGV inside `itk::Statistics::Histogram::GetIndex`), not a catchable `itk::ExceptionObject`. `numberOfHistogram >= 2` is unaffected. | Same severity class as deviation 1 (`SWS` overthresholding): taking down the user's MATLAB session is not behaviour worth preserving, and there is no reference capture for a crashing call to match against in the first place. |
 | 10 | **Non-finite or wildly out-of-range seed coordinates raise `mexitk:seeds` instead of casting with undefined behaviour.** `SeedPointsToIndices` (`SCT`/`SCC`/`SNC`/`SIC`) validates every coordinate as a finite `double` truncating into `[1, size(axis)]` before casting to an ITK index. `NaN`/`Inf` previously passed central validation's `s < 1.0` check unrejected (an IEEE unordered comparison, false for both) and then hit a raw cast; a huge finite coordinate overflowed `itk::IndexValueType` on that same cast. Both are undefined behaviour in C++, and the overflow case was platform-dependent in a way that stayed hidden on one architecture: ARM64's saturating convert masked it (the garbage result still failed the old bounds check), but x86 wrapped to `INT64_MIN`, where the following `-1` base shift was a second, independent signed-overflow UB. In-range values, including fractional truncation (`70.9` behaves as `70`), are unaffected. | Same rationale as deviation 5: the original's behaviour on these exact inputs is unknown and unreproducible, and reproducing undefined behaviour on purpose is not a defect worth keeping. One identifier (`mexitk:seeds`) covers both the non-finite and out-of-range cases deliberately, rather than splitting non-finite seeds off under `mexitk:paramRange`. |
+| 11 | **`FBL` rejects `domainSigma <= 0` and `rangeSigma <= 0`** with `mexitk:FBL:domainSigma` / `mexitk:FBL:rangeSigma`, instead of running `BilateralImageFilter`. Traced directly in ITK's headers, and `domainSigma`'s non-positive case fails through two distinct mechanisms depending on sign: a negative `domainSigma` reaches a raw `(SizeValueType)std::ceil(...)` cast of a negative `double` into an unsigned type in `GenerateInputRequestedRegion` (`itkBilateralImageFilter.hxx:79,145`, undefined behaviour); `domainSigma == 0` instead reaches `GaussianSpatialFunction::Evaluate`, which divides by `2 * m_Sigma[i] * m_Sigma[i]` while building the kernel (`itkGaussianSpatialFunction.hxx:44-55`) — a zero denominator, producing `NaN` that silently propagates through the filter's weighted-average normalization with **no exception**: confirmed live, `mexitk('FBL', [0 5], V)` returns all-`NaN` on `double` and uniformly zero on `uint8`. Separately, a non-positive `rangeSigma` collapses the filter's per-voxel accumulation threshold so nothing ever accumulates, making `val /= normFactor` compute `0.0/0.0` (`NaN`), which is then written by a raw `static_cast` straight into the native (non-promoted) integer output buffer *inside* `BilateralImageFilter`'s own `DynamicThreadedGenerateData` — before `mexitk`'s export step runs, so `ClampExport` cannot intervene the way it can for the promoted opcodes. In-range sigma is unaffected. | Same family as deviations 6/7 (`FDG`/`FGA`/`FSN`'s semantic guards): every failure here is inside ITK's own computation (undefined behaviour, or a silent `NaN` written natively before export), not at a narrowing-cast boundary `ClampExport` could catch; refusing the input is the only option that avoids undefined behaviour or a wrong-looking-defined result. |
+| 12 | **`FCA`, `FCF` and `FGAD` reject a negative `timeStep`** with `mexitk:FCA:timeStep` / `mexitk:FCF:timeStep` / `mexitk:FGAD:timeStep`. A negative `timeStep` runs the diffusion/curvature-flow solver backward in time, which is ill-posed; the original's behaviour on this input is unknown and unreproducible. `timeStep == 0` stays accepted as a defined no-op, and the existing large-`timeStep` case (which merely triggers ITK's own `itkWarningMacro` and proceeds, per the `timeStep` comment in `fca.cpp`) is unchanged — still loud, still proceeds, now with a defined `ClampExport`-based result on integral output instead of an undefined one. | Same rationale as deviation 5: refuse an input whose original behaviour cannot be reproduced or verified, while leaving every previously-defined value (including `timeStep == 0` and large-but-positive `timeStep`) unaffected. |
 
 ## Behaviour matched deliberately, including the odd bits
 
@@ -241,14 +243,15 @@ or refuses to reproduce a defect.
 
 ## Coverage
 
-`mexitk` currently implements **22 of the original's 40 opcodes**:
-FCA, FOMT, SWS, the 14 smoke-tested filters FBB, FBD, FBE, FBT, FD, FDG,
-FDM, FDMV, FF, FGA, FMEAN, FMEDIAN, FSN and FVBIH, and the 5 smoke-tested
-segmentation opcodes SCC, SCT, SIC, SNC and SOT.
+`mexitk` currently implements **30 of the original's 40 opcodes**:
+FCA, FOMT, SWS, the 22 smoke-tested filters FAAB, FBB, FBD, FBE, FBL, FBT,
+FCF, FD, FDG, FDM, FDMV, FF, FGA, FGAD, FGM, FGMRG, FLS, FMEAN, FMEDIAN,
+FSN, FVBIH and FVMI, and the 5 smoke-tested segmentation opcodes SCC, SCT,
+SIC, SNC and SOT.
 FCA, FOMT and SWS are the three NFT depends on, and the only three with
-reference data; the other 19 have no captured reference (see "Smoke-tested
+reference data; the other 27 have no captured reference (see "Smoke-tested
 opcodes" below).
-The remaining 18 are catalogued in `docs/matitk_opcode_registry.txt`
+The remaining 10 are catalogued in `docs/matitk_opcode_registry.txt`
 (the original binary's own parameter dump)
 and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`,
 but they are **not implemented**.
@@ -256,30 +259,38 @@ See the README for the current status of each.
 
 ## Smoke-tested opcodes (no reference)
 
-FBB, FBD, FBE, FBT, FD, FDG, FDM, FDMV, FF, FGA, FMEAN, FMEDIAN, FSN,
-FVBIH, SCC, SCT, SIC, SNC and SOT run and return plausible output, but no
-reference capture exists for them: the only captured reference is the 2006
-MATITK binary's FCA/FOMT/SWS output (see "The reference" above), so there
-is nothing to measure these 19 against. There are no measurement tables for
-them, unlike FCA and SWS above, because there is no reference to measure
-against.
+FAAB, FBB, FBD, FBE, FBL, FBT, FCF, FD, FDG, FDM, FDMV, FF, FGA, FGAD, FGM,
+FGMRG, FLS, FMEAN, FMEDIAN, FSN, FVBIH, FVMI, SCC, SCT, SIC, SNC and SOT
+run and return plausible output, but no reference capture exists for them:
+the only captured reference is the 2006 MATITK binary's FCA/FOMT/SWS output
+(see "The reference" above), so there is nothing to measure these 27
+against. There are no measurement tables for them, unlike FCA and SWS
+above, because there is no reference to measure against.
 
 | Opcode | ITK class |
 |---|---|
+| FAAB | `AntiAliasBinaryImageFilter` |
 | FBB | `BinomialBlurImageFilter` |
 | FBD | `BinaryDilateImageFilter` |
 | FBE | `BinaryErodeImageFilter` |
+| FBL | `BilateralImageFilter` |
 | FBT | `BinaryThresholdImageFilter` |
+| FCF | `CurvatureFlowImageFilter` |
 | FD | `DerivativeImageFilter` |
 | FDG | `DiscreteGaussianImageFilter` |
 | FDM | `DanielssonDistanceMapImageFilter` (distance output) |
 | FDMV | `DanielssonDistanceMapImageFilter` (Voronoi output; see below) |
 | FF | `FlipImageFilter` |
 | FGA | `DiscreteGaussianImageFilter` (see below) |
+| FGAD | `GradientAnisotropicDiffusionImageFilter` |
+| FGM | `GradientMagnitudeImageFilter` (see "FGM vs FGMRG" below) |
+| FGMRG | `GradientMagnitudeRecursiveGaussianImageFilter` (see "FGM vs FGMRG" below) |
+| FLS | `LaplacianRecursiveGaussianImageFilter` |
 | FMEAN | `MeanImageFilter` |
 | FMEDIAN | `MedianImageFilter` |
 | FSN | `SigmoidImageFilter` |
 | FVBIH | `VotingBinaryIterativeHoleFillingImageFilter` |
+| FVMI | `HessianRecursiveGaussianImageFilter` + `Hessian3DToVesselnessMeasureImageFilter` |
 | SCC | `ConfidenceConnectedImageFilter` |
 | SCT | `ConnectedThresholdImageFilter` |
 | SIC | `IsolatedConnectedImageFilter` |
@@ -329,7 +340,7 @@ geometry yields distances ranging roughly 294 to 443 across the volume,
 every one of them past `uint8`'s 255 max; the saturated output is uniformly
 255 only because the whole field exceeds the clamp ceiling), and casting an out-of-range value into an integral
 type is undefined behaviour in C++, not merely lossy. `mexitk` saturates via
-`itk::ClampImageFilter` before the narrowing export; see deliberate
+`ClampExport` before the narrowing export; see deliberate
 deviation 8 below. In-range distances are unaffected: clamp-then-truncate
 equals truncate when the value already fits, matching the original's
 same-pixel-type codegen for in-range results.
@@ -451,15 +462,112 @@ threshold values one bin edge apart. `tests/tPhase3RegionGrowingSmoke.m`
 asserts the measured bound (`agree > 0.997`), not equality, per project
 policy: the number is measured, not invented or tuned to pass.
 
-**One pixel-type deviation: FD promotes `uint8` to `float`.** ITK's
-`DerivativeImageFilter` requires a signed output pixel type
-(`Concept::Signed<OutputPixelType>`), which `uint8` fails and
-`int32`/`float`/`double` satisfy. So `FD` promotes `uint8` input to `float`
-for the derivative and casts back on the way out, mirroring FCA's
-promote-and-cast-back pattern but keyed on signedness rather than
-floating-pointness. The other 8 opcodes in this table run at the native input
-pixel type for all four supported classes (`double`, `single`, `uint8`,
-`int32`); no promotion.
+**Pixel-type promotion, opcode by opcode.** Most opcodes in this table run
+natively at all four supported classes (`double`, `single`, `uint8`,
+`int32`); no promotion. Two groups deviate:
+
+- **Signedness-promoted (one opcode): `FD`.** ITK's `DerivativeImageFilter`
+  requires a signed output pixel type (`Concept::Signed<OutputPixelType>`),
+  which `uint8` fails and `int32`/`float`/`double` satisfy. So `FD` promotes
+  `uint8` input to `float` for the derivative and casts back on the way
+  out. `FD` is the only opcode in this project where the float requirement
+  is *concept-enforced* (a compile-time check); everywhere else it is
+  documented-only or the class's own internals are hardwired to a float
+  type regardless of what compiles.
+- **Float-promoted with clamp-back export (seven opcodes): `FCA`, `FGAD`,
+  `FCF`, `FGMRG`, `FLS`, `FAAB`, `FVMI`.** Integral (`uint8`/`int32`) input
+  promotes to `float`; the result exports back through `ClampExport`
+  (deviation 8), which saturates rather than performing the undefined-behaviour
+  narrowing cast a plain `itk::CastImageFilter` would. None of these seven
+  has a concept check that forces a floating-point pixel type: `FCA`/`FGAD`
+  share `AnisotropicDiffusionImageFilter`'s documented-only requirement
+  ("these filters expect images of real-valued types"); `FCF`/`FAAB` are
+  documented-only in the same way (`CurvatureFlowImageFilter`'s "TOutputImage's
+  pixel type must be a real number type"; `AntiAliasBinaryImageFilter`'s
+  "should be a real valued scalar type"); `FGMRG`/`FLS`/`FVMI`'s classes have
+  no float-related concept check at all, but hardwire
+  `InternalRealType = float` internally and end their pipelines in a raw
+  narrowing cast that `mexitk` replaces with the same clamp policy.
+  `double`/`single` input runs natively in every case (no promotion needed).
+  None of the seven has any integral reference capture, so the promotion
+  target (`float`, not `double`) is unverified against the original by
+  construction, same caveat as `FCA`'s own `StatusNote`.
+
+## FGM vs FGMRG: same conceptual quantity, different algorithms
+
+`FGM` (`GradientMagnitudeImageFilter`) and `FGMRG`
+(`GradientMagnitudeRecursiveGaussianImageFilter`) both compute a gradient
+magnitude, but `mexitk` does **not** implement `FGMRG` as a smoothed version
+of `FGM`, or either as an approximation of the other: they are genuinely
+different algorithms (central differences vs. a recursive Gaussian
+derivative), each faithful to its own original ITK class. Their outputs
+differ by design; `fgmrgDiffersFromFgm` in
+`tests/tPhase4GradientsSmoke.m` asserts this directly rather than assuming
+it.
+
+`FGM` is not one of the seven float-promoted opcodes above: its computation
+stays fully native for every input type, `uint8`/`int32` included —
+`GradientMagnitudeImageFilter` is instantiated directly on the input pixel
+type, never on a promoted `float`. Only the *export* differs by type.
+`itkGradientMagnitudeImageFilter.hxx` accumulates in
+`NumericTraits<InputPixelType>::RealType`, which is `double` for both
+`uint8` and `int32` (confirmed directly from the ITK header, not assumed).
+For `uint8`, that `double` accumulation was always narrowed back with a
+plain, safe cast: the worst-case gradient magnitude on a `uint8` volume is
+bounded by roughly 220.9 (measured 76.21 on the reference volume), both
+under `uint8`'s 255 max, so no fix was needed there — `FGM`'s `uint8` path
+is bit-identical before and after this change. `int32`'s native narrowing
+cast had no such bound and could overflow, so `int32` now instantiates
+`GradientMagnitudeImageFilter<Image3<int32_t>, Image3<double>>` and exports
+through `ClampExport<int32_t, double>` (deviation 8) instead of casting back
+natively. Because `ClampExport`'s in-range path performs the identical
+`static_cast` ITK's own filter would, this changes no in-range `int32`
+result either; verified with an independent bit-compare (0 mismatches
+across all 442368 voxels of the reference volume, both `uint8` and `int32`).
+
+## FAAB and FLS: signed output, clamped on integral export
+
+`FAAB` (`AntiAliasBinaryImageFilter`) outputs "a level set image of real,
+signed values. ... Values outside the zero level set are negative and
+values inside the zero level set are positive"
+(`itkAntiAliasBinaryImageFilter.h:82-85`). Measured on the reference volume
+(binarized at intensity 33, the Phase 3 Otsu cut): the double-precision
+output ranges -3 to 3, with 98.5% of foreground voxels positive and 97.2%
+of background voxels negative (the remainder sit near the estimated
+zero-crossing surface, expected for a level-set method). On `uint8`, the
+signed-to-unsigned clamp-back export (deviation 8) means the entire
+outside-negative half of the level set saturates to 0: measured, 72.8% of
+`uint8` output voxels are exactly 0, and that `uint8`-zero set agrees with
+the double path's non-positive set on 94.97% of voxels. This is a large,
+deliberate, and now-documented consequence of the existing clamp policy,
+not a new deviation.
+
+`FLS` (`LaplacianRecursiveGaussianImageFilter`) is signed for the same
+reason a second derivative is signed: measured on the reference volume at
+sigma 2, output ranges -10.22 to 9.50. The `uint8` clamp-back export was
+checked against the exact arithmetic
+(`uint8(floor(min(max(single_path_output, 0), 255)))`) and matched exactly,
+0 mismatches across all 442368 voxels.
+
+## FVMI: two filters, one opcode
+
+`FVMI`'s three registry parameters land on two different ITK filters:
+`SetSigma` on `HessianRecursiveGaussianImageFilter`, `SetAlpha1`/`SetAlpha2`
+on `Hessian3DToVesselnessMeasureImageFilter`. The second stage hardcodes its
+input type as `Image<SymmetricSecondRankTensor<double,3>,3>`
+(`itkHessian3DToVesselnessMeasureImageFilter.h:76-78,85`), and the first
+stage's *default* second template argument is
+`Image<SymmetricSecondRankTensor<NumericTraits<PixelType>::RealType,Dim>,Dim>`;
+since `NumericTraits<float>::RealType` and `NumericTraits<double>::RealType`
+are both `double`, that default already produces exactly the double-tensor
+image the second stage requires, whether the first stage's own pixel type
+is `float` (the promoted path) or `double` (the native path). No explicit
+tensor-image instantiation is needed. The Hessian stage additionally
+computes its own recursive passes in `InternalRealType = float` regardless
+of the image's own pixel type; that is ITK's own internal design, not
+something `mexitk` chooses. Non-vessel voxels are exactly 0 by construction
+(`itkHessian3DToVesselnessMeasureImageFilter.hxx:87`); measured on the
+reference volume at `[1 0.5 2]`, 249505 of 442368 voxels are exactly 0.
 
 ### `SCSS`: will not support
 

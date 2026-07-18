@@ -17,7 +17,6 @@
 #include "mexitk_common.h"
 #include "opcode.h"
 
-#include "itkClampImageFilter.h"
 #include "itkDanielssonDistanceMapImageFilter.h"
 
 #include <type_traits>
@@ -65,16 +64,12 @@ void RunDanielsson(OpContext& ctx, bool wantVoronoi) {
   if constexpr (std::is_same<PixelT, RealT>::value) {
     ctx.plhs[0] = ExportVolume<RealT>(filter->GetDistanceMap());
   } else {
-    // itk::ClampImageFilter saturates into [NonpositiveMin, max] of the
-    // target pixel type before the narrowing cast, which is defined
-    // behaviour, unlike itk::CastImageFilter's plain static_cast. In-range
-    // distances are unaffected: clamp-then-truncate equals truncate when the
-    // value already fits.
-    using ClampType = itk::ClampImageFilter<RealImage, InImage>;
-    typename ClampType::Pointer clamp = ClampType::New();
-    clamp->SetInput(filter->GetDistanceMap());
-    clamp->Update();
-    ctx.plhs[0] = ExportVolume<PixelT>(clamp->GetOutput());
+    // ClampExport saturates into [lowest, max] of the target pixel type and
+    // maps non-finite values to 0, instead of itk::ClampImageFilter's plain
+    // static_cast fallthrough for NaN (undefined behaviour). In-range
+    // distances are unaffected: this is the same bounds check and the same
+    // in-range cast ITK's own Clamp functor performs.
+    ctx.plhs[0] = ClampExport<PixelT, RealT>(filter->GetDistanceMap());
   }
 }
 
