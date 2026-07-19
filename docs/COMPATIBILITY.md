@@ -552,6 +552,7 @@ or refuses to reproduce a defect.
 | 13 | **`FDM`/`FDMV` reject an all-background input** (no nonzero voxel anywhere) with `mexitk:fdm:noObject`. Measured directly against the `fdm_zero_double`/`fdm_zero_uint8` fixtures, where the original itself succeeded: an all-zero `uint8` input yields distances of roughly 294 to 443 across this project's reference geometry, every one of them past `uint8`'s 255 max and, on every pixel type, not a meaningful answer to "distance to the nearest object" when there is no object — an artifact of the distance filter's internal initialization, not a defined computation. | Same severity/rationale class as deviation 5: the original's own output for this input is not a value worth reproducing, since "distance to the nearest of zero objects" has no defined answer. Refusing it is a strict subset of accepted inputs; every volume with at least one nonzero voxel is unaffected. |
 | 14 | **`FD` accepts `uint8` and `int32` input; the original rejects both outright** with "This method is not supported with this data type! Try converting to double first.", regardless of parameters (measured directly against `fd_0_0_uint8`/`fd_1_0_uint8`/`fd_1_0_int32`, where the original itself failed). `mexitk` promotes `uint8` to `float` for the derivative (`itk::DerivativeImageFilter` requires a signed output pixel type, which `uint8` fails) and runs `int32` natively, returning a defined result for both. No agreement claim is made about the VALUE `mexitk` returns for these two pixel types — the original never produced one to compare against — only that the call succeeds; see `tests/tReferenceRejections.m`. | Accept strictly more, the same direction as deviation 2 (string objects): every call that worked against the original still works and still matches; `uint8`/`int32` input, which the original refused unconditionally, now succeeds instead of erroring. Nothing about the original's own defined behaviour (double/single) changes. |
 | 15 | **`RD` rejects `NumberOfHistogramLevels < 1`** with `mexitk:RD:NumberOfHistogramLevels`, instead of running `HistogramMatchingImageFilter`. Measured directly, not assumed: `NumberOfHistogramLevels = 0` segfaults the whole MATLAB process (a crash dump shows the fault inside `itk::HistogramMatchingImageFilter::ConstructHistogramFromIntensityRange`, called from `BeforeThreadedGenerateData`, called from `RdOpcode::Execute`), not a catchable `itk::ExceptionObject`. Traced to `itkHistogramMatchingImageFilter.hxx`: `histogram->SetBinMax(0, m_NumberOfHistogramLevels - 1, imageTrueMaxValue)` computes `0 - 1` on an unsigned `SizeValueType`, underflowing to `SIZE_MAX`, and writes out of the histogram's actual bin range — an out-of-bounds write. `CastParam<itk::SizeValueType>` (`src/mexitk_common.h`) already rejects non-finite and negative values for this parameter, but 0 is a perfectly valid `SizeValueType` and passes that check untouched, so a separate semantic guard is needed. The threshold is exactly 1, verified empirically rather than assumed or chosen for a safety margin: `NumberOfHistogramLevels = 1` was run in isolation and confirmed to complete normally (finite `128x128x27` output), before this bound was written. `NumberOfHistogramLevels >= 1` is unaffected. | Same severity class as deviation 1 (`SWS` overthresholding) and deviation 9 (`SOT` histogram bins): taking down the user's MATLAB session is not behaviour worth preserving, and there is no reference capture for a crashing call to match against in the first place. The guard refuses only the measured defect (0), not a wider margin invented around it, the same discipline as deviation 9's own `>= 2` bound for `SOT`. |
+| 16 | **`SCSS` registers and appears in `mexitk('?')`, but `Execute()` always throws `mexitk:SCSS:unsupported`**, refusing every call regardless of parameters. Confirmed against the captured fixture (`scss_scss_20_60_10_seedS1_double`): the original itself succeeded, and its own output is a `[10 1]` column of ones (one entry per `AdvanceTimeStep()` iteration), not an image of any size or shape `mexitk`'s calling convention could return under this name. | Refuse to reproduce an output-type mismatch mexitk's own calling convention cannot represent honestly: the original's own result for this opcode is not an image, and shipping an image-shaped substitute under the `SCSS` name would look like agreement where none exists — worse than refusing outright. See "`SCSS`: formally unsupported (Epic 4 Phase 2)" below for the full rationale. |
 
 ## Behaviour matched deliberately, including the odd bits
 
@@ -570,22 +571,29 @@ or refuses to reproduce a defect.
 
 ## Coverage
 
-`mexitk` currently implements **37 of the original's 40 opcodes**. Epic 2
-Phases 1-3 extended the capture harness to 30 of them, captured reference
-fixtures for every one, and measured `mexitk`'s own agreement against every
-fixture (`tools/classify_fixtures.m`; see "Second capture campaign: Phase 3
-findings" above for how). Epic 3 Phase 1 added `FMMCF` and `SFM`; Epic 3
-Phase 2 added `SGAC`, `SLLS`, and `SSDLS` -- the first opcodes to genuinely
-consume a second image volume (`inputArray2`) rather than accept-and-ignore
-it. Epic 4 Phase 1 added `RD` and `RTPS`, the first `Category::kRegistration`
-opcodes -- see "RD and RTPS: the first registration opcodes" below. `RTPS`'s
-own initial fixture was a rejection only; two follow-up reference-host
-capture rounds (`s14`, nine more fixtures) then settled its calling
-convention, supplied eight successful captures, and isolated the exact
-cause of its two initially-unexplained residuals, promoting it out of
-smoke-tested. All seven (FMMCF, SFM, SGAC, SLLS, SSDLS, RD, RTPS) have
-their own captured fixture(s), measured the same way. The status ladder now splits the 37 into
-three tiers by that measurement, not by guesswork:
+`mexitk` currently implements **39 of the original's 40 opcodes**, and formally
+disposes of the fortieth (`SCSS`) as unsupported rather than leaving it silently
+absent -- all 40 are addressed. Epic 2 Phases 1-3 extended the capture harness
+to 30 of them, captured reference fixtures for every one, and measured
+`mexitk`'s own agreement against every fixture (`tools/classify_fixtures.m`;
+see "Second capture campaign: Phase 3 findings" above for how). Epic 3 Phase 1
+added `FMMCF` and `SFM`; Epic 3 Phase 2 added `SGAC`, `SLLS`, and `SSDLS` --
+the first opcodes to genuinely consume a second image volume (`inputArray2`)
+rather than accept-and-ignore it. Epic 4 Phase 1 added `RD` and `RTPS`, the
+first `Category::kRegistration` opcodes -- see "RD and RTPS: the first
+registration opcodes" below. `RTPS`'s own initial fixture was a rejection
+only; two follow-up reference-host capture rounds (`s14`, nine more fixtures)
+then settled its calling convention, supplied eight successful captures, and
+isolated the exact cause of its two initially-unexplained residuals, promoting
+it out of smoke-tested. Epic 4 Phase 2 closed out the roadmap: `FGMS` is
+implemented as a registry duplicate of `FGMRG` (fixture-confirmed
+bit-identical in the original), `FFFT` runs but carries no fixture-agreement
+claim, and `SCSS` is registered with a deliberate refusal -- see "`SCSS`:
+formally unsupported (Epic 4 Phase 2)" and "`FGMS` and `FFFT`: resolved (Epic
+4 Phase 2)" above. All ten opcodes from Epic 3 and Epic 4 (FMMCF, SFM, SGAC,
+SLLS, SSDLS, RD, RTPS, FGMS, FFFT, SCSS) have their own captured fixture(s),
+measured the same way. The status ladder now splits the 40 into four tiers by
+that measurement, not by guesswork:
 
 - **Validated (15):** FBB, FBD, FBE, FBT, FD, FF, FGM, FMEAN, FMEDIAN,
   FVBIH, SCC, SCT, SGAC, SIC, SOT.
@@ -596,9 +604,9 @@ three tiers by that measurement, not by guesswork:
   than a defined reference (SCC's empty-seed fixture; see above) — those
   are asserted separately in `tests/tReferenceRejections.m` with no
   agreement claim.
-- **Bounded deviation (21):** FCA, SWS (their own dedicated sections
-  above), FBL, FCF, FDG, FDM, FDMV, FGA, FGAD, FGMRG, FLS, FMMCF, FOMT,
-  FSN, FVMI, SFM, SLLS, SNC, SSDLS, RD, RTPS.
+- **Bounded deviation (22):** FCA, SWS (their own dedicated sections
+  above), FBL, FCF, FDG, FDM, FDMV, FGA, FGAD, FGMRG, FGMS, FLS, FMMCF,
+  FOMT, FSN, FVMI, SFM, SLLS, SNC, SSDLS, RD, RTPS.
   Runs the same ITK filter with the same parameters, but does not
   reproduce the original bit-for-bit; the difference is measured and
   bounded (`tests/tReferenceBounded.m`, plus FCA/SWS/FOMT's own dedicated
@@ -637,10 +645,26 @@ three tiers by that measurement, not by guesswork:
   not coplanarity as first suspected — see "RD and RTPS: the first
   registration opcodes" below and
   `src/opcodes/rtps.cpp`'s own `StatusNote` for the full evidence,
-  including how the calling convention itself was determined.
-- **Smoke-tested (1):** FAAB. Its disagreement with the
+  including how the calling convention itself was determined. FGMS (Epic
+  4 Phase 2) has three captured fixtures (double only, sigma 1/2/4): the
+  original's own FGMS output is bit-identical to its own FGMRG output at
+  every one, so mexitk implements it as the identical filter call and
+  measures the identical residual FGMRG measures against its own
+  fixtures at the same sigma -- see "`FGMS` and `FFFT`: resolved (Epic 4
+  Phase 2)" above and `src/opcodes/fgmrg.cpp`'s `FgmsOpcode::StatusNote`.
+- **Smoke-tested (2):** FAAB, FFFT. FAAB's disagreement with the
   original is large enough (RMS in the hundreds) that pinning a bound
   would not be a useful signal — see "SWS and FAAB: not bounded" below.
+  FFFT (Epic 4 Phase 2) runs cleanly on all four pixel types but neither
+  of its two captured fixtures is reproduced by any packing this project
+  could determine, so no bound is asserted for either output mode — see
+  "`FGMS` and `FFFT`: resolved (Epic 4 Phase 2)" above.
+- **Unsupported (1):** SCSS. Registers and appears in `mexitk('?')`, but
+  `Execute()` always throws `mexitk:SCSS:unsupported` by design: the
+  original's own output for this opcode is not an image (a `[10 1]`
+  vector of iteration counters, fixture-confirmed), so no image-shaped
+  result could be returned under this name without misleading a caller
+  — see "`SCSS`: formally unsupported (Epic 4 Phase 2)" above.
 
 **Worst measured deviation per bounded-deviation opcode** (excluding FCA,
 SWS, and FOMT, each of which has its own dedicated measurement table or
@@ -668,6 +692,7 @@ status reflects its OTHER captured points, not that class.
 | FSN | 1.7e-15 (double) | 2.8e-14 (double) | one point; every other captured point exact |
 | FVMI | 0.514 (double/single) | 10.05 (double) | int32/uint8 0.494/10.0; no exact points captured |
 | FGMRG | 2.7e-7 (double) | 5.4e-6 (double) | single at noise floor too; int32/uint8 exact at sigma=2 |
+| FGMS | 2.7e-7 (double) | 5.4e-6 (double) | registry duplicate of FGMRG; identical measured numbers at matching sigma; only double captured |
 | FLS | 98.7 (uint8) | 255.0 (uint8) | double/single at noise floor; int32 exact at sigma=2 |
 | FDM | 0.218 (uint8) | 6.0 (uint8) | double/single/int32 exact |
 | FDMV | 11.4 (uint8) | 255.0 (uint8) | double at noise floor (~3e-12); single/int32 exact |
@@ -679,10 +704,12 @@ status reflects its OTHER captured points, not that class.
 | RD | 4.63626 (double) | 88.0 (double) | full input intensity range; only one fixture (double); uint8/int32 unmeasured |
 | RTPS | 4.159985 (double) | 88.0 (double) | worst of 3 captures with fewer than 3 distinct landmark pairs; 5 well-posed (3+ distinct pairs) captures at the floating-point noise floor instead (3 at RMS ~1e-12, 2 at RMS ~2e-10); only double captured, uint8/int32/single unmeasured |
 
-The remaining 3 opcodes are catalogued in `docs/matitk_opcode_registry.txt`
+All 40 opcodes are catalogued in `docs/matitk_opcode_registry.txt`
 (the original binary's own parameter dump)
-and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`,
-but they are **not implemented**.
+and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`.
+39 are implemented above; the fortieth, `SCSS`, is formally **unsupported**
+(registered, documented, always refuses -- see "`SCSS`: formally unsupported
+(Epic 4 Phase 2)" above) rather than silently absent.
 See the README for the current status of each.
 
 ## SWS and FAAB: not bounded
@@ -1468,10 +1495,11 @@ something `mexitk` chooses. Non-vessel voxels are exactly 0 by construction
 (`itkHessian3DToVesselnessMeasureImageFilter.hxx:87`); measured on the
 reference volume at `[1 0.5 2]`, 249505 of 442368 voxels are exactly 0.
 
-### `SCSS`: will not support
+### `SCSS`: formally unsupported (Epic 4 Phase 2)
 
-**Decision: `SCSS` will not be implemented.** This is settled; please do not re-open it
-without new information.
+**Decision: `SCSS` is registered but deliberately refused, not implemented.**
+This closes out the earlier "will not support" plan with a captured fixture and a
+real disposition, rather than leaving the opcode silently absent from the registry.
 
 `SCSS` is not a segmentation filter in the modern sense.
 It maps to `itk::bio::CellularAggregate`, which:
@@ -1484,15 +1512,54 @@ It maps to `itk::bio::CellularAggregate`, which:
 - carries global static state, which is hostile to a MEX file that is loaded once and
   called repeatedly inside a long-lived MATLAB session.
 
+A reference-host capture (Epic 4 Phase 2, `scss_scss_20_60_10_seedS1_double`) confirms this
+directly rather than leaving it inferred: the original itself ran without error on
+`SCSS([20 60 10], V, [], S1)`, and its own captured output is a `[10 1]` column of ones, one
+entry per `AdvanceTimeStep()` iteration (`numberOfIterations=10`) — a vector of iteration
+counters, not an image of any size or shape `mexitk`'s calling convention expects.
+
 There is no modern ITK filter that is behaviourally equivalent.
 Shipping something merely *similar* under the name `SCSS` would be worse than not
 shipping it: callers would get silently different results under a familiar name,
-which is exactly the failure mode this project exists to avoid.
-Calling `mexitk('SCSS', ...)` returns an unknown-operation error, which is the honest answer.
+which is exactly the failure mode this project exists to avoid. `SCSS` is registered with
+`Status::kUnsupported` (`src/opcode.h`) — it appears in `mexitk('?')` like every other
+opcode, so a caller can discover it exists and why it refuses, but `Execute()` always throws
+`mexitk:SCSS:unsupported` with the rationale above. This is a deliberate refusal, not the
+generic `mexitk:unknownOpcode` error an unregistered name would produce, and not a
+placeholder for a future implementation: per this project's core honesty principle, a
+plausible-looking image-shaped substitute under this name would be strictly worse than
+refusing. See `src/opcodes/scss.cpp` and `tests/tReferenceRejections.m`'s
+`scssRefusesDespiteOriginalSuccess`.
 
-### Other opcodes needing resolution before implementation
+### `FGMS` and `FFFT`: resolved (Epic 4 Phase 2)
 
-- **`FGMS`** could not be pinned to any ITK class name with confidence
-  and needs verification against the original binary before implementation.
-- **`FFFT`**: the VNL FFT backend was removed from ITK and rerouted via pocketfft;
-  the real/complex output switch semantics are unconfirmed.
+Both were left open after the initial mapping pass; both are now resolved with fixture
+evidence rather than left as "needs verification":
+
+- **`FGMS`**: reference-host capture (`fgms_sigma1_double`, `fgms_sigma2_double`,
+  `fgms_sigma4_double`) settles the question the mapping pass could not: the original's own
+  `FGMS` output is bit-identical to its own `FGMRG` output at every captured sigma
+  (`isequal` plus an independent hash check, not merely close). `mexitk` implements `FGMS` as
+  the same `GradientMagnitudeRecursiveGaussianImageFilter` call as `FGMRG` (`src/opcodes/
+  fgmrg.cpp`), the same registry-duplicate situation as `FGA`/`FDG`, and measures the
+  identical residual against these fixtures as `FGMRG` measures against its own (RMS
+  2.73366e-07 at sigma=1, 1.32290e-07 at sigma=2, 7.13001e-08 at sigma=4 — the
+  floating-point noise floor). Status: **bounded deviation**.
+- **`FFFT`**: the concrete `itk::VnlForwardFFTImageFilter` (not the abstract, object-factory-
+  resolved `ForwardFFTImageFilter` the mapping pass pointed at, which fails to instantiate on
+  this build with no PocketFFT backend compiled in) runs cleanly on all four pixel types, but
+  the real/complex output switch semantics remain genuinely unconfirmed: neither captured
+  fixture (`ffft_real0_double`, `ffft_complex1_double`) is reproduced by any packing tried —
+  full or per-slice/per-axis FFTs, with or without `fftshift`, linear/log-magnitude rescales
+  over six percentile-clip windows, and a power-law family, none within floating-point noise
+  of either fixture. One inline guess from an earlier pass is directly disproven, not just
+  unconfirmed: `ffft_complex1_double`'s own extreme value (±3543768.099) is NOT the DC
+  component of the volume's FFT (the true DC term, computed directly, is 9650539 — the sum of
+  all voxel intensities); this implementation's own raw-real-part output independently
+  reproduces that 9650539 DC value exactly, confirming the real-part extraction itself is
+  arithmetically correct while also showing the original's output cannot be that raw,
+  unscaled quantity. Status: **smoke-tested**, no agreement claim for either mode. A targeted
+  reference-host capture (a small all-constant volume, plus a small single-impulse volume,
+  both at 8x8x8 or smaller for byte-for-byte comparison) would very likely settle the exact
+  packing; see `src/opcodes/ffft.cpp`'s `StatusNote` for the full diagnostic writeup and the
+  precise proposed capture.
