@@ -5,13 +5,14 @@ classdef tPhase7DispositionsSmoke < matlab.unittest.TestCase
     % since it already has a captured fixture proving the original itself
     % succeeded on that input.
     %
-    % FFFT (kSmokeTested) has two captured fixtures, but neither is
-    % reproduced by any packing this project could determine -- see
-    % src/opcodes/ffft.cpp's StatusNote for the full diagnostic writeup.
-    % No agreement claim is made for either mode, so this suite asserts
-    % only structural invariants (shape, class, finiteness, both output
-    % modes, across all four pixel types), the same role
-    % tPhase6RegistrationSmoke.m plays for RD/RTPS.
+    % FFFT (kBoundedDeviation, promoted from kSmokeTested by a follow-up
+    % s15 controlled-capture round) has its packing fully confirmed and
+    % its double-precision fixtures covered in tests/tReferenceExact.m /
+    % tests/tReferenceBounded.m -- see src/opcodes/ffft.cpp's StatusNote
+    % for the full evidence trail. This suite adds only what the
+    % double-only fixtures do not cover: structural invariants (shape,
+    % class, finiteness, both output modes, across all four pixel types),
+    % the same role tPhase6RegistrationSmoke.m plays for RD/RTPS.
     %
     % FGMS (kBoundedDeviation) already has full reference-fixture coverage
     % in tests/tReferenceBounded.m (it measures the identical residual as

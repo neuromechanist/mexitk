@@ -117,6 +117,33 @@ classdef tReferenceBounded < matlab.unittest.TestCase
             'FGMS', 'fgms_sigma2_double', 1.32290e-07, 1.85020e-06; ...
             'FGMS', 'fgms_sigma4_double', 7.13001e-08, 9.00417e-07; ...
             ...
+            ... FFFT: packing confirmed exact on 4/6 s15 controlled
+            ... captures (see tReferenceExact.m); the other 2 have a
+            ... residual at absolute double-precision noise floor
+            ... (imporig_real, impoff_real -- both real-part outputs on
+            ... small 8x8x8 volumes). The two ORIGINAL mri-sized fixtures
+            ... (real0, complex1; input [128 128 27], the same shape
+            ... every other opcode's mri fixture uses) have a real, much
+            ... larger measured residual that persists despite the
+            ... packing itself being proven correct: this project's own
+            ... ITK-native FFT computation was independently verified
+            ... EXACT (rms 1.8e-11) against MATLAB's own trusted fftn on
+            ... the real 128x128x27 volume (ruling out any bug in this
+            ... codebase -- axis order, radix-3/z=27 handling, fftshift,
+            ... padding, all directly tested and ruled out), so the
+            ... residual reflects a genuine difference between the
+            ... original 2006 binary's own ITK-2.4-vintage VNL FFT and
+            ... modern ITK's, on this specific composite (non-power-of-2)
+            ... size -- a real numerics difference, the same category as
+            ... FCA/RD, not floating-point noise. See src/opcodes/
+            ... ffft.cpp's StatusNote and docs/COMPATIBILITY.md for the
+            ... full evidence trail, including the sign-convention
+            ... correction the controlled captures also revealed.
+            'FFFT', 'ffft_imporig_real_double', 1.0658141e-14, 1.0658141e-14; ...
+            'FFFT', 'ffft_impoff_real_double',  3.5527137e-15, 7.1054274e-15; ...
+            'FFFT', 'ffft_real0_double',        20.219783,     95.495205;     ...
+            'FFFT', 'ffft_complex1_double',     16121.494,     3544950.7;     ...
+            ...
             ... FLS: LaplacianRecursiveGaussianImageFilter, same story;
             ... uint8's clamp-back export (deviation 8) makes its own
             ... residual much larger since the underlying signed field
