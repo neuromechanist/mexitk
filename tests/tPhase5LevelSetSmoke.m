@@ -20,6 +20,19 @@ classdef tPhase5LevelSetSmoke < matlab.unittest.TestCase
         Vu   % uint8 volume (native mri class)
     end
 
+    properties (Constant)
+        % [70 50 14], value 68: the same seed used throughout the Phase 3
+        % region-growing suite (see tPhase3RegionGrowingSmoke.regionGrowSeed
+        % for why this voxel and not the volume's global max). Reused here
+        % for the same reason: an asymmetric-subscript seed so a transposed
+        % axis in SeedPointsToIndices is caught.
+        Seed = [70 50 14];
+        % ITK's own LargeValue sentinel for a double level-set image:
+        % NumericTraits<double>::max()/2, matched exactly against the
+        % sfm_stop100_seedS1_double fixture (see src/opcodes/sfm.cpp).
+        DoubleSentinel = 8.988465674311579e+307;
+    end
+
     methods (TestMethodSetup)
         function loadVolume(tc)
             mri = load('mri');
@@ -84,4 +97,101 @@ classdef tPhase5LevelSetSmoke < matlab.unittest.TestCase
             tc.verifyEqual(out, tc.V);
         end
     end
+
+    methods (Test)  % SFM
+        function sfmRunsAndPreservesShapeAndClass(tc)
+            for f = {@double, @single, @uint8, @int32}
+                vin = f{1}(tc.Vu);
+                out = mexitk('SFM', 100, vin, [], tPhase5LevelSetSmoke.Seed);
+                tc.verifyClass(out, class(vin));
+                tc.verifySize(out, size(vin));
+            end
+        end
+
+        function sfmSeedVoxelIsZero(tc)
+            sub = tPhase5LevelSetSmoke.Seed;
+            out = mexitk('SFM', 100, tc.V, [], sub);
+            tc.verifyEqual(out(sub(1), sub(2), sub(3)), 0);
+        end
+
+        function sfmSeedConventionIsNotTransposed(tc)
+            % An axis transposition would place the zero-valued trial point
+            % at a different voxel; the transposed coordinate must NOT be
+            % zero (verified: 0.500333 there, not 0).
+            sub = tPhase5LevelSetSmoke.Seed;
+            out = mexitk('SFM', 100, tc.V, [], sub);
+            transposed = [sub(2), sub(1), sub(3)];
+            tc.verifyNotEqual(out(transposed(1), transposed(2), transposed(3)), 0);
+        end
+
+        function sfmOutputIsNonNegative(tc)
+            out = mexitk('SFM', 100, tc.V, [], tPhase5LevelSetSmoke.Seed);
+            tc.verifyGreaterThanOrEqual(min(out(:)), 0);
+        end
+
+        function sfmLargerStoppingTimeReachesAtLeastAsManyVoxels(tc)
+            % Measured: reached (finite, non-sentinel) voxel count grows
+            % 170405 -> 171527 -> 171530 (saturating) as stoppingTime goes
+            % 1 -> 2 -> 5, then stays flat through 100: the speed image
+            % (the volume's own intensity) is exactly zero over the image's
+            % background, so the front cannot propagate past the boundary
+            % of the nonzero-intensity region no matter how large
+            % stoppingTime is -- a real, ITK-documented property (a
+            % zero-speed neighbor's update time is unbounded), not a bug.
+            sub = tPhase5LevelSetSmoke.Seed;
+            small = mexitk('SFM', 1, tc.V, [], sub);
+            big = mexitk('SFM', 5, tc.V, [], sub);
+            reachedSmall = nnz(small < tPhase5LevelSetSmoke.DoubleSentinel);
+            reachedBig = nnz(big < tPhase5LevelSetSmoke.DoubleSentinel);
+            tc.verifyGreaterThan(reachedBig, reachedSmall);
+        end
+
+        function sfmEmptySeedsAllSentinel(tc)
+            % Defined behaviour, verified directly against
+            % itkFastMarchingImageFilter.hxx's Initialize()/GenerateData():
+            % with no trial points the marching heap is empty from the
+            % start, so every voxel keeps Initialize()'s own LargeValue
+            % fill, and the call returns a fully allocated, uniform
+            % sentinel output rather than erroring.
+            out = mexitk('SFM', 100, tc.V, [], []);
+            tc.verifyEqual(numel(unique(out(:))), 1);
+            tc.verifyEqual(out(1, 1, 1), tPhase5LevelSetSmoke.DoubleSentinel);
+        end
+
+        function sfmSentinelSaturatesOnIntegralExport(tc)
+            % uint8/int32 promote to float internally; the (very large)
+            % LargeValue sentinel saturates to the integral type's own max
+            % through ClampExport, rather than an undefined-behaviour cast.
+            outU8 = mexitk('SFM', 100, tc.Vu, [], []);
+            outI32 = mexitk('SFM', 100, int32(tc.Vu), [], []);
+            tc.verifyEqual(outU8(1, 1, 1), uint8(255));
+            tc.verifyEqual(outI32(1, 1, 1), int32(intmax('int32')));
+        end
+
+        function sfmRejectsShortParamCount(tc)
+            tc.verifyError(@() mexitk('SFM', [], tc.V, [], tPhase5LevelSetSmoke.Seed), ...
+                'mexitk:params');
+        end
+
+        function sfmRejectsOutOfBoundsSeed(tc)
+            tc.verifyError(@() mexitk('SFM', 100, tc.V, [], [9999 9999 9999]), ...
+                'mexitk:seeds');
+        end
+
+        function sfmRejectsExtraOutputArgument(tc)
+            % Single-output opcode per the registry; requesting a second
+            % output must error, matching every other opcode's nargout
+            % contract (see tFomtReference.m's own use of the same
+            % withOutputs helper).
+            sub = tPhase5LevelSetSmoke.Seed;
+            tc.verifyError(@() withOutputs(2, @() mexitk('SFM', 100, tc.V, [], sub)), ...
+                'mexitk:nargout');
+        end
+    end
+end
+
+function varargout = withOutputs(n, fn)
+% Calls fn requesting exactly n outputs, so nargout handling can be tested.
+varargout = cell(1, n);
+[varargout{1:n}] = fn();
 end
