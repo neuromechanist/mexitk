@@ -10,9 +10,10 @@ function classify_fixtures(fixturesDir, matlabDir)
 %   machine.
 %
 %   Verdicts:
-%     EXACT               - the original succeeded; mexitk's output is
-%                            isequal to the captured output (bit-exact,
-%                            including for multi-output fixtures).
+%     EXACT               - the original succeeded; mexitk's output matches
+%                            the captured output in both class and value
+%                            (isequal, bit-exact, including for
+%                            multi-output fixtures).
 %     DEVIATES            - the original succeeded; mexitk's output differs.
 %                            RMS and max-abs difference are printed.
 %     EXPECTED-REJECTION  - the original rejected the call, and mexitk
@@ -54,6 +55,9 @@ if nargin < 2 || isempty(matlabDir)
 end
 
 addpath(matlabDir);
+% reconstructFixtureInput (input reconstruction + class/hash verification,
+% shared with tests/mexitkFixture.m) and local_md5.
+addpath(fullfile(rootDir, 'tools', 'capture_reference'));
 if isempty(which('mexitk'))
     error('classify_fixtures:notBuilt', ...
         'mexitk MEX not found on the path. Build it first; expected in %s', matlabDir);
@@ -74,7 +78,7 @@ for i = 1:numel(names)
         continue;
     end
     f = data.fixture;
-    [verdict, detail] = classifyOne(f);
+    [verdict, detail] = classifyOne(f, tag);
     verdicts(end+1) = struct('name', tag, 'opcode', f.opcode, ...
         'verdict', verdict, 'detail', detail); %#ok<AGROW>
     fprintf('%-45s %-11s %-20s %s\n', tag, f.opcode, verdict, detail);
@@ -103,9 +107,9 @@ fprintf('\ntotal fixtures: %d, classified: %d, skipped: %d\n', ...
     numel(names), numel(verdicts), numel(skipped));
 end
 
-function [verdict, detail] = classifyOne(f)
+function [verdict, detail] = classifyOne(f, tag)
 try
-    vin = reconstructInput(f);
+    vin = reconstructFixtureInput(f, tag);
 catch err
     verdict = 'RECONSTRUCT-ERROR';
     detail = err.message;
@@ -142,35 +146,59 @@ if f.success
         detail = sprintf('%s: %s', mexErr.identifier, mexErr.message);
         return;
     end
+    % isequal alone is not sufficient for an EXACT verdict: it compares
+    % values only, so a value-equal but wrong-class result (e.g. mexitk
+    % returning double where the original returned uint8) would otherwise
+    % pass silently. tests/tReferenceExact.m already checks class
+    % separately (tc.verifyClass); match that strictness here.
     if isMultiOutput
         allEqual = true;
         worstRms = 0;
         worstMax = 0;
+        classDetail = '';
         for k = 1:n
-            if isequal(outs{k}, f.outputs{k})
+            sameClass = strcmp(class(outs{k}), f.outputClasses{k});
+            sameValue = isequal(outs{k}, f.outputs{k});
+            if sameClass && sameValue
                 continue;
             end
             allEqual = false;
-            dk = double(outs{k}(:)) - double(f.outputs{k}(:));
-            worstRms = max(worstRms, sqrt(mean(dk .^ 2)));
-            worstMax = max(worstMax, max(abs(dk)));
+            if ~sameClass
+                classDetail = [classDetail, sprintf('output %d class %s!=%s; ', ...
+                    k, class(outs{k}), f.outputClasses{k})]; %#ok<AGROW>
+            end
+            if ~sameValue
+                dk = double(outs{k}(:)) - double(f.outputs{k}(:));
+                worstRms = max(worstRms, sqrt(mean(dk .^ 2)));
+                worstMax = max(worstMax, max(abs(dk)));
+            end
         end
         if allEqual
             verdict = 'EXACT';
             detail = sprintf('%d outputs', n);
         else
             verdict = 'DEVIATES';
-            detail = sprintf('worst rms=%.6g maxabs=%.6g (over %d outputs)', worstRms, worstMax, n);
+            detail = sprintf('%sworst rms=%.6g maxabs=%.6g (over %d outputs)', ...
+                classDetail, worstRms, worstMax, n);
         end
     else
-        if isequal(out, f.output)
+        sameClass = strcmp(class(out), f.outputClass);
+        sameValue = isequal(out, f.output);
+        if sameClass && sameValue
             verdict = 'EXACT';
             detail = '';
         else
-            d = double(out(:)) - double(f.output(:));
             verdict = 'DEVIATES';
-            detail = sprintf('rms=%.6g maxabs=%.6g ndiff=%d/%d', ...
-                sqrt(mean(d .^ 2)), max(abs(d)), nnz(d), numel(d));
+            if sameValue
+                detail = '';
+            else
+                d = double(out(:)) - double(f.output(:));
+                detail = sprintf('rms=%.6g maxabs=%.6g ndiff=%d/%d', ...
+                    sqrt(mean(d .^ 2)), max(abs(d)), nnz(d), numel(d));
+            end
+            if ~sameClass
+                detail = sprintf('class %s!=%s; %s', class(out), f.outputClass, detail);
+            end
         end
     end
 else
@@ -180,35 +208,6 @@ else
     else
         verdict = 'EXPECTED-REJECTION';
         detail = sprintf('%s: %s', mexErr.identifier, mexErr.message);
-    end
-end
-end
-
-function vin = reconstructInput(f)
-% Duplicates tests/mexitkFixture.m's reconstruction logic rather than
-% calling it directly: mexitkFixture.m resolves its fixtures directory from
-% its own file location (fixed to the committed tests/fixtures/, for use
-% inside the test suite), while this tool accepts an arbitrary FIXTURESDIR
-% parameter and must reconstruct purely from the loaded fixture struct.
-if isfield(f, 'inputRecipe') && ~isempty(f.inputRecipe)
-    mri = load('mri');
-    V = squeeze(mri.D); %#ok<NASGU> referenced by name inside the eval'd recipe
-    eval([f.inputRecipe ';']);
-    if exist('b', 'var')
-        vin = b;
-    else
-        vin = ans; %#ok<NOANS>
-    end
-else
-    mri = load('mri');
-    V = squeeze(mri.D);
-    switch f.inputClass
-        case 'double', vin = double(V);
-        case 'single', vin = single(V);
-        case 'uint8',  vin = V;
-        case 'int32',  vin = int32(V);
-        otherwise
-            error('classify_fixtures:inputClass', 'Unhandled input class %s', f.inputClass);
     end
 end
 end
