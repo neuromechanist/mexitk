@@ -30,9 +30,16 @@ else
     arg4 = vinB;
 end
 
+% arg4 is threaded into BOTH branches, not only the seedArg one: a
+% single-volume, no-seed fixture is unaffected (arg4 is the class-matched
+% empty placeholder from above, and mexitk.cpp's OptionalVolume treats an
+% explicit empty 4th argument identically to an omitted one), but a
+% hypothetical future two-volume fixture with no seedArg would otherwise
+% have volumeB silently dropped here -- RequireVolumeB would still catch
+% that loudly downstream, but the plumbing should not rely on it.
 if isfield(fx, 'seedArg')
     got = mexitk(opcode, fx.params, vin, arg4, fx.seedArg);
 else
-    got = mexitk(opcode, fx.params, vin);
+    got = mexitk(opcode, fx.params, vin, arg4);
 end
 end

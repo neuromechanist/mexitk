@@ -126,9 +126,16 @@ else
     arg4 = vinB;
 end
 
-args = {f.opcode, f.params, vin};
+% arg4 is threaded in unconditionally, not only alongside seedArg: a
+% single-volume, no-seed fixture is unaffected (arg4 is the class-matched
+% empty placeholder above, and mexitk.cpp's OptionalVolume treats an
+% explicit empty 4th argument identically to an omitted one), but a
+% hypothetical future two-volume fixture with no seedArg would otherwise
+% have volumeB silently dropped here -- see mexitkFixtureCall.m's own
+% identical fix.
+args = {f.opcode, f.params, vin, arg4};
 if isfield(f, 'seedArg')
-    args = [args, {arg4}, {f.seedArg}];
+    args = [args, {f.seedArg}];
 end
 
 isMultiOutput = isfield(f, 'outputs') && f.success;
