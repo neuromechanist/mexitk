@@ -26,10 +26,12 @@ distinct pairs measures worse than 1 before jumping to the noise floor
 at 3). See `docs/COMPATIBILITY.md`'s "RD and RTPS: the first
 registration opcodes" for the full evidence trail. Phase 2 closed out
 the last three: `FGMS` (fixture-confirmed registry duplicate of
-`FGMRG`, bounded deviation), `FFFT` (runs, but neither captured fixture
-is reproduced by any packing this project could determine -- see
-`docs/COMPATIBILITY.md`'s "`FGMS` and `FFFT`: resolved (Epic 4 Phase
-2)"), and `SCSS` (formally dispositioned `Status::kUnsupported`: it
+`FGMRG`, bounded deviation), `FFFT` (packing confirmed exactly by a
+follow-up controlled capture round, `s15`, after the original two
+fixtures alone proved insufficient; promoted to bounded deviation with
+a real, independently-investigated residual on the mri-sized fixtures
+-- see `docs/COMPATIBILITY.md`'s "`FGMS` and `FFFT`: resolved (Epic 4
+Phase 2)"), and `SCSS` (formally dispositioned `Status::kUnsupported`: it
 registers, appears in `mexitk('?')`, and always throws
 `mexitk:SCSS:unsupported` -- the original's own output for it is a
 `[10 1]` vector, not an image, fixture-confirmed).
@@ -385,9 +387,11 @@ log as how we got here.
 3. **How broad should the opcode surface get?** Answered, and now closed:
    39 of 40 are implemented (up from 30 when this item was written), and
    the vast majority have reference data from Epic 2's capture campaign
-   onward -- 37 of 39 carry a validated or bounded-deviation status; only
-   `FAAB` and `FFFT` remain smoke-tested with no useful bound or
-   agreement claim. The fortieth (`SCSS`) is formally unsupported, not
+   onward -- 38 of 39 carry a validated or bounded-deviation status; only
+   `FAAB` remains smoke-tested with no useful bound. `FFFT`'s own packing
+   was undetermined at first but was settled exactly by a follow-up
+   controlled capture round (`s15`), promoting it to bounded deviation.
+   The fortieth (`SCSS`) is formally unsupported, not
    silently missing. See `docs/COMPATIBILITY.md`'s Coverage section for
    the authoritative current tier breakdown; this item is stale, not
    current state.
@@ -460,12 +464,17 @@ Formerly-known problem cases, all now resolved (Epic 4 Phase 2):
   original at every captured sigma. Implemented as the same filter call, the same
   registry-duplicate situation as `FGA`/`FDG`. See `src/opcodes/fgmrg.cpp`.
 - ~~**FFFT** VNL FFT backend was removed; rerouted via pocketfft. Output semantics unconfirmed.~~
-  Resolved, partially: implemented against the concrete `itk::VnlForwardFFTImageFilter`
+  Resolved: implemented against the concrete `itk::VnlForwardFFTImageFilter`
   (the factory-dispatched `ForwardFFTImageFilter` fails to instantiate on this build).
-  Output semantics remain genuinely unconfirmed -- neither captured fixture is
-  reproduced by any packing tried. Ships smoke-tested, no agreement claim. See
-  `src/opcodes/ffft.cpp`'s `StatusNote` for the full diagnostic writeup and a
-  proposed disambiguating capture.
+  Output semantics are now CONFIRMED, not by inference but by a follow-up controlled
+  reference-host capture round (`s15`, three small volumes with analytically known
+  spectra): real mode is the real part of the FFT rescaled to `[0,255]`, complex mode
+  is the raw imaginary part. The original two mri-sized fixtures still carry a real,
+  measured residual even with the confirmed packing, independently traced to a
+  genuine ITK-2.4-vs-modern difference on that composite (non-power-of-2) size, not a
+  bug here (this codebase's own FFT was proven exact against MATLAB's own `fftn` on
+  the same volume). Ships bounded deviation, scoped to `double`. See
+  `src/opcodes/ffft.cpp`'s `StatusNote` for the full evidence trail.
 - ~~**RD** `SetStandardDeviations` is inert unless `SmoothDisplacementFieldOn()` is also
   called.~~ Resolved: `RD` is implemented (Epic 4 Phase 1) and calls
   `SmoothDisplacementFieldOn()` explicitly; see `src/opcodes/rd.cpp`.

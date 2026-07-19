@@ -370,14 +370,24 @@ identically to FGAD.
 
 ### `FFFT` — Forward FFT (highest API drift of any filter opcode)
 
-**Resolved (Epic 4 Phase 2), partially.** Implemented against the concrete
+**Resolved (Epic 4 Phase 2).** Implemented against the concrete
 `itk::VnlForwardFFTImageFilter` (the abstract `ForwardFFTImageFilter` below
 fails to instantiate on this project's own ITK build, which has no PocketFFT
 backend compiled in). The real/complex switch semantics this entry flags as
-**not confirmed** remain genuinely unconfirmed: neither captured fixture is
-reproduced by any packing tried. Status: smoke-tested, no agreement claim.
+**not confirmed** are now CONFIRMED, not by inference but by a controlled
+reference-host capture round (`s15`: three small 8x8x8 volumes with
+analytically known spectra): Real mode (param 0) is the REAL PART of the
+full 3-D forward FFT, rescaled to `[0,255]`; Complex mode (param 1) is the
+raw, unscaled IMAGINARY PART, with a sign correction the same captures
+revealed (`VnlForwardFFTImageFilter`'s own imaginary-part sign convention is
+the exact negation of the original's). The two original (mri-sized)
+fixtures still carry a real, measured residual even with the confirmed
+packing, independently traced to a genuine ITK-2.4-vs-modern difference on
+this composite (non-power-of-2, `z=27`) size, not a bug in this codebase
+(this codebase's own FFT was proven mathematically exact against MATLAB's
+`fftn` on the same volume). Status: bounded deviation, scoped to `double`.
 See `docs/COMPATIBILITY.md`'s "`FGMS` and `FFFT`: resolved (Epic 4 Phase 2)"
-and `src/opcodes/ffft.cpp`'s `StatusNote` for the full diagnostic writeup.
+and `src/opcodes/ffft.cpp`'s `StatusNote` for the full evidence trail.
 The table below is kept as the original mapping-pass record.
 
 | Field | Value |
