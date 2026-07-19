@@ -578,11 +578,12 @@ Phase 2 added `SGAC`, `SLLS`, and `SSDLS` -- the first opcodes to genuinely
 consume a second image volume (`inputArray2`) rather than accept-and-ignore
 it. Epic 4 Phase 1 added `RD` and `RTPS`, the first `Category::kRegistration`
 opcodes -- see "RD and RTPS: the first registration opcodes" below. `RTPS`'s
-own initial fixture was a rejection only; a follow-up reference-host capture
-round (`s14`, six more fixtures) then settled its calling convention and
-supplied five successful captures, promoting it out of smoke-tested. All
-seven (FMMCF, SFM, SGAC, SLLS, SSDLS, RD, RTPS) have their own captured
-fixture(s), measured the same way. The status ladder now splits the 37 into
+own initial fixture was a rejection only; two follow-up reference-host
+capture rounds (`s14`, nine more fixtures) then settled its calling
+convention, supplied eight successful captures, and isolated the exact
+cause of its two initially-unexplained residuals, promoting it out of
+smoke-tested. All seven (FMMCF, SFM, SGAC, SLLS, SSDLS, RD, RTPS) have
+their own captured fixture(s), measured the same way. The status ladder now splits the 37 into
 three tiers by that measurement, not by guesswork:
 
 - **Validated (15):** FBB, FBD, FBE, FBT, FD, FF, FGM, FMEAN, FMEDIAN,
@@ -627,13 +628,14 @@ three tiers by that measurement, not by guesswork:
   same category as FCA/FMMCF rather than SFM/SLLS/SSDLS's noise-floor
   category -- see "RD and RTPS: the first registration opcodes" below and
   `src/opcodes/rd.cpp`'s own `StatusNote`. RTPS (Epic 4 Phase 1, `s14`
-  capture round) has five captured fixtures (double only): three are at
-  the floating-point noise floor (RMS 2.12e-10, 2.00e-10, 2.63e-12), the
-  other two (structurally degenerate landmark sets) have a real, modest
-  residual (RMS 2.226571 and 3.647131) — see "RD and RTPS: the first
-  registration opcodes" below and `src/opcodes/rtps.cpp`'s own
-  `StatusNote` for the full evidence, including how the calling
-  convention itself was determined.
+  capture round, two rounds) has eight captured fixtures (double only):
+  six are at the floating-point noise floor (RMS <= 5.26e-12), the other
+  two plus a third round-2 capture have a real, modest residual (RMS
+  2.226571, 3.647131, 4.159985) traced specifically to fewer than 3
+  distinct landmark pairs, not coplanarity as first suspected — see "RD
+  and RTPS: the first registration opcodes" below and
+  `src/opcodes/rtps.cpp`'s own `StatusNote` for the full evidence,
+  including how the calling convention itself was determined.
 - **Smoke-tested (1):** FAAB. Its disagreement with the
   original is large enough (RMS in the hundreds) that pinning a bound
   would not be a useful signal — see "SWS and FAAB: not bounded" below.
@@ -673,7 +675,7 @@ status reflects its OTHER captured points, not that class.
 | SNC | 73.3 (double) | 255.0 (double) | radius [1,1,1] and base-threshold fixtures exact |
 | SSDLS | 6.7e-8 (double) | 5.3e-6 (double) | floating-point noise floor, raw un-thresholded output; only one fixture (double); uint8/int32 unmeasured |
 | RD | 4.63626 (double) | 88.0 (double) | full input intensity range; only one fixture (double); uint8/int32 unmeasured |
-| RTPS | 3.647131 (double) | 88.0 (double) | worst of 2 degenerate-landmark captures; 3 well-posed captures at the floating-point noise floor (RMS <= 2.12e-10) instead; only double captured, uint8/int32/single unmeasured |
+| RTPS | 4.159985 (double) | 88.0 (double) | worst of 3 captures with fewer than 3 distinct landmark pairs; 6 well-posed (3+ distinct pairs) captures at the floating-point noise floor (RMS <= 5.3e-12) instead; only double captured, uint8/int32/single unmeasured |
 
 The remaining 3 opcodes are catalogued in `docs/matitk_opcode_registry.txt`
 (the original binary's own parameter dump)
@@ -1017,41 +1019,59 @@ out a wiring bug as the residual's source in the two remaining captures
 below, since the wiring is identical across all five and three of them
 match essentially exactly.
 
-**The other two `s14` captures have a real, modest, measured residual,
-not a wiring problem.** `rtps_pairs4_identity_double` (RMS 2.226571,
+**Two of the five round-1 captures have a real, modest, measured
+residual, not a wiring problem -- and a round-2 follow-up capture
+isolated exactly why.** `rtps_pairs4_identity_double` (RMS 2.226571,
 58566/442368 voxels differ, 13.2%) and `rtps_pair1_minimal_double` (RMS
 3.647131, 100523/442368 voxels differ, 22.7%) both involve landmark
-configurations that are structurally degenerate for a thin-plate spline,
-not merely coincidentally hard: `pairs4_identity`'s four interleaved
-pairs collapse to only TWO distinct (source,target) pairs, each supplied
-twice -- verified directly, pair 1 equals pair 3 and pair 2 equals pair
-4, exactly -- a rank-deficient landmark system (the same coplanar
-4-point set that made this capture's own affine part underdetermined
-even before the duplication is compounded by two literally identical
-rows in the fitting matrix). `pair1_minimal` supplies only one landmark
-pair, far below the four non-degenerate pairs a 3-D thin-plate spline's
-affine component needs to be well-determined. Both residuals are
-consistent with ITK's SVD-based pseudo-inverse resolving a near-singular
-or severely underdetermined system slightly differently between 2.4 (the
-original's 2006 build) and 5.4, the same upstream-numerics-evolution
-category as `FCA`/`SNC`/`SWS` elsewhere in this project -- not tuned
-away, measured and asserted as-is in `tests/tReferenceBounded.m`.
+configurations that are structurally degenerate for a thin-plate spline.
+The first hypothesis tried here was coplanarity: `pairs4_identity`'s
+four interleaved pairs collapse to only TWO distinct (source,target)
+pairs, each supplied twice (verified directly, pair 1 equals pair 3 and
+pair 2 equals pair 4 exactly), built from a coplanar 4-point source set.
+A second capture round (`s14`, round 2: `rtps_coplanar3_distinct_double`,
+`rtps_pairs2_distinct_double`, `rtps_pairs3_distinct_double`) tested this
+directly and DISPROVED it: `rtps_coplanar3_distinct_double` (3 DISTINCT
+pairs, sources coplanar, no duplication) reproduces EXACTLY (RMS
+8.146892e-13) -- coplanarity alone is not the cause.
+`rtps_pairs3_distinct_double` (3 distinct, well-spread, non-coplanar
+pairs) is likewise exact (RMS 5.264589e-12), while
+`rtps_pairs2_distinct_double` (only 2 distinct pairs) has a real residual
+(RMS 4.159985, comparable in kind to `pair1_minimal`'s single pair).
+**The threshold is the number of DISTINCT landmark pairs: 3 or more
+reproduces exactly (regardless of coplanarity), fewer than 3 leaves a
+real, measured residual.** This also explains `pairs4_identity`
+precisely: its 4 landmark pairs carry only 2 pieces of DISTINCT
+information (the duplication), the same effective count as
+`pairs2_distinct`, and its residual is the same order of magnitude.
+All of this is consistent with ITK's SVD-based pseudo-inverse resolving
+an underdetermined augmented least-squares system slightly differently
+between 2.4 (the original's 2006 build) and 5.4 once fewer than 3
+distinct correspondences are available to constrain it -- the same
+upstream-numerics-evolution category as `FCA`/`SNC`/`SWS` elsewhere in
+this project, not tuned away, measured and asserted as-is in
+`tests/tReferenceBounded.m`. Six captures spanning coplanar and
+non-coplanar, identity and translation, and symmetric and asymmetric
+volumes all reproduce exactly under the identical wiring, which rules
+out a systematic wiring error as the source of the remaining three
+residuals.
 
-`rtps_odd3_reject_double` (three landmarks, captured alongside the five
-successes) is a second rejection fixture, confirming the even-count
-requirement independently of the original round-1 capture; both
-rejections are asserted in `tests/tReferenceRejections.m`.
+`rtps_odd3_reject_double` (three landmarks, captured in round 1 alongside
+the five round-1 successes) is a second rejection fixture, confirming
+the even-count requirement independently of the original round-1
+single-seed capture; both rejections are asserted in
+`tests/tReferenceRejections.m`.
 
-**RTPS's status is now bounded-deviation, not smoke-tested.** Five
-successful fixtures exist (all double only; `uint8`/`int32`/`single`
-carry no agreement claim and promote to `float` internally, same as
-every other promoted opcode). The internal identity self-check Phase 1
-used as a stand-in for reference evidence (`volumeA==volumeB` with
-matching source/target landmarks reproduces the input exactly) still
-holds, but now under the CORRECT interleaved reading -- a landmark list
-built from repeated `(p_i, p_i)` pairs, not Phase 1's
-`[p1 p2 ... pN p1 p2 ... pN]`, which the `s14` captures proved is not an
-identity map at all under the real convention.
+**RTPS's status is now bounded-deviation, not smoke-tested.** Eight
+successful fixtures exist across the two `s14` rounds (all double only;
+`uint8`/`int32`/`single` carry no agreement claim and promote to `float`
+internally, same as every other promoted opcode). The internal identity
+self-check Phase 1 used as a stand-in for reference evidence
+(`volumeA==volumeB` with matching source/target landmarks reproduces the
+input exactly) still holds, but now under the CORRECT interleaved
+reading -- a landmark list built from repeated `(p_i, p_i)` pairs, not
+Phase 1's `[p1 p2 ... pN p1 p2 ... pN]`, which the `s14` captures proved
+is not an identity map at all under the real convention.
 
 ### Seed coordinate convention
 

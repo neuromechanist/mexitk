@@ -13,13 +13,15 @@ underway: Phase 1 added `RD` (Demons deformable registration, bounded
 deviation -- one fixture, RMS 4.63626/max-abs 88) and `RTPS`
 (thin-plate-spline landmark warping), the first `Category::kRegistration`
 opcodes. `RTPS` shipped smoke-tested on an inferred landmark convention
-(only a rejection fixture existed); a follow-up reference-host capture
-round (`s14`, six fixtures) disproved that inference and settled the real
-one (interleaved landmarks, volumeB fixed/volumeA moving -- the opposite
-of `RD`), promoting `RTPS` to bounded-deviation (3 of 5 new fixtures at
-the floating-point noise floor, 2 with a real modest residual from
-degenerate landmark configurations). See `docs/COMPATIBILITY.md`'s "RD
-and RTPS: the first registration opcodes" for the full evidence trail.
+(only a rejection fixture existed); two follow-up reference-host capture
+rounds (`s14`, nine fixtures total) disproved that inference and settled
+the real one (interleaved landmarks, volumeB fixed/volumeA moving -- the
+opposite of `RD`), promoting `RTPS` to bounded-deviation (6 of 8 new
+fixtures at the floating-point noise floor; the other 2, plus a third
+round-2 capture, have a real modest residual traced specifically to
+fewer than 3 distinct landmark pairs, not coplanarity as first
+suspected). See `docs/COMPATIBILITY.md`'s "RD and RTPS: the first
+registration opcodes" for the full evidence trail.
 Remaining: `SCSS` (will not implement), `FGMS`, `FFFT`. See
 `docs/COMPATIBILITY.md`'s Coverage section for the authoritative tier
 breakdown; the `## Done` log below is a historical record that stops at
