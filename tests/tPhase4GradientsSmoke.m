@@ -315,10 +315,20 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             % threshold (1e-300) that also can never trigger early
             % stopping within 50 iterations, confirming the two really do
             % take the same code path rather than coincidentally matching.
+            % Negative control, so the equality above cannot pass
+            % vacuously by maximumRMSError having no effect at all on this
+            % config: the registry's own default (0.01) DOES trigger early
+            % stopping within 50 iterations and produces a measurably
+            % different result (measured: 73157/442368 voxels differ, max
+            % abs diff 1), so a broken guard that let NaN silently fall
+            % back to some OTHER default, rather than genuinely disabling
+            % early stopping, would be caught here.
             B = 255 * double(tc.Vu > 33);
             outNan = mexitk('FAAB', [NaN 50 2], B);
             outNeverTriggers = mexitk('FAAB', [1e-300 50 2], B);
+            outNormalThreshold = mexitk('FAAB', [0.01 50 2], B);
             tc.verifyEqual(outNan, outNeverTriggers);
+            tc.verifyNotEqual(outNan, outNormalThreshold);
         end
 
         function faabUint8ClampsOutsideToZero(tc)
