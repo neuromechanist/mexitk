@@ -42,8 +42,9 @@ set(MEXITK_ITK_COMPONENTS
   ITKDistanceMap           # FDM, FDMV: DanielssonDistanceMapImageFilter
   ITKLabelVoting           # FVBIH: VotingBinaryIterativeHoleFillingImageFilter
   ITKImageGradient         # FGM, FGMRG: GradientMagnitude(RecursiveGaussian)ImageFilter
-  ITKCurvatureFlow         # FCF: CurvatureFlowImageFilter
+  ITKCurvatureFlow         # FCF, FMMCF: (MinMax)CurvatureFlowImageFilter
   ITKAntiAlias             # FAAB: AntiAliasBinaryImageFilter (pulls ITKLevelSets transitively)
+  ITKFastMarching          # SFM: FastMarchingImageFilter
 )
 find_package(ITK 5.4 REQUIRED COMPONENTS ${MEXITK_ITK_COMPONENTS})
 
