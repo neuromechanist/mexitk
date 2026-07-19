@@ -192,27 +192,47 @@ classdef tPhase2MorphologySmoke < matlab.unittest.TestCase
             end
         end
 
-        function voronoiLabelsDrawnFromInput(tc)
-            % A pure binary 0/255 input yields a uniform-255 Voronoi map
-            % (still subset of the input set, still != FDM); the multi-band
-            % input makes the partition non-trivial and is the honest
-            % exercise of the nearest-object property. Verified on both
-            % double and uint8 label volumes.
+        function voronoiIdsAreSequentialNotDrawnFromInput(tc)
+            % Epic 2 Phase 3 disproved the earlier assumption this test was
+            % named for: Voronoi labels are NOT drawn from the input's own
+            % pixel values. They are a sequential per-object-voxel id
+            % (scan-order over the permuted volume), rescaled to
+            % [0, typeMax] -- except on uint8 output, which wraps the raw
+            % id via standard unsigned overflow instead (see
+            % src/opcodes/fdm.cpp), so it alone is excluded from the
+            % "all distinct" check below (256 wrapped values cannot stay
+            % distinct across 65010 object voxels; that collision is
+            % expected, not a bug).
             for f = {@double, @uint8}
                 lab = f{1}(tPhase2MorphologySmoke.labels(tc.V));
                 vor = mexitk('FDMV', [], lab);
                 d = mexitk('FDM', [], lab);
-                tc.verifyEmpty(setdiff(unique(vor(:)), unique(lab(:))));
                 tc.verifyNotEqual(vor, d);
             end
+            % Verified directly: among the 65010 voxels sharing input label
+            % value 1 in the "labels" fixture, all 65010 receive DISTINCT
+            % FDMV output values on the double path -- if labels were drawn
+            % from input, they would all share one value instead. See
+            % docs/COMPATIBILITY.md.
+            lab = tPhase2MorphologySmoke.labels(tc.V);
+            vor = mexitk('FDMV', [], lab);
+            sameInputVoxels = vor(lab == 1);
+            tc.verifyEqual(numel(unique(sameInputVoxels)), numel(sameInputVoxels));
         end
 
-        function distanceIsExactlyOneAtSixAdjacentBackground(tc)
+        function sixAdjacentBackgroundSharesTheMinimalRescaledDistance(tc)
             % A background voxel that is 6-connected-adjacent to a
-            % foreground voxel is exactly grid-distance 1 away: the minimum
-            % possible nonzero distance. Verified empirically on the full
-            % binarized volume (26954 such voxels, all equal to 1, not just
-            % a single spot check) before writing this as a hard equality.
+            % foreground voxel is exactly grid-distance 1 away, the minimum
+            % possible nonzero raw distance -- but FDM's output is that raw
+            % distance RESCALED to [0, typeMax] (see src/opcodes/fdm.cpp),
+            % not the raw grid distance itself, so the expected value is no
+            % longer literally 1. What IS still true, and what this test
+            % now pins, is that every such voxel shares exactly the same
+            % rescaled value (the minimal nonzero distance value present
+            % anywhere in the output), since they all have the identical
+            % raw grid distance of 1. Verified empirically on the full
+            % binarized volume (26954 such voxels, all equal to the single
+            % value 1317.569..., not just a single spot check).
             b = tPhase2MorphologySmoke.binarize(tc.V);
             d = mexitk('FDM', [], b);
             fg = (b == 255);
@@ -225,34 +245,23 @@ classdef tPhase2MorphologySmoke < matlab.unittest.TestCase
             adj6(:, :, 1:end-1) = adj6(:, :, 1:end-1) | fg(:, :, 2:end);
             bgAdj6 = adj6 & ~fg;
             tc.verifyNotEmpty(find(bgAdj6, 1));
-            tc.verifyTrue(all(d(bgAdj6) == 1));
+            minNonzero = min(d(d > 0));
+            tc.verifyTrue(all(d(bgAdj6) == minNonzero));
         end
 
-        function distanceMapOnAllZeroVolume(tc)
-            % No foreground anywhere: after the ClampImageFilter fix, uint8
-            % is defined (previously UB, since ITK's internal float
-            % distance is far out of uint8 range here). Verified
-            % empirically, not assumed: the uint8 case is uniformly 255,
-            % but ONLY because saturation clips the entire non-uniform
-            % float distance field into the single value 255 -- the
-            % underlying float field is NOT itself uniform (see the double
-            % case below), so this is not the same claim as "distance from
-            % an empty volume is a constant".
+        function distanceMapRejectsAllZeroVolume(tc)
+            % Epic 2 Phase 3 changed this from a defined-but-meaningless
+            % saturated/gradient output into an outright rejection
+            % (mexitk:fdm:noObject): the original's own distance field over
+            % zero objects was found to be an artifact of the filter's
+            % internal initialization, not a defined answer to "distance to
+            % the nearest object" when there is no object. See deliberate
+            % deviation entry in docs/COMPATIBILITY.md.
             z8 = zeros(size(tc.Vu), 'uint8');
-            d8 = mexitk('FDM', [], z8);
-            tc.verifyEqual(unique(d8(:)), uint8(255));
-
-            % An initial assumption that the double (native, unclamped)
-            % case would ALSO be uniform (~443) was checked empirically and
-            % found FALSE: values range from about 294 to 443 across this
-            % volume's geometry, evidently some deterministic gradient from
-            % ITK's handling of a fully empty input, not a constant. Per
-            % project policy this is not tuned into a false "all equal"
-            % assertion; only the property that was actually verified
-            % (strictly positive everywhere) is asserted.
+            tc.verifyError(@() mexitk('FDM', [], z8), 'mexitk:fdm:noObject');
             z64 = zeros(size(tc.Vu));
-            d64 = mexitk('FDM', [], z64);
-            tc.verifyTrue(all(d64(:) > 0));
+            tc.verifyError(@() mexitk('FDM', [], z64), 'mexitk:fdm:noObject');
+            tc.verifyError(@() mexitk('FDMV', [], z64), 'mexitk:fdm:noObject');
         end
     end
 
