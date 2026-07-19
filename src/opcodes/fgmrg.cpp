@@ -98,9 +98,15 @@ class FgmrgOpcode : public Opcode {
   void Execute(OpContext& ctx) const override {
     // Same rationale as FLS's own sigma guard (shared RecursiveGaussian
     // base): sigma <= 0 is already caught by ITK's own exception
-    // (mexitk:itkException), unchanged here; that guard's `<= 0.0` does
-    // not catch NaN (confirmed empirically: silent all-NaN output, no
-    // exception), so only the non-finite gap is closed here.
+    // (mexitk:itkException), unchanged here. That guard's `<= 0.0` does
+    // not catch NaN or +Inf (confirmed empirically: silent all-NaN
+    // output, no exception) -- the actual pre-PR gap this guard closes.
+    // `-Inf` is different: `-Inf <= 0.0` is true, so ITK's own exception
+    // already caught it pre-PR too (as mexitk:itkException); this guard
+    // now intercepts it first instead, since it runs before RunFgmrg ever
+    // dispatches to the filter, so -Inf now surfaces as
+    // mexitk:FGMRG:sigma -- a deliberate, disclosed identifier change,
+    // not a new rejection.
     if (!std::isfinite((*ctx.params)[0])) {
       throw OpcodeError("mexitk:FGMRG:sigma", "sigma must be finite.");
     }

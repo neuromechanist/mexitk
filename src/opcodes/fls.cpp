@@ -102,11 +102,16 @@ class FlsOpcode : public Opcode {
     // sigma <= 0 is already caught by RecursiveGaussianImageFilter's own
     // itkExceptionMacro ("Sigma must be greater than zero.",
     // itkRecursiveGaussianImageFilter.hxx:330-333, surfaced here as
-    // mexitk:itkException) -- that constraint is unchanged. But that
+    // mexitk:itkException) -- that constraint is unchanged. That
     // exception's own guard is `m_Sigma <= 0.0`, which does not catch NaN
-    // (confirmed empirically: a NaN sigma instead silently returned an
-    // all-NaN output, no exception), so only the non-finite gap is closed
-    // here, param-guard hardening pass.
+    // or +Inf (confirmed empirically: a NaN or +Inf sigma instead
+    // silently returned an all-NaN output, no exception) -- that was the
+    // actual pre-PR gap this guard closes. `-Inf` is a different case:
+    // `-Inf <= 0.0` is true, so ITK's own exception already caught it
+    // pre-PR too (as mexitk:itkException); this guard now intercepts it
+    // first instead, since it runs before RunFls ever dispatches to the
+    // filter, so -Inf now surfaces as mexitk:FLS:sigma instead -- a
+    // deliberate, disclosed identifier change, not a new rejection.
     if (!std::isfinite((*ctx.params)[0])) {
       throw OpcodeError("mexitk:FLS:sigma", "sigma must be finite.");
     }

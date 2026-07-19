@@ -399,13 +399,20 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
         end
 
         function fgmrgRejectsNonFiniteSigma(tc)
-            % ITK's own `<= 0.0` exception guard does not catch NaN;
-            % verified directly before this mexitk-level guard existed, a
-            % NaN sigma silently returned an all-NaN output, no exception.
-            % The sign constraint above is unchanged; only the non-finite
-            % gap is new (param-guard hardening, Epic 3 issue #26).
+            % ITK's own `<= 0.0` exception guard does not catch NaN or
+            % +Inf; verified directly before this mexitk-level guard
+            % existed, a NaN or +Inf sigma silently returned an all-NaN
+            % output, no exception -- that was the actual pre-PR gap. The
+            % sign constraint above is unchanged for -Inf's own rejection,
+            % but its IDENTIFIER changes: `-Inf <= 0.0` is true, so ITK's
+            % own exception already rejected -Inf pre-PR too (as
+            % mexitk:itkException, see fgmrgRejectsNonPositiveSigma
+            % above); this guard now intercepts it first, so it surfaces
+            % as mexitk:FGMRG:sigma instead -- pinned here deliberately so
+            % that identifier change cannot silently move back.
             tc.verifyError(@() mexitk('FGMRG', NaN, tc.V), 'mexitk:FGMRG:sigma');
             tc.verifyError(@() mexitk('FGMRG', Inf, tc.V), 'mexitk:FGMRG:sigma');
+            tc.verifyError(@() mexitk('FGMRG', -Inf, tc.V), 'mexitk:FGMRG:sigma');
         end
 
         function flsRejectsNonPositiveSigma(tc)
@@ -415,9 +422,15 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
         end
 
         function flsRejectsNonFiniteSigma(tc)
-            % Same rationale as FGMRG's own non-finite guard.
+            % Same rationale as FGMRG's own non-finite guard, including
+            % the -Inf identifier change: ITK's own exception already
+            % rejected -Inf pre-PR (mexitk:itkException), but this guard
+            % now intercepts it first, surfacing mexitk:FLS:sigma instead
+            % -- pinned here deliberately so that cannot silently move
+            % back.
             tc.verifyError(@() mexitk('FLS', NaN, tc.V), 'mexitk:FLS:sigma');
             tc.verifyError(@() mexitk('FLS', Inf, tc.V), 'mexitk:FLS:sigma');
+            tc.verifyError(@() mexitk('FLS', -Inf, tc.V), 'mexitk:FLS:sigma');
         end
 
         function fvmiRejectsNonPositiveSigma(tc)
