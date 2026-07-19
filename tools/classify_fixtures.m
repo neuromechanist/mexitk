@@ -1,0 +1,214 @@
+function classify_fixtures(fixturesDir, matlabDir)
+%CLASSIFY_FIXTURES Re-run every committed fixture and print a verdict.
+%
+%   CLASSIFY_FIXTURES(FIXTURESDIR, MATLABDIR) reconstructs the input for
+%   every per-opcode fixture under FIXTURESDIR, calls the local mexitk build
+%   under MATLABDIR with the fixture's own parameters/seeds, and prints one
+%   verdict line per fixture plus a per-opcode summary. Both arguments are
+%   optional; they default to tests/fixtures and matlab, relative to this
+%   file's own repo root, so nothing here names a path specific to any one
+%   machine.
+%
+%   Verdicts:
+%     EXACT               - the original succeeded; mexitk's output is
+%                            isequal to the captured output (bit-exact,
+%                            including for multi-output fixtures).
+%     DEVIATES            - the original succeeded; mexitk's output differs.
+%                            RMS and max-abs difference are printed.
+%     EXPECTED-REJECTION  - the original rejected the call, and mexitk
+%                            rejects it too (both refuse the same input).
+%     MEXITK-ACCEPTS-MORE - the original rejected the call, but mexitk
+%                            accepts it and returns a defined result (a
+%                            deliberate "accept strictly more" deviation;
+%                            see docs/COMPATIBILITY.md).
+%     MEXITK-REJECTS      - the original succeeded, but mexitk refuses the
+%                            call (a deliberate "refuse to reproduce a
+%                            defect/UB" deviation; see
+%                            docs/COMPATIBILITY.md).
+%
+%   Fixture files without a top-level `fixture` struct (the older named-shape
+%   captures and the s12 cross-check probe summaries; see tests/
+%   tFixtureHygiene.m) are not per-opcode calls and are skipped, listed
+%   separately at the end.
+%
+%   This is the tool that produced the Epic 2 Phase 3 classification driving
+%   the status promotions in the opcode registry, docs/COMPATIBILITY.md, and
+%   README; re-run it after any change that could move agreement with the
+%   original (an ITK upgrade, a parameter-mapping fix) rather than editing
+%   those numbers by hand.
+%
+%       matlab -batch "addpath('matlab'); tools_classify_fixtures"
+%       matlab -batch "classify_fixtures('tests/fixtures', 'matlab')"
+%
+% SPDX-License-Identifier: BSD-3-Clause
+% Copyright (c) 2026, Seyed Yahya Shirazi <shirazi@ieee.org>
+% Swartz Center for Computational Neuroscience (SCCN),
+% Institute for Neural Computation (INC), UC San Diego.
+
+rootDir = fileparts(fileparts(mfilename('fullpath')));
+if nargin < 1 || isempty(fixturesDir)
+    fixturesDir = fullfile(rootDir, 'tests', 'fixtures');
+end
+if nargin < 2 || isempty(matlabDir)
+    matlabDir = fullfile(rootDir, 'matlab');
+end
+
+addpath(matlabDir);
+if isempty(which('mexitk'))
+    error('classify_fixtures:notBuilt', ...
+        'mexitk MEX not found on the path. Build it first; expected in %s', matlabDir);
+end
+
+d = dir(fullfile(fixturesDir, '*.mat'));
+names = sort({d.name});
+
+verdicts = struct('name', {}, 'opcode', {}, 'verdict', {}, 'detail', {});
+skipped = {};
+
+for i = 1:numel(names)
+    fname = names{i};
+    tag = fname(1:end-4);
+    data = load(fullfile(fixturesDir, fname));
+    if ~isfield(data, 'fixture')
+        skipped{end+1} = fname; %#ok<AGROW>
+        continue;
+    end
+    f = data.fixture;
+    [verdict, detail] = classifyOne(f);
+    verdicts(end+1) = struct('name', tag, 'opcode', f.opcode, ...
+        'verdict', verdict, 'detail', detail); %#ok<AGROW>
+    fprintf('%-45s %-11s %-20s %s\n', tag, f.opcode, verdict, detail);
+end
+
+fprintf('\n==== per-opcode summary ====\n');
+opcodes = unique({verdicts.opcode});
+opcodes = sort(opcodes);
+tallyVerdicts = {'EXACT', 'DEVIATES', 'EXPECTED-REJECTION', 'MEXITK-ACCEPTS-MORE', 'MEXITK-REJECTS'};
+for i = 1:numel(opcodes)
+    op = opcodes{i};
+    mask = strcmp({verdicts.opcode}, op);
+    counts = zeros(1, numel(tallyVerdicts));
+    for k = 1:numel(tallyVerdicts)
+        counts(k) = nnz(mask & strcmp({verdicts.verdict}, tallyVerdicts{k}));
+    end
+    fprintf('%-10s total=%-4d exact=%-3d deviates=%-3d expected-rejection=%-3d accepts-more=%-3d mexitk-rejects=%-3d\n', ...
+        op, nnz(mask), counts(1), counts(2), counts(3), counts(4), counts(5));
+end
+
+fprintf('\n==== skipped (no top-level fixture struct) ====\n');
+for i = 1:numel(skipped)
+    fprintf('  %s\n', skipped{i});
+end
+fprintf('\ntotal fixtures: %d, classified: %d, skipped: %d\n', ...
+    numel(names), numel(verdicts), numel(skipped));
+end
+
+function [verdict, detail] = classifyOne(f)
+try
+    vin = reconstructInput(f);
+catch err
+    verdict = 'RECONSTRUCT-ERROR';
+    detail = err.message;
+    return;
+end
+
+args = {f.opcode, f.params, vin};
+if isfield(f, 'seedArg')
+    args = [args, {cast([], class(vin))}, {f.seedArg}]; %#ok<CCAT>
+end
+
+isMultiOutput = isfield(f, 'outputs') && f.success;
+if isMultiOutput
+    n = f.numOutputs;
+else
+    n = 1;
+end
+
+try
+    if isMultiOutput
+        outs = cell(1, n);
+        [outs{1:n}] = mexitk(args{:});
+    else
+        out = mexitk(args{:});
+    end
+    mexitkSucceeded = true;
+catch mexErr
+    mexitkSucceeded = false;
+end
+
+if f.success
+    if ~mexitkSucceeded
+        verdict = 'MEXITK-REJECTS';
+        detail = sprintf('%s: %s', mexErr.identifier, mexErr.message);
+        return;
+    end
+    if isMultiOutput
+        allEqual = true;
+        worstRms = 0;
+        worstMax = 0;
+        for k = 1:n
+            if isequal(outs{k}, f.outputs{k})
+                continue;
+            end
+            allEqual = false;
+            dk = double(outs{k}(:)) - double(f.outputs{k}(:));
+            worstRms = max(worstRms, sqrt(mean(dk .^ 2)));
+            worstMax = max(worstMax, max(abs(dk)));
+        end
+        if allEqual
+            verdict = 'EXACT';
+            detail = sprintf('%d outputs', n);
+        else
+            verdict = 'DEVIATES';
+            detail = sprintf('worst rms=%.6g maxabs=%.6g (over %d outputs)', worstRms, worstMax, n);
+        end
+    else
+        if isequal(out, f.output)
+            verdict = 'EXACT';
+            detail = '';
+        else
+            d = double(out(:)) - double(f.output(:));
+            verdict = 'DEVIATES';
+            detail = sprintf('rms=%.6g maxabs=%.6g ndiff=%d/%d', ...
+                sqrt(mean(d .^ 2)), max(abs(d)), nnz(d), numel(d));
+        end
+    end
+else
+    if mexitkSucceeded
+        verdict = 'MEXITK-ACCEPTS-MORE';
+        detail = 'original rejected this input; mexitk runs and returns a defined result';
+    else
+        verdict = 'EXPECTED-REJECTION';
+        detail = sprintf('%s: %s', mexErr.identifier, mexErr.message);
+    end
+end
+end
+
+function vin = reconstructInput(f)
+% Duplicates tests/mexitkFixture.m's reconstruction logic rather than
+% calling it directly: mexitkFixture.m resolves its fixtures directory from
+% its own file location (fixed to the committed tests/fixtures/, for use
+% inside the test suite), while this tool accepts an arbitrary FIXTURESDIR
+% parameter and must reconstruct purely from the loaded fixture struct.
+if isfield(f, 'inputRecipe') && ~isempty(f.inputRecipe)
+    mri = load('mri');
+    V = squeeze(mri.D); %#ok<NASGU> referenced by name inside the eval'd recipe
+    eval([f.inputRecipe ';']);
+    if exist('b', 'var')
+        vin = b;
+    else
+        vin = ans; %#ok<NOANS>
+    end
+else
+    mri = load('mri');
+    V = squeeze(mri.D);
+    switch f.inputClass
+        case 'double', vin = double(V);
+        case 'single', vin = single(V);
+        case 'uint8',  vin = V;
+        case 'int32',  vin = int32(V);
+        otherwise
+            error('classify_fixtures:inputClass', 'Unhandled input class %s', f.inputClass);
+    end
+end
+end
