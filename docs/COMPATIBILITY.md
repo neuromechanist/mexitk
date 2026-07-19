@@ -569,16 +569,19 @@ or refuses to reproduce a defect.
 
 ## Coverage
 
-`mexitk` currently implements **35 of the original's 40 opcodes**. Epic 2
+`mexitk` currently implements **37 of the original's 40 opcodes**. Epic 2
 Phases 1-3 extended the capture harness to 30 of them, captured reference
 fixtures for every one, and measured `mexitk`'s own agreement against every
 fixture (`tools/classify_fixtures.m`; see "Second capture campaign: Phase 3
 findings" above for how). Epic 3 Phase 1 added `FMMCF` and `SFM`; Epic 3
 Phase 2 added `SGAC`, `SLLS`, and `SSDLS` -- the first opcodes to genuinely
 consume a second image volume (`inputArray2`) rather than accept-and-ignore
-it. All five have their own captured fixture, measured the same way. The
-status ladder now splits the 35 into three tiers by that measurement, not by
-guesswork:
+it. Epic 4 Phase 1 added `RD` and `RTPS`, the first `Category::kRegistration`
+opcodes -- see "RD and RTPS: the first registration opcodes" below. All
+seven (FMMCF, SFM, SGAC, SLLS, SSDLS, RD, RTPS) have their own captured
+fixture(s), measured the same way, except RTPS: its one fixture is a
+rejection, not a successful capture (see below). The status ladder now
+splits the 37 into three tiers by that measurement, not by guesswork:
 
 - **Validated (15):** FBB, FBD, FBE, FBT, FD, FF, FGM, FMEAN, FMEDIAN,
   FVBIH, SCC, SCT, SGAC, SIC, SOT.
@@ -589,9 +592,9 @@ guesswork:
   than a defined reference (SCC's empty-seed fixture; see above) — those
   are asserted separately in `tests/tReferenceRejections.m` with no
   agreement claim.
-- **Bounded deviation (19):** FCA, SWS (their own dedicated sections
+- **Bounded deviation (20):** FCA, SWS (their own dedicated sections
   above), FBL, FCF, FDG, FDM, FDMV, FGA, FGAD, FGMRG, FLS, FMMCF, FOMT,
-  FSN, FVMI, SFM, SLLS, SNC, SSDLS.
+  FSN, FVMI, SFM, SLLS, SNC, SSDLS, RD.
   Runs the same ITK filter with the same parameters, but does not
   reproduce the original bit-for-bit; the difference is measured and
   bounded (`tests/tReferenceBounded.m`, plus FCA/SWS/FOMT's own dedicated
@@ -614,8 +617,15 @@ guesswork:
   thresholding, not an algorithmic difference; SSDLS's residual (RMS
   6.7e-8, max-abs 5.25e-6, on its raw un-thresholded output) is the same
   noise-floor category as SFM's — see their own `StatusNote`s in
-  `src/opcodes/slls.cpp` / `src/opcodes/ssdls.cpp`.
-- **Smoke-tested (1):** FAAB. Its disagreement with the
+  `src/opcodes/slls.cpp` / `src/opcodes/ssdls.cpp`. RD (Epic 4 Phase 1)
+  also has exactly one captured fixture (double only): its residual (RMS
+  4.63626, max-abs 88 -- the full 0-88 input intensity range -- on
+  173173/442368 voxels, 39.1%) is far above the floating-point noise
+  floor, a real numerics difference in the iterative Demons solver, the
+  same category as FCA/FMMCF rather than SFM/SLLS/SSDLS's noise-floor
+  category -- see "RD and RTPS: the first registration opcodes" below and
+  `src/opcodes/rd.cpp`'s own `StatusNote`.
+- **Smoke-tested (2):** FAAB, RTPS. FAAB's disagreement with the
   original is large enough (RMS in the hundreds) that pinning a bound
   would not be a useful signal — see "SWS and FAAB: not bounded" below.
 
@@ -653,8 +663,9 @@ status reflects its OTHER captured points, not that class.
 | SLLS | 6.42 (double) | 255.0 (double) | 280/442368 voxels (0.063%) flip category near the zero crossing; only one fixture (double); uint8/int32 unmeasured |
 | SNC | 73.3 (double) | 255.0 (double) | radius [1,1,1] and base-threshold fixtures exact |
 | SSDLS | 6.7e-8 (double) | 5.3e-6 (double) | floating-point noise floor, raw un-thresholded output; only one fixture (double); uint8/int32 unmeasured |
+| RD | 4.63626 (double) | 88.0 (double) | full input intensity range; only one fixture (double); uint8/int32 unmeasured |
 
-The remaining 5 opcodes are catalogued in `docs/matitk_opcode_registry.txt`
+The remaining 3 opcodes are catalogued in `docs/matitk_opcode_registry.txt`
 (the original binary's own parameter dump)
 and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`,
 but they are **not implemented**.
@@ -678,7 +689,7 @@ numbers above are the honest record, not a target.
 
 ## Opcode-to-ITK-class reference
 
-This table covers all 35 implemented opcodes regardless of tier (it
+This table covers all 37 implemented opcodes regardless of tier (it
 predates the validated/bounded-deviation/smoke-tested split above, and is
 kept as a single reference rather than split three ways).
 
@@ -709,6 +720,8 @@ kept as a single reference rather than split three ways).
 | FSN | `SigmoidImageFilter` |
 | FVBIH | `VotingBinaryIterativeHoleFillingImageFilter` |
 | FVMI | `HessianRecursiveGaussianImageFilter` + `Hessian3DToVesselnessMeasureImageFilter` |
+| RD | `HistogramMatchingImageFilter` + `DemonsRegistrationFilter` + `WarpImageFilter` (see "RD and RTPS" below) |
+| RTPS | `ThinPlateSplineKernelTransform` + `ResampleImageFilter` (see "RD and RTPS" below) |
 | SCC | `ConfidenceConnectedImageFilter` |
 | SCT | `ConnectedThresholdImageFilter` |
 | SFM | `FastMarchingImageFilter` |
@@ -849,6 +862,133 @@ other two.
 Full detail, including the exact measured residuals and the swapped-role
 control numbers, is in each opcode's own `StatusNote()`:
 `src/opcodes/sgac.cpp`, `src/opcodes/slls.cpp`, `src/opcodes/ssdls.cpp`.
+
+### RD and RTPS: the first registration opcodes
+
+`RD` (Demons deformable registration) and `RTPS` (thin-plate-spline
+landmark warping) are Epic 4 Phase 1's two additions, the first opcodes in
+`Category::kRegistration`. They land in very different places on the
+status ladder: `RD` has a successful reference fixture and a measured
+bounded deviation; `RTPS` has only a rejection fixture and is capped at
+smoke-tested, since there is nothing to measure agreement against.
+
+**RD: fixed/moving role assignment, determined by the same swap-test
+method as SGAC.** The registry (`docs/matitk_opcode_registry.txt`) gives
+no role hint -- it only dumps the four numeric parameters. Built both
+ways and run against `rd_demons_volB_double` (`NumberOfHistogramLevels
+=1024, NumberOfMatchPoints=7, DemonNumberofIterations=150,
+DemonStandardDeviations=1`, `volumeB=circshift(volumeA,[3 3 1])`): with
+volumeA fixed / volumeB moving, RMS 4.63626, max-abs 88, 173173/442368
+voxels differ (39.1%); with the roles swapped, RMS 21.7, 189263/442368
+voxels differ (42.8%) -- clearly worse, not merely different, so
+volumeA=fixed / volumeB=moving is the assignment used, though neither
+wiring reaches bit-exactness. **This is a real, measured numerics
+difference, not floating-point noise**: `numberOfIterations=0` is
+confirmed an exact identity no-op (warping by an all-zero displacement
+field returns the moving image unchanged, 0/442368 voxels differ),
+ruling out a basic wiring error, so the residual traces to the Demons
+solver's own 150-iteration numerics having moved between ITK 2.4 and
+5.4 -- the same broad category as `FCA`/`FMMCF` (an iterative PDE-style
+solver whose exact per-step arithmetic evolved upstream), not the
+floating-point-noise-floor category `SFM`/`SLLS`/`SSDLS` fall into. Two
+consecutive local runs were compared bit-for-bit before comparing
+against the fixture at all, to rule out iterative/multithreaded
+nondeterminism as a confound (registration is both); they matched
+exactly. Only one fixture exists (double), so `uint8`/`int32`/`single`
+carry no agreement claim; they promote to `float` internally the same as
+every other promoted opcode.
+
+**RD: which image gets warped, the original moving image or the
+histogram-matched intermediate.** The classic ITK Demons registration
+example (`HistogramMatchingImageFilter` feeding `DemonsRegistrationFilter`
+feeding `WarpImageFilter`) warps the ORIGINAL pre-match moving image with
+the resulting displacement field, using the histogram-matched image only
+as the Demons filter's own input -- histogram matching is a computational
+aid for registration, not something meant to survive into the final
+output. `mexitk` follows that convention, but `rd_demons_volB_double`
+cannot independently prove it either way: `volumeB` is
+`circshift(volumeA,[3 3 1])`, so both images share EXACTLY the same
+histogram (a circular shift permutes voxel positions, not values), and
+histogram-matching an image against its own histogram is very close to
+identity here -- measured directly, warping `matcher->GetOutput()`
+instead of the original moving image produces bit-identical `mexitk`
+output on this fixture. A future fixture with genuinely different
+fixed/moving intensity distributions would be needed to settle this
+independently; see `src/opcodes/rd.cpp`.
+
+**`SetStandardDeviations` is silently inert unless smoothing is
+explicitly enabled.** `PDEDeformableRegistrationFilter::
+m_SmoothDisplacementField` default-initializes to `false`, and
+`DemonsRegistrationFilter`'s own constructor never touches it -- a real
+silent-failure trap, not a hypothetical one (this is why it was flagged
+in `docs/itk_opcode_mapping.md` before implementation even began). `RD`
+calls `SmoothDisplacementFieldOn()` explicitly; removing it would make
+`DemonStandardDeviations` a parameter that is accepted, validated, and
+then silently ignored.
+
+**RTPS: only a rejection fixture exists.** The one captured fixture
+(`rtps_tps_volB_seedS1_double`, a single seed point `[70 50 14]`) is a
+FAILED capture: the original's full error text is `This method requires
+landmarks.  Each landmark should be 3-dimensional, and there should be
+even number of landmarks (source->target)`. This proves three things and
+no more: landmarks ride the seed argument (arg5); a single landmark point
+is refused; the count must be even. `mexitk` reproduces exactly that --
+`mexitk:RTPS:landmarks` on an empty or odd-count landmark list -- and
+this rejection fixture is asserted in `tests/tReferenceRejections.m`
+(`bothRejectTheSameInput`). No stricter minimum (e.g. requiring at least
+4 point pairs, the number a 3-D thin-plate spline's affine component
+needs to be fully determined) is enforced: the original's own message
+states no such minimum, and inventing one without evidence would risk
+refusing an input the original accepted.
+
+**RTPS: everything past "even and nonempty" is inferred, not
+fixture-proven**, so `RTPS` is capped at smoke-tested rather than
+bounded-deviation -- there is no successful capture to measure agreement
+against. Three separate inferences, each documented in
+`src/opcodes/rtps.cpp` and its `StatusNote`:
+
+1. **Split-in-half landmark convention.** The flat landmark list's first
+   half is treated as the source-landmark set and the second half as the
+   target-landmark set, matching the Insight Software Guide's own
+   landmark-warping worked example (a full source list, then a full
+   target list, not interleaved pairs). An interleaved convention
+   (source1, target1, source2, target2, ...) was not ruled out by any
+   fixture.
+2. **Fixed/moving role assignment.** Carried over from RD's own
+   swap-tested determination (volumeA fixed, volumeB moving) for
+   consistency between this epic's two registration opcodes, not
+   independently confirmed for RTPS.
+3. **Source=fixed-space / target=moving-space wiring into Resample.**
+   The standard convention for plugging a `KernelTransform` directly into
+   `ResampleImageFilter` without inverting it (`ResampleImageFilter` calls
+   `transform->TransformPoint(outputPoint)` to find the corresponding
+   input point, and `KernelTransform::TransformPoint` maps
+   source-landmark space to target-landmark space by construction, so
+   source landmarks must be expressed in the fixed/output image's space
+   for that call to mean what `Resample` needs) -- not a fixture finding.
+
+**What internal verification does exist**, short of a reference
+comparison: calling with `volumeA==volumeB` and IDENTICAL source/target
+landmark coordinates (a true no-op warp) reproduces the input EXACTLY
+(0/442368 voxels differ) once 4 or more well-spread landmark pairs are
+given, confirming the landmark indexing, the source/target convention,
+and the Resample wiring are all internally self-consistent, even though
+none of it is checked against the original. With only 1-2 pairs the
+identity check holds only at and near the given points -- expected, not a
+bug: a 3-D thin-plate spline's affine component needs at least 4
+non-degenerate point pairs to be determined, so fewer leave the transform
+genuinely underdetermined elsewhere, and ITK's SVD-based solve returns a
+defined but not-necessarily-identity answer there.
+
+**What would settle RTPS's open questions.** A targeted reference-host
+capture with several PAIRED landmarks (at least 4, to also exercise the
+well-determined case) and a geometrically distinctive `volumeB` (not a
+symmetric `circshift`, so a source/target or fixed/moving mixup would
+visibly misplace the result rather than looking coincidentally correct)
+would settle all three inferences above at once. This is a proposal for
+a future reference-host capture round, not something this phase
+attempted: reference-host work is coordinated separately from opcode
+implementation.
 
 ### Seed coordinate convention
 
@@ -1152,5 +1292,3 @@ Calling `mexitk('SCSS', ...)` returns an unknown-operation error, which is the h
   and needs verification against the original binary before implementation.
 - **`FFFT`**: the VNL FFT backend was removed from ITK and rerouted via pocketfft;
   the real/complex output switch semantics are unconfirmed.
-- **`RD`**: `SetStandardDeviations` is silently inert unless `SmoothDisplacementFieldOn()`
-  is also called, a real silent-failure trap to avoid inheriting.

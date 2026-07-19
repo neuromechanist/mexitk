@@ -31,7 +31,7 @@ src/
 ├── mexitk.cpp          # mexFunction entry: arg parsing, validation, dispatch, diagnostics
 ├── mexitk_common.h     # pixel-type dispatch + mxArray <-> itk::Image bridge (zero-copy import)
 ├── opcode.h/.cpp       # the opcode registry; RegisterBuiltinOpcodes() is the one list
-└── opcodes/            # 33 files for 35 opcodes: one file per opcode, except
+└── opcodes/            # 35 files for 37 opcodes: one file per opcode, except
                         # fdg.cpp (FDG + FGA) and fdm.cpp (FDM + FDMV), each a
                         # deliberate shared pair, not an accident
 matlab/                 # built MEX lands here; run_mexitk_tests.m
@@ -58,9 +58,12 @@ so documented status cannot drift from what the code claims.
 
 ### Honesty about validation is the product
 
-35 of 40 opcodes are implemented, and they are not equally trustworthy:
-15 are validated, 19 have a measured bounded deviation, and 1 (FAAB) is
-smoke-tested because its disagreement is too large to bound meaningfully.
+37 of 40 opcodes are implemented, and they are not equally trustworthy:
+15 are validated, 20 have a measured bounded deviation, and 2 are
+smoke-tested: FAAB because its disagreement is too large to bound
+meaningfully, RTPS because no successful reference capture exists at all
+(only a rejection fixture, proving the original refuses a single landmark
+point).
 `docs/COMPATIBILITY.md`'s Coverage section is the canonical tier list;
 update it and this paragraph together.
 The status ladder is load-bearing and appears in the code, in `mexitk('?')`, and in the README:

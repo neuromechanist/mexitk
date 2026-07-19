@@ -1,6 +1,24 @@
 # mexitk plan
 
-Status as of 2026-07-19. Version 0.4.0.
+Status as of 2026-07-19. Version 0.5.0.
+
+## Current state
+
+37 of 40 opcodes implemented (35 -> 37 this phase). Epics 1-3 are done:
+Epic 1 (30 opcodes, Phases 1-4, smoke-tested), Epic 2 (reference-capture
+campaign + Phase 3 status promotions, `docs/COMPATIBILITY.md`'s "Second
+capture campaign" sections), Epic 3 (`FMMCF`/`SFM`, then `SGAC`/`SLLS`/
+`SSDLS`, the first two-volume opcodes). Epic 4 (registration) is
+underway: Phase 1 added `RD` (Demons deformable registration, bounded
+deviation -- one fixture, RMS 4.63626/max-abs 88) and `RTPS`
+(thin-plate-spline landmark warping, smoke-tested -- only a rejection
+fixture exists), the first `Category::kRegistration` opcodes. Remaining:
+`SCSS` (will not implement), `FGMS`, `FFFT`. See
+`docs/COMPATIBILITY.md`'s Coverage section for the authoritative tier
+breakdown; the `## Done` log below is a historical record that stops at
+Epic 2 Phase 2 and is not being retroactively rewritten -- treat
+`docs/COMPATIBILITY.md` and the opcode registry as current truth, this
+log as how we got here.
 
 ## Done
 
@@ -405,4 +423,6 @@ Known problem cases:
   mesh output, global static state). Recommend dropping rather than porting.
 - **FGMS** could not be pinned to an ITK class; needs verification against the binary.
 - **FFFT** VNL FFT backend was removed; rerouted via pocketfft. Output semantics unconfirmed.
-- **RD** `SetStandardDeviations` is inert unless `SmoothDisplacementFieldOn()` is also called.
+- ~~**RD** `SetStandardDeviations` is inert unless `SmoothDisplacementFieldOn()` is also
+  called.~~ Resolved: `RD` is implemented (Epic 4 Phase 1) and calls
+  `SmoothDisplacementFieldOn()` explicitly; see `src/opcodes/rd.cpp`.
