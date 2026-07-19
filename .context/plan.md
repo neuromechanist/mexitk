@@ -16,11 +16,12 @@ opcodes. `RTPS` shipped smoke-tested on an inferred landmark convention
 (only a rejection fixture existed); two follow-up reference-host capture
 rounds (`s14`, nine fixtures total) disproved that inference and settled
 the real one (interleaved landmarks, volumeB fixed/volumeA moving -- the
-opposite of `RD`), promoting `RTPS` to bounded-deviation (6 of 8 new
-fixtures at the floating-point noise floor; the other 2, plus a third
-round-2 capture, have a real modest residual traced specifically to
-fewer than 3 distinct landmark pairs, not coplanarity as first
-suspected). See `docs/COMPATIBILITY.md`'s "RD and RTPS: the first
+opposite of `RD`), promoting `RTPS` to bounded-deviation (5 of 8 new
+fixtures at the floating-point noise floor; the other 3 have a real
+modest residual traced specifically to fewer than 3 distinct landmark
+pairs, not coplanarity as first suspected -- and not a monotonic shrink
+either, 2 distinct pairs measures worse than 1 before jumping to the
+noise floor at 3). See `docs/COMPATIBILITY.md`'s "RD and RTPS: the first
 registration opcodes" for the full evidence trail.
 Remaining: `SCSS` (will not implement), `FGMS`, `FFFT`. See
 `docs/COMPATIBILITY.md`'s Coverage section for the authoritative tier

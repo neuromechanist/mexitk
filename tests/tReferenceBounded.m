@@ -210,20 +210,30 @@ classdef tReferenceBounded < matlab.unittest.TestCase
             ...
             ... RTPS: ThinPlateSplineKernelTransform + Resample (Epic 4
             ... Phase 1, s14 reference-host capture round, two rounds, 8
-            ... successful captures). Six are at the floating-point noise
-            ... floor; the other two (rtps_pairs4_identity_double,
-            ... rtps_pair1_minimal_double) plus rtps_pairs2_distinct_double
-            ... below have a real, modest, measured residual. Round 2
+            ... successful captures: 5 at the floating-point noise floor,
+            ... 3 with a real, modest, measured residual). The 5 noise-
+            ... floor captures split into two magnitude bands, not one
+            ... uniform ceiling: 3 at RMS ~1e-12 (rtps_pairs4_translate_
+            ... double 2.63e-12, rtps_coplanar3_distinct_double 8.15e-13,
+            ... rtps_pairs3_distinct_double 5.26e-12) and 2 at RMS ~2e-10
+            ... (rtps_nc5_identity_double 2.12e-10, rtps_nc5_translate_
+            ... double 2.00e-10). The 3 with a real residual
+            ... (rtps_pairs4_identity_double, rtps_pair1_minimal_double,
+            ... rtps_pairs2_distinct_double) come from round 2
             ... (rtps_coplanar3_distinct_double, rtps_pairs2_distinct_double,
-            ... rtps_pairs3_distinct_double) isolated exactly why: the
-            ... threshold is 3+ DISTINCT landmark pairs, not coplanarity (3
-            ... distinct coplanar pairs reproduce exactly) and not raw pair
-            ... count (rtps_pairs4_identity_double's 4 pairs collapse to
-            ... only 2 distinct ones and shows the same residual class as
-            ... genuinely having only 2). Consistent with ITK's SVD-based
-            ... pseudo-inverse resolving an underdetermined system slightly
-            ... differently between 2.4 and 5.4, the same upstream-numerics-
-            ... evolution category as FCA/SNC/SWS -- see
+            ... rtps_pairs3_distinct_double), which isolated exactly why:
+            ... the threshold is 3+ DISTINCT landmark pairs, not
+            ... coplanarity (3 distinct coplanar pairs reproduce exactly)
+            ... and not raw pair count (rtps_pairs4_identity_double's 4
+            ... pairs collapse to only 2 distinct ones and shows the same
+            ... residual class as genuinely having only 2 --
+            ... rtps_pairs2_distinct_double). Not a monotonic shrink either:
+            ... 2 distinct pairs (RMS 4.16) is WORSE than 1 (RMS 3.65),
+            ... then reproduction jumps straight to the noise floor at 3 --
+            ... a threshold, not a gradual improvement. Consistent with
+            ... ITK's SVD-based pseudo-inverse resolving an underdetermined
+            ... system slightly differently between 2.4 and 5.4, the same
+            ... upstream-numerics-evolution category as FCA/SNC/SWS -- see
             ... src/opcodes/rtps.cpp's StatusNote for the full evidence,
             ... including how the convention itself was determined
             ... (interleaved landmarks, volumeB fixed/volumeA moving) and

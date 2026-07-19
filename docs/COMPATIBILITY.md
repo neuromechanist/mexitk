@@ -629,11 +629,12 @@ three tiers by that measurement, not by guesswork:
   category -- see "RD and RTPS: the first registration opcodes" below and
   `src/opcodes/rd.cpp`'s own `StatusNote`. RTPS (Epic 4 Phase 1, `s14`
   capture round, two rounds) has eight captured fixtures (double only):
-  six are at the floating-point noise floor (RMS <= 5.26e-12), the other
-  two plus a third round-2 capture have a real, modest residual (RMS
-  2.226571, 3.647131, 4.159985) traced specifically to fewer than 3
-  distinct landmark pairs, not coplanarity as first suspected — see "RD
-  and RTPS: the first registration opcodes" below and
+  five are at the floating-point noise floor, in two magnitude bands
+  (three at RMS ~1e-12, two at RMS ~2e-10 -- not one uniform ceiling);
+  the other three have a real, modest residual (RMS 2.226571, 3.647131,
+  4.159985) traced specifically to fewer than 3 distinct landmark pairs,
+  not coplanarity as first suspected — see "RD and RTPS: the first
+  registration opcodes" below and
   `src/opcodes/rtps.cpp`'s own `StatusNote` for the full evidence,
   including how the calling convention itself was determined.
 - **Smoke-tested (1):** FAAB. Its disagreement with the
@@ -675,7 +676,7 @@ status reflects its OTHER captured points, not that class.
 | SNC | 73.3 (double) | 255.0 (double) | radius [1,1,1] and base-threshold fixtures exact |
 | SSDLS | 6.7e-8 (double) | 5.3e-6 (double) | floating-point noise floor, raw un-thresholded output; only one fixture (double); uint8/int32 unmeasured |
 | RD | 4.63626 (double) | 88.0 (double) | full input intensity range; only one fixture (double); uint8/int32 unmeasured |
-| RTPS | 4.159985 (double) | 88.0 (double) | worst of 3 captures with fewer than 3 distinct landmark pairs; 6 well-posed (3+ distinct pairs) captures at the floating-point noise floor (RMS <= 5.3e-12) instead; only double captured, uint8/int32/single unmeasured |
+| RTPS | 4.159985 (double) | 88.0 (double) | worst of 3 captures with fewer than 3 distinct landmark pairs; 5 well-posed (3+ distinct pairs) captures at the floating-point noise floor instead (3 at RMS ~1e-12, 2 at RMS ~2e-10); only double captured, uint8/int32/single unmeasured |
 
 The remaining 3 opcodes are catalogued in `docs/matitk_opcode_registry.txt`
 (the original binary's own parameter dump)
@@ -880,15 +881,19 @@ control numbers, is in each opcode's own `StatusNote()`:
 `RD` (Demons deformable registration) and `RTPS` (thin-plate-spline
 landmark warping) are Epic 4 Phase 1's two additions, the first opcodes in
 `Category::kRegistration`. Both are now bounded-deviation, but `RTPS` got
-there in two steps: its own first captured fixture was a rejection only,
-enough to cap it at smoke-tested with an INFERRED calling convention; a
-follow-up reference-host capture round (`s14`,
-`tools/capture_reference/s14_rtps_landmarks.m`, six more fixtures) then
-disproved that inference outright and pinned down the real one. Both the
-original inference and what replaced it are recorded below, not just the
-final answer, because the wrong inference is itself useful evidence
-about what does and does not follow from "landmarks ride the seed
-argument, one point is rejected, the count must be even."
+there in three steps: its own first captured fixture was a rejection
+only, enough to cap it at smoke-tested with an INFERRED calling
+convention; `s14`'s first capture round
+(`tools/capture_reference/s14_rtps_landmarks.m`, six fixtures) then
+disproved that inference outright and pinned down the real one,
+promoting it to bounded-deviation; `s14`'s second round (three more
+fixtures) then isolated the exact cause of the two residual fixtures
+round 1 left unexplained, refining -- not changing -- the status. All
+three steps, including the disproven inference and the disproven
+"monotonic shrink" prediction from round 2's own plan, are recorded
+below, not just the final answer, because a wrong hypothesis is itself
+useful evidence about what does and does not follow from "landmarks
+ride the seed argument, one point is rejected, the count must be even."
 
 **RD: fixed/moving role assignment, determined by the same swap-test
 method as SGAC.** The registry (`docs/matitk_opcode_registry.txt`) gives
@@ -944,7 +949,7 @@ calls `SmoothDisplacementFieldOn()` explicitly; removing it would make
 `DemonStandardDeviations` a parameter that is accepted, validated, and
 then silently ignored.
 
-**RTPS, round 1: only a rejection fixture existed.** The one fixture
+**RTPS before `s14`: only a rejection fixture existed.** The one fixture
 captured before `s14` (`rtps_tps_volB_seedS1_double`, a single seed point
 `[70 50 14]`) is a FAILED capture: the original's full error text is
 `This method requires landmarks.  Each landmark should be 3-dimensional,
@@ -961,10 +966,11 @@ target=moving-space wiring into `ResampleImageFilter`. Status was capped
 at smoke-tested accordingly, since none of that was checked against the
 original.
 
-**RTPS, round 2: the `s14` captures disproved the inference directly.**
-`tools/capture_reference/s14_rtps_landmarks.m` captured six fixtures
-targeting exactly the two open questions the round-1 error text left
-open: does the landmark list split in half or interleave, and which
+**RTPS, `s14` round 1: the captures disproved the inference directly.**
+`tools/capture_reference/s14_rtps_landmarks.m`'s first round captured six
+fixtures targeting exactly the two open questions the original rejection
+fixture's error text left open: does the landmark list split in half or
+interleave, and which
 volume does the transform resample, in which direction. One structural
 finding surfaced along the way, worth recording on its own: the original
 rejects a landmark argument passed as a **matrix** with `Seed array must
@@ -1010,17 +1016,17 @@ is MOVING (the target-landmark/input space, the one actually
 resampled)** -- the OPPOSITE of `RD`'s own role assignment. With volumeB
 fixed, this capture reproduces at RMS 2.63e-12 (floating-point noise
 floor); with volumeA fixed (Phase 1's original, RD-consistent
-assumption), RMS is 37.7 -- not a close call. Three of the five `s14`
+assumption), RMS is 37.7 -- not a close call. Three of round 1's five
 successful captures (`nc5_identity`, `nc5_translate`, `pairs4_translate`)
 are therefore reproduced at the floating-point noise floor under
 INTERLEAVED landmarks + volumeB-fixed/volumeA-moving, with the
 source/target roles read literally (no further swap needed): this rules
-out a wiring bug as the residual's source in the two remaining captures
-below, since the wiring is identical across all five and three of them
-match essentially exactly.
+out a wiring bug as the residual's source in round 1's two remaining
+captures, since the wiring is identical across all five and three of
+them match essentially exactly.
 
-**Two of the five round-1 captures have a real, modest, measured
-residual, not a wiring problem -- and a round-2 follow-up capture
+**Two of round 1's five captures have a real, modest, measured
+residual, not a wiring problem -- and round 2's follow-up captures
 isolated exactly why.** `rtps_pairs4_identity_double` (RMS 2.226571,
 58566/442368 voxels differ, 13.2%) and `rtps_pair1_minimal_double` (RMS
 3.647131, 100523/442368 voxels differ, 22.7%) both involve landmark
@@ -1050,16 +1056,31 @@ between 2.4 (the original's 2006 build) and 5.4 once fewer than 3
 distinct correspondences are available to constrain it -- the same
 upstream-numerics-evolution category as `FCA`/`SNC`/`SWS` elsewhere in
 this project, not tuned away, measured and asserted as-is in
-`tests/tReferenceBounded.m`. Six captures spanning coplanar and
+`tests/tReferenceBounded.m`. Five captures spanning coplanar and
 non-coplanar, identity and translation, and symmetric and asymmetric
 volumes all reproduce exactly under the identical wiring, which rules
 out a systematic wiring error as the source of the remaining three
 residuals.
 
-`rtps_odd3_reject_double` (three landmarks, captured in round 1 alongside
-the five round-1 successes) is a second rejection fixture, confirming
-the even-count requirement independently of the original round-1
-single-seed capture; both rejections are asserted in
+**This is a threshold, not a gradual improvement -- a disproven
+assumption worth recording explicitly, the same way `FDMV`'s accessor
+guess and `SOT`'s inside-value default are recorded above once
+measurement contradicted them.** Round 2's own plan predicted the
+residual would shrink monotonically as distinct-pair count rose from 1
+toward 4+; it does not. The full sequence, ordered by distinct-pair
+count: 1 pair (`pair1_minimal`, RMS 3.647131), 2 pairs
+(`pairs2_distinct`, RMS 4.159985 -- WORSE than 1 pair, not smaller), 3
+pairs (`pairs3_distinct`, RMS 5.264589e-12 -- suddenly at the noise
+floor), 5 pairs (`nc5_identity`/`nc5_translate`, RMS ~2e-10 -- still at
+the noise floor). Agreement does not improve gradually as more distinct
+pairs are added; it steps from "real, measured residual" to
+"floating-point noise floor" the moment 3 distinct pairs are reached,
+with no smooth transition through 2.
+
+`rtps_odd3_reject_double` (three landmarks, captured in `s14`'s first
+round alongside its five successes) is a second rejection fixture,
+confirming the even-count requirement independently of the original,
+pre-`s14` single-seed rejection; both rejections are asserted in
 `tests/tReferenceRejections.m`.
 
 **RTPS's status is now bounded-deviation, not smoke-tested.** Eight
