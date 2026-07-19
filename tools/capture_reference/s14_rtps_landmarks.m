@@ -10,15 +10,53 @@
 %      volumeB is deliberately asymmetric (flipped + shifted), so a
 %      fixed/moving or source/target mixup misplaces the output visibly.
 %
-% Cases (all double; RTPS takes zero parameters):
-%   pairs4_translate: 4 spread source points, 4 targets = source + [6 -4 2],
-%                     asymmetric volumeB. The decisive convention capture.
-%   pairs4_identity : volumeB == input, targets == sources. If the wiring
-%                     matches mexitk's structural self-check, output ~= input.
-%   pair1_minimal   : one pair (2 landmarks). Does the original accept an
-%                     underdetermined TPS?
+% Cases (all double; RTPS takes zero parameters). The one-line intents
+% below are what this script's AUTHOR meant to test when the numbers were
+% chosen -- before question 1 above was answered. Once landmarks were
+% established as INTERLEAVED (source1,target1,source2,target2,...), not
+% split-in-half, two of these decode to something DIFFERENT from that
+% original intent; both are noted explicitly so a future reader does not
+% have to re-derive it, the same way COMPATIBILITY.md's own writeup does:
+%   pairs4_translate: INTENDED as 4 spread source points each translated by
+%                     [6 -4 2], against an asymmetric volumeB. What the
+%                     array [src4 tgt4] actually decodes to under
+%                     interleaved reading is 4 pairs of the form
+%                     (src4(k), src4(k+1)) and (tgt4(k), tgt4(k+1)) --
+%                     i.e. each pair maps one of src4's own points to the
+%                     NEXT one in the same block (a +[60 0 0] shift within
+%                     src4, and separately within tgt4), not a [6 -4 2]
+%                     shift from src to tgt. The capture is still decisive
+%                     for FIXED/MOVING direction regardless: volumeB's
+%                     asymmetry (flip+shift) still makes a fixed/moving
+%                     mixup misplace the output visibly, independent of
+%                     what the landmark correspondence itself geometrically
+%                     means. See docs/COMPATIBILITY.md's "RD and RTPS"
+%                     section for the actual decoded pairs and how this was
+%                     established.
+%   pairs4_identity : INTENDED as volumeB == input with targets == sources
+%                     (a literal identity landmark set), to test mexitk's
+%                     structural self-check (output ~= input if the wiring
+%                     is right). [src4 src4] does NOT decode to identity
+%                     pairs under interleaved reading: it decodes to the
+%                     same TWO distinct pairs as pairs4_translate's own
+%                     src4-internal pairs, each supplied TWICE (source1==
+%                     source3, target1==target3, etc) -- a rank-deficient,
+%                     not identity, landmark system. This mismatch between
+%                     intent and reality is exactly what pairs4_identity's
+%                     own measured residual traces to (rank-deficient
+%                     duplicate pairs, not coplanarity) -- see
+%                     docs/COMPATIBILITY.md.
+%   pair1_minimal   : one pair (2 landmarks) -- src4's first point to
+%                     tgt4's first point. Split-half and interleaved
+%                     reading agree trivially for a single pair (there is
+%                     only one way to split or interleave 2 points), so
+%                     this one decodes exactly as intended either way.
+%                     Does the original accept an underdetermined TPS?
 %   odd3_reject     : 3 landmarks; expected rejection, captures the exact
-%                     even-count error text for the rejection suite.
+%                     even-count error text for the rejection suite. Pairing
+%                     convention is irrelevant here too: the original's
+%                     rejection is a parity check on the total count, not a
+%                     statement about how the (even) case would decode.
 %
 % Run exactly like s07-s13 (own matlab -batch invocation; crash-tolerant).
 
