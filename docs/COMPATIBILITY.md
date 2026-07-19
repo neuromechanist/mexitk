@@ -574,26 +574,27 @@ against every fixture (`tools/classify_fixtures.m`; see "Second capture
 campaign: Phase 3 findings" above for how). The status ladder now splits
 the 30 into three tiers by that measurement, not by guesswork:
 
-- **Validated (15):** FOMT (floating-point input, plus uint8 at N=1; see
-  its own section above), FBB, FBD, FBE, FBT, FD, FF, FGM, FMEAN, FMEDIAN,
+- **Validated (14):** FBB, FBD, FBE, FBT, FD, FF, FGM, FMEAN, FMEDIAN,
   FVBIH, SCC, SCT, SIC, SOT.
   Bit-identical to the original on every comparable captured fixture
-  (`tests/tReferenceExact.m`, plus FOMT's own `tests/tFomtReference.m`).
+  (`tests/tReferenceExact.m`).
   "Comparable" excludes fixtures where the original itself rejected the
   call, or where a captured fixture is a non-reproducible artifact rather
   than a defined reference (SCC's empty-seed fixture; see above) — those
   are asserted separately in `tests/tReferenceRejections.m` with no
   agreement claim.
-- **Bounded deviation (14):** FCA, SWS (their own dedicated sections
-  above), FBL, FCF, FDG, FDM, FDMV, FGA, FGAD, FGMRG, FLS, FSN, FVMI, SNC.
+- **Bounded deviation (15):** FCA, SWS (their own dedicated sections
+  above), FBL, FCF, FDG, FDM, FDMV, FGA, FGAD, FGMRG, FLS, FOMT, FSN,
+  FVMI, SNC.
   Runs the same ITK filter with the same parameters, but does not
   reproduce the original bit-for-bit; the difference is measured and
-  bounded (`tests/tReferenceBounded.m`, plus FCA/SWS's own dedicated
-  suites), not merely asserted to exist. FOMT's uint8 output at N&ge;2 is
-  the same kind of bounded, non-exact residual, but FOMT's own overall
-  status stays validated (see its own section above) rather than moving
-  the whole opcode to this tier, matching the project's pre-existing
-  per-opcode (not per-pixel-type) status granularity.
+  bounded (`tests/tReferenceBounded.m`, plus FCA/SWS/FOMT's own dedicated
+  suites), not merely asserted to exist. FOMT sits in this tier because
+  its uint8 output at N&ge;2 is a real, measured residual; its
+  floating-point output and uint8 N=1 are still asserted bit-identical
+  by `tests/tFomtReference.m` (see its own section above). A validated
+  badge would overstate the uint8 multi-threshold agreement, and the
+  status ladder never conflates tiers.
 - **Smoke-tested (1):** FAAB. Its disagreement with the
   original is large enough (RMS in the hundreds) that pinning a bound
   would not be a useful signal — see "SWS and FAAB: not bounded" below.

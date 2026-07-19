@@ -79,11 +79,11 @@ class FomtOpcode : public Opcode {
   const char* Description() const override {
     return "Otsu multiple thresholds; returns one 0/255 mask per class";
   }
-  Status GetStatus() const override { return Status::kValidated; }
+  Status GetStatus() const override { return Status::kBoundedDeviation; }
   const char* StatusNote() const override {
-    return "validated coverage is the exact fixtures: bit-identical to the "
-           "original for double and single at N=2,3,4 (every threshold "
-           "count NFT uses), and for uint8 at N=1. uint8 at N=2,3,4 "
+    return "bit-identical to the original for double and single at N=2,3,4 "
+           "(every threshold count NFT uses), and for uint8 at N=1, "
+           "asserted exactly by tests/tFomtReference.m. uint8 at N=2,3,4 "
            "deviates (0.17%/0.38%/1.80% of voxels respectively, measured), "
            "asserted as a bound (not equality) by "
            "tests/tFomtReference.m's uint8DeviationStaysWithinMeasuredBound. "
