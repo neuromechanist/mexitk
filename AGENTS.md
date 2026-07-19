@@ -95,7 +95,7 @@ The reference input is MATLAB's built-in `load mri`, so no imaging data is redis
 
 Deviating only happens in two directions: accept strictly more, or refuse to reproduce a defect.
 Every deviation is enumerated, numbered, and justified in `docs/COMPATIBILITY.md`
-(rows 1-12 as of this writing) — read it rather than this summary. A few
+(rows 1-14 as of this writing) — read it rather than this summary. A few
 illustrative examples: `SWS` overthresholding errors instead of segfaulting
 MATLAB; non-finite or wildly out-of-range filter results export as a defined
 saturated/zero value on integral pixel types instead of an undefined-behaviour

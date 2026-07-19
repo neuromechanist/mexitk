@@ -609,8 +609,13 @@ measurement, not by guesswork:
   original is large enough (RMS in the hundreds) that pinning a bound
   would not be a useful signal — see "SWS and FAAB: not bounded" below.
 
-**Worst measured deviation per bounded-deviation opcode** (excluding FCA
-and SWS, which have their own dedicated measurement tables above). This is
+**Worst measured deviation per bounded-deviation opcode** (excluding FCA,
+SWS, and FOMT, each of which has its own dedicated measurement table or
+section above, in FOMT's case using a different metric entirely --
+per-output voxel-disagreement percentage, not RMS/max-abs, since its
+deviation is a discrete multi-class labeling difference rather than a
+continuous-valued one; see "FOMT: bit-identical for floating-point input,
+and for uint8 at N=1" above). This is
 a summary, not a substitute for the per-fixture numbers: every literal
 bound actually asserted by a test lives in `tests/tReferenceBounded.m`
 (re-measure with `tools/classify_fixtures.m`, never hand-edit either).
@@ -673,6 +678,7 @@ kept as a single reference rather than split three ways).
 | FBE | `BinaryErodeImageFilter` |
 | FBL | `BilateralImageFilter` |
 | FBT | `BinaryThresholdImageFilter` |
+| FCA | `CurvatureAnisotropicDiffusionImageFilter` |
 | FCF | `CurvatureFlowImageFilter` |
 | FD | `DerivativeImageFilter` |
 | FDG | `DiscreteGaussianImageFilter` |
@@ -687,6 +693,7 @@ kept as a single reference rather than split three ways).
 | FMEAN | `MeanImageFilter` |
 | FMEDIAN | `MedianImageFilter` |
 | FMMCF | `MinMaxCurvatureFlowImageFilter` |
+| FOMT | `OtsuMultipleThresholdsImageFilter` (see "FOMT" above) |
 | FSN | `SigmoidImageFilter` |
 | FVBIH | `VotingBinaryIterativeHoleFillingImageFilter` |
 | FVMI | `HessianRecursiveGaussianImageFilter` + `Hessian3DToVesselnessMeasureImageFilter` |
@@ -696,6 +703,7 @@ kept as a single reference rather than split three ways).
 | SIC | `IsolatedConnectedImageFilter` |
 | SNC | `NeighborhoodConnectedImageFilter` |
 | SOT | `OtsuThresholdImageFilter` |
+| SWS | `WatershedImageFilter` (see "SWS: bounded deviation" above) |
 
 **FGA is implemented as a deliberate duplicate of FDG.** Both opcodes have the
 identical registry parameter signature (`gaussianVariance`, `maxKernelWidth`;
