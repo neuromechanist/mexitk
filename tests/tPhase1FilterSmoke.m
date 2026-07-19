@@ -321,5 +321,24 @@ classdef tPhase1FilterSmoke < matlab.unittest.TestCase
         function sigmoidRejectsZeroAlpha(tc)
             tc.verifyError(@() mexitk('FSN', [10 240 0 170], tc.V), 'mexitk:FSN:alpha');
         end
+
+        function sigmoidRejectsNonFiniteAlpha(tc)
+            % `== 0.0` does not catch NaN either; verified directly, a NaN
+            % alpha reached SigmoidImageFilter's own divide-by-zero path on
+            % uint8 with no exception (silent all-zero via an undefined
+            % native cast). +Inf is rejected the same way (param-guard
+            % hardening, Epic 3 issue #26).
+            tc.verifyError(@() mexitk('FSN', [10 240 NaN 170], tc.V), 'mexitk:FSN:alpha');
+            tc.verifyError(@() mexitk('FSN', [10 240 Inf 170], tc.V), 'mexitk:FSN:alpha');
+        end
+
+        function sigmoidRejectsNonFiniteBeta(tc)
+            % beta had no prior constraint at all; verified directly, a NaN
+            % beta silently propagated into the output with no exception.
+            % Only the non-finite case is guarded (param-guard hardening,
+            % Epic 3 issue #26).
+            tc.verifyError(@() mexitk('FSN', [10 240 10 NaN], tc.V), 'mexitk:FSN:beta');
+            tc.verifyError(@() mexitk('FSN', [10 240 10 Inf], tc.V), 'mexitk:FSN:beta');
+        end
     end
 end
