@@ -15,6 +15,7 @@
 #include "itkCastImageFilter.h"
 #include "itkCurvatureFlowImageFilter.h"
 
+#include <cmath>
 #include <type_traits>
 
 namespace mexitk {
@@ -62,9 +63,15 @@ void RunFcf(OpContext& ctx) {
   // timeStep comment in fca.cpp for the same arithmetic. A negative
   // timeStep runs the flow backward in time (ill-posed); rejected for the
   // same reason as FCA's guard. timeStep == 0 stays accepted as a defined
-  // no-op.
-  if (p[1] < 0.0) {
-    throw OpcodeError("mexitk:FCF:timeStep", "timeStep must not be negative.");
+  // no-op. Non-finite (NaN/Inf) is rejected too, not just negative:
+  // measured directly, a NaN or +Inf timeStep propagates through
+  // CurvatureFlowFunction's update with no exception, silently returning
+  // an all-NaN output on every voxel -- a `< 0.0` comparison alone would
+  // not catch this, since NaN compares false against every ordered
+  // relational operator.
+  if (!std::isfinite(p[1]) || p[1] < 0.0) {
+    throw OpcodeError("mexitk:FCF:timeStep",
+                      "timeStep must be finite and not negative.");
   }
   filter->SetTimeStep(p[1]);
   filter->Update();

@@ -83,6 +83,22 @@ classdef tPhase5LevelSetSmoke < matlab.unittest.TestCase
                 'mexitk:FMMCF:timeStep');
         end
 
+        function fmmcfRejectsNonFiniteTimeStep(tc)
+            % A plain `< 0.0` guard does not catch NaN (every ordered
+            % comparison against NaN is false): measured directly before
+            % this guard existed, a NaN timeStep crashed the whole MATLAB
+            % process with a SIGBUS inside MinMaxCurvatureFlowFunction::
+            % ComputeThreshold, not merely a bad result -- the same
+            % severity class as the SWS/SOT crash guards. +-Inf are
+            % rejected the same way as any other non-finite value.
+            tc.verifyError(@() mexitk('FMMCF', [10 NaN 1], tc.V), ...
+                'mexitk:FMMCF:timeStep');
+            tc.verifyError(@() mexitk('FMMCF', [10 Inf 1], tc.V), ...
+                'mexitk:FMMCF:timeStep');
+            tc.verifyError(@() mexitk('FMMCF', [10 -Inf 1], tc.V), ...
+                'mexitk:FMMCF:timeStep');
+        end
+
         function fmmcfRejectsNegativeStencilRadius(tc)
             % RadiusValueType is unsigned; CastParam's integral path
             % rejects a negative value.

@@ -432,6 +432,17 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             tc.verifyError(@() mexitk('FCF', [10 -1], tc.V), 'mexitk:FCF:timeStep');
         end
 
+        function fcfRejectsNonFiniteTimeStep(tc)
+            % A plain `< 0.0` guard does not catch NaN (every ordered
+            % comparison against NaN is false): verified directly before
+            % this guard existed, a NaN or +Inf timeStep silently produced
+            % an all-NaN output on every voxel, no exception. -Inf is
+            % rejected the same way as any other non-finite value.
+            tc.verifyError(@() mexitk('FCF', [10 NaN], tc.V), 'mexitk:FCF:timeStep');
+            tc.verifyError(@() mexitk('FCF', [10 Inf], tc.V), 'mexitk:FCF:timeStep');
+            tc.verifyError(@() mexitk('FCF', [10 -Inf], tc.V), 'mexitk:FCF:timeStep');
+        end
+
         function fgadRejectsNegativeTimeStep(tc)
             tc.verifyError(@() mexitk('FGAD', [5 -1 3], tc.V), 'mexitk:FGAD:timeStep');
         end

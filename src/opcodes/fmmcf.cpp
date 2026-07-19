@@ -15,6 +15,7 @@
 #include "itkCastImageFilter.h"
 #include "itkMinMaxCurvatureFlowImageFilter.h"
 
+#include <cmath>
 #include <type_traits>
 
 namespace mexitk {
@@ -60,9 +61,17 @@ void RunFmmcf(OpContext& ctx) {
       CastParam<itk::IdentifierType>(p[0], "FMMCF", "numberOfIterations"));
   // Same ill-posed-backward-flow rationale as FCF's timeStep guard: a
   // negative timeStep runs the flow backward in time. timeStep == 0 stays
-  // accepted as a defined no-op.
-  if (p[1] < 0.0) {
-    throw OpcodeError("mexitk:FMMCF:timeStep", "timeStep must not be negative.");
+  // accepted as a defined no-op. Non-finite (NaN/Inf) is rejected too, not
+  // just negative: measured directly, a NaN timeStep crashes the whole
+  // MATLAB process with a SIGBUS inside MinMaxCurvatureFlowFunction::
+  // ComputeThreshold's Dispatch<3> path, not merely a silent bad result --
+  // the same severity class as the SWS-overthresholding and SOT-histogram
+  // crash guards (see docs/COMPATIBILITY.md deviations 1 and 9). A plain
+  // `< 0.0` comparison does not catch this: NaN compares false against
+  // every ordered relational operator, so it would sail through unrejected.
+  if (!std::isfinite(p[1]) || p[1] < 0.0) {
+    throw OpcodeError("mexitk:FMMCF:timeStep",
+                      "timeStep must be finite and not negative.");
   }
   filter->SetTimeStep(p[1]);
   // StencilRadius is RadiusValueType, declared locally on this class
