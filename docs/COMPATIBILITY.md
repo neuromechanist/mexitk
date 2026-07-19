@@ -186,12 +186,13 @@ comparison, not inferred from the naming alone:
   (`SETDIRECTION=1`) is bit-identical to the swapped mapping's
   `SETDIRECTION=0`. `SETORDER=0` (`fd_0_0_double`) is exact regardless,
   since a zeroth-order derivative does not depend on direction.
-- **`FMEDIAN`**: `fmedian_r3_1_1_double` (asymmetric radius) deviated
-  under the unswapped mapping and is bit-identical under the swap;
-  `fmedian_r1_1_3_double` (also asymmetric, but the complementary case)
-  is bit-identical too. `fmedian_r1_1_1_*` (symmetric, where the swap is a
-  no-op) was already exact either way, which is why it alone could not
-  have revealed the bug.
+- **`FMEDIAN`**: `fmedian_r3_1_1_double` (XRADIUS=3, YRADIUS=1 -- asymmetric
+  between X and Y) deviated under the unswapped mapping and is bit-identical
+  under the swap; this fixture alone is the proof. `fmedian_r1_1_3_double`
+  (XRADIUS=YRADIUS=1, only ZRADIUS differs) does NOT independently confirm
+  the swap: X and Y are equal there, so swapping them is a no-op, and the
+  fixture was already exact either way -- the same reason
+  `fmedian_r1_1_1_*` (fully symmetric) could not have revealed the bug.
 - **`SNC`**: `snc_rx_wide_seedS1_double` / `snc_rz_wide_seedS1_double`
   (asymmetric radius) are the discriminating fixtures; `SNC` is the one
   member of this family that does NOT reach bit-exactness even with the
@@ -389,11 +390,12 @@ Those cover every threshold count NFT uses.
 | N (bins) | voxel disagreement |
 |---|---|
 | 2 (50) | 0.17% (755 of 442,368 on output 2) |
-| 3 (128) | 0.38% (worst of 3 outputs) |
-| 4 (100) | 1.80% (worst of 4 outputs) |
+| 3 (128) | 0.38% (1697 of 442,368 on output 3) |
+| 4 (100) | 0.84% (3725 of 442,368 on output 4) |
 
 ITK changed how integral pixel types are binned into the Otsu histogram since 2.4.
-The disagreement is asserted to stay under 2% by `tests/tFomtReference.m`
+The disagreement is asserted at these exact measured values (10% headroom, per-N,
+not a single loose ceiling) by `tests/tFomtReference.m`
 (`uint8DeviationStaysWithinMeasuredBound`).
 
 **Epic 2 Phase 3 investigated this directly and ruled out SOT's own root
@@ -598,6 +600,32 @@ the 30 into three tiers by that measurement, not by guesswork:
 - **Smoke-tested (1):** FAAB. Its disagreement with the
   original is large enough (RMS in the hundreds) that pinning a bound
   would not be a useful signal — see "SWS and FAAB: not bounded" below.
+
+**Worst measured deviation per bounded-deviation opcode** (excluding FCA
+and SWS, which have their own dedicated measurement tables above). This is
+a summary, not a substitute for the per-fixture numbers: every literal
+bound actually asserted by a test lives in `tests/tReferenceBounded.m`
+(re-measure with `tools/classify_fixtures.m`, never hand-edit either).
+Split by pixel-type class where the worst case differs meaningfully
+between classes; "exact" in the Notes column means that class has at
+least one captured point with NO deviation (asserted in
+`tests/tReferenceExact.m` instead), so the opcode's bounded-deviation
+status reflects its OTHER captured points, not that class.
+
+| Opcode | Worst RMS | Worst max-abs | Notes |
+|---|---|---|---|
+| FDG | 0.287 (int32) | 2.0 (int32) | double/single ≤4.1e-3 |
+| FGA | 0.287 (int32) | 2.0 (int32) | alias of FDG; same numbers |
+| FGAD | 11.7 (uint8) | 55.0 (uint8) | double ≤0.35, single ≤7.6e-3, int32 1.27/5.0 |
+| FCF | 7.28 (uint8) | 130.0 (uint8) | double at noise floor; int32 1.72/21.0 |
+| FBL | 5.0e-13 (double) | 5.2e-12 (double) | int32/single/uint8 exact |
+| FSN | 1.7e-15 (double) | 2.8e-14 (double) | one point; every other captured point exact |
+| FVMI | 0.514 (double/single) | 10.05 (double) | int32/uint8 0.494/10.0; no exact points captured |
+| FGMRG | 2.7e-7 (double) | 5.4e-6 (double) | single at noise floor too; int32/uint8 exact at sigma=2 |
+| FLS | 98.7 (uint8) | 255.0 (uint8) | double/single at noise floor; int32 exact at sigma=2 |
+| FDM | 0.218 (uint8) | 6.0 (uint8) | double/single/int32 exact |
+| FDMV | 11.4 (uint8) | 255.0 (uint8) | double at noise floor (~3e-12); single/int32 exact |
+| SNC | 73.3 (double) | 255.0 (double) | radius [1,1,1] and base-threshold fixtures exact |
 
 The remaining 10 opcodes are catalogued in `docs/matitk_opcode_registry.txt`
 (the original binary's own parameter dump)
@@ -868,13 +896,21 @@ natively at all four supported classes (`double`, `single`, `uint8`,
   `double`/`single` input runs natively in every case (no promotion needed).
   Epic 2 Phase 3 captured integral reference fixtures for six of these
   seven (all but `FAAB`, whose disagreement is too large to bound
-  meaningfully — see "SWS and FAAB: not bounded" above): `FCF`/`FGAD`/
-  `FGMRG`/`FLS`/`FVMI` on `uint8`/`int32` all show a measured, bounded
-  residual against the original, generally much larger on `uint8` than on
-  `int32` (see `tests/tReferenceBounded.m` for exact numbers per opcode).
-  The promotion target being `float` rather than `double` is confirmed
-  correct by these captures for those five opcodes; `FAAB` remains
-  unverified in that specific respect, same caveat as before.
+  meaningfully — see "SWS and FAAB: not bounded" above). `FCF`/`FGAD`/
+  `FVMI` on `uint8`/`int32` show a measured, bounded residual against the
+  original at every captured point, generally much larger on `uint8` than
+  on `int32` (see `tests/tReferenceBounded.m` for exact numbers per
+  opcode). `FGMRG` and `FLS` are partial exceptions, NOT covered by that
+  "all show a residual" claim: both were captured at only one integral
+  point (sigma=2), and at that point `FGMRG`'s `int32` AND `uint8` output
+  is bit-identical to the original (see `tests/tReferenceExact.m`), while
+  `FLS`'s `int32` output is bit-identical but its `uint8` output has a
+  large residual (`uint8`'s clamp-to-0 export of the signed field
+  amplifies a small numeric difference into many sign flips near the zero
+  crossing — see "FAAB and FLS" below). The promotion target being
+  `float` rather than `double` is confirmed correct by these captures for
+  all five opcodes named in this paragraph; `FAAB` remains unverified in
+  that specific respect, same caveat as before.
 
 ## FGM vs FGMRG: same conceptual quantity, different algorithms
 

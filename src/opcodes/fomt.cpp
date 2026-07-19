@@ -84,7 +84,7 @@ class FomtOpcode : public Opcode {
     return "bit-identical to the original for double and single at N=2,3,4 "
            "(every threshold count NFT uses), and for uint8 at N=1, "
            "asserted exactly by tests/tFomtReference.m. uint8 at N=2,3,4 "
-           "deviates (0.17%/0.38%/1.80% of voxels respectively, measured), "
+           "deviates (0.17%/0.38%/0.84% of voxels respectively, measured), "
            "asserted as a bound (not equality) by "
            "tests/tFomtReference.m's uint8DeviationStaysWithinMeasuredBound. "
            "Epic 2 Phase 3 tested and ruled out SOT's own root cause here "
