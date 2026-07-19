@@ -407,6 +407,20 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             tc.verifyError(@() mexitk('FVMI', [0 0.5 2], tc.V), 'mexitk:itkException');
         end
 
+        function fvmiRejectsNonFiniteParams(tc)
+            % None of SetSigma/SetAlpha1/SetAlpha2 had a prior mexitk-level
+            % constraint (unlike FLS/FGMRG's sigma, ITK itself does not
+            % reject a NaN or non-positive alpha1/alpha2). Verified
+            % directly: a NaN SetSigma silently returned an all-zero
+            % output; NaN SetAlpha1/SetAlpha2 each silently propagated into
+            % the output. Only non-finite is guarded, no new sign/range
+            % constraint (param-guard hardening, Epic 3 issue #26).
+            tc.verifyError(@() mexitk('FVMI', [NaN 0.5 2], tc.V), 'mexitk:FVMI:SetSigma');
+            tc.verifyError(@() mexitk('FVMI', [Inf 0.5 2], tc.V), 'mexitk:FVMI:SetSigma');
+            tc.verifyError(@() mexitk('FVMI', [1 NaN 2], tc.V), 'mexitk:FVMI:SetAlpha1');
+            tc.verifyError(@() mexitk('FVMI', [1 0.5 NaN], tc.V), 'mexitk:FVMI:SetAlpha2');
+        end
+
         function fblRejectsNegativeDomainSigma(tc)
             % negative domainSigma reaches a raw (SizeValueType)ceil(...)
             % cast of a negative double inside ITK's own
