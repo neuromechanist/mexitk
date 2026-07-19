@@ -209,23 +209,34 @@ classdef tReferenceBounded < matlab.unittest.TestCase
             'RD', 'rd_demons_volB_double', 4.63626, 88.0; ...
             ...
             ... RTPS: ThinPlateSplineKernelTransform + Resample (Epic 4
-            ... Phase 1, s14 reference-host capture round). Three of five
-            ... successful captures are at the floating-point noise floor
-            ... (well-posed, non-degenerate landmark configurations); the
-            ... other two are structurally degenerate landmark systems
-            ... (rank-deficient duplicate pairs; a single, severely
-            ... underdetermined pair) with a real, modest, measured
-            ... residual, the same upstream-numerics-evolution category as
-            ... FCA/SNC/SWS -- see src/opcodes/rtps.cpp's StatusNote for
-            ... the full evidence, including how this convention was
-            ... determined (interleaved landmarks, volumeB fixed/volumeA
-            ... moving) and why Phase 1's original split-half/volumeA-fixed
-            ... inference was wrong.
-            'RTPS', 'rtps_nc5_identity_double',     2.12194811e-10, 7.809859426e-09; ...
-            'RTPS', 'rtps_nc5_translate_double',    1.998278382e-10, 7.471129493e-09; ...
-            'RTPS', 'rtps_pairs4_translate_double', 2.634815908e-12, 7.443602765e-11; ...
-            'RTPS', 'rtps_pairs4_identity_double',  2.226571164, 88.0; ...
-            'RTPS', 'rtps_pair1_minimal_double',    3.647131445, 88.0};
+            ... Phase 1, s14 reference-host capture round, two rounds, 8
+            ... successful captures). Six are at the floating-point noise
+            ... floor; the other two (rtps_pairs4_identity_double,
+            ... rtps_pair1_minimal_double) plus rtps_pairs2_distinct_double
+            ... below have a real, modest, measured residual. Round 2
+            ... (rtps_coplanar3_distinct_double, rtps_pairs2_distinct_double,
+            ... rtps_pairs3_distinct_double) isolated exactly why: the
+            ... threshold is 3+ DISTINCT landmark pairs, not coplanarity (3
+            ... distinct coplanar pairs reproduce exactly) and not raw pair
+            ... count (rtps_pairs4_identity_double's 4 pairs collapse to
+            ... only 2 distinct ones and shows the same residual class as
+            ... genuinely having only 2). Consistent with ITK's SVD-based
+            ... pseudo-inverse resolving an underdetermined system slightly
+            ... differently between 2.4 and 5.4, the same upstream-numerics-
+            ... evolution category as FCA/SNC/SWS -- see
+            ... src/opcodes/rtps.cpp's StatusNote for the full evidence,
+            ... including how the convention itself was determined
+            ... (interleaved landmarks, volumeB fixed/volumeA moving) and
+            ... why Phase 1's original split-half/volumeA-fixed inference
+            ... was wrong.
+            'RTPS', 'rtps_nc5_identity_double',        2.12194811e-10, 7.809859426e-09; ...
+            'RTPS', 'rtps_nc5_translate_double',       1.998278382e-10, 7.471129493e-09; ...
+            'RTPS', 'rtps_pairs4_translate_double',    2.634815908e-12, 7.443602765e-11; ...
+            'RTPS', 'rtps_coplanar3_distinct_double',  8.146892322e-13, 1.563194019e-11; ...
+            'RTPS', 'rtps_pairs3_distinct_double',     5.264588848e-12, 1.091677859e-10; ...
+            'RTPS', 'rtps_pairs4_identity_double',     2.226571164, 88.0; ...
+            'RTPS', 'rtps_pair1_minimal_double',       3.647131445, 88.0; ...
+            'RTPS', 'rtps_pairs2_distinct_double',     4.159985105, 88.0};
     end
 
     methods (Static)
