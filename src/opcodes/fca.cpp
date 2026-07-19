@@ -12,7 +12,6 @@
 #include "mexitk_common.h"
 #include "opcode.h"
 
-#include "itkCastImageFilter.h"
 #include "itkCurvatureAnisotropicDiffusionImageFilter.h"
 
 #include <type_traits>
@@ -36,17 +35,7 @@ void RunFca(OpContext& ctx) {
   using RealImage = Image3<RealT>;
 
   typename InImage::Pointer input = ImportVolume<PixelT>(ctx.volumeA);
-
-  typename RealImage::Pointer real;
-  if constexpr (std::is_same<PixelT, RealT>::value) {
-    real = input;
-  } else {
-    using CastIn = itk::CastImageFilter<InImage, RealImage>;
-    typename CastIn::Pointer cast = CastIn::New();
-    cast->SetInput(input);
-    cast->Update();
-    real = cast->GetOutput();
-  }
+  typename RealImage::Pointer real = PromoteToReal<PixelT, RealT>(input);
 
   const std::vector<double>& p = *ctx.params;
 
@@ -73,17 +62,14 @@ void RunFca(OpContext& ctx) {
   filter->SetConductanceParameter(p[2]);
   filter->Update();
 
-  if constexpr (std::is_same<PixelT, RealT>::value) {
-    ctx.plhs[0] = ExportVolume<RealT>(filter->GetOutput());
-  } else {
-    // ClampExport saturates into [lowest, max] of the target pixel type and
-    // maps non-finite values to 0, instead of itk::ClampImageFilter's plain
-    // static_cast fallthrough for NaN (undefined behaviour; reachable via
-    // an unstable timeStep). In-range values are unaffected: this is the
-    // same bounds check and the same in-range cast ITK's own Clamp functor
-    // performs. Only uint8/int32 take this path (see FcaRealType).
-    ctx.plhs[0] = ClampExport<PixelT, RealT>(filter->GetOutput());
-  }
+  // ExportPromoted's promoted-path branch (ClampExport) saturates into
+  // [lowest, max] of the target pixel type and maps non-finite values to 0,
+  // instead of itk::ClampImageFilter's plain static_cast fallthrough for
+  // NaN (undefined behaviour; reachable via an unstable timeStep). In-range
+  // values are unaffected: this is the same bounds check and the same
+  // in-range cast ITK's own Clamp functor performs. Only uint8/int32 take
+  // that path (see FcaRealType).
+  ctx.plhs[0] = ExportPromoted<PixelT, RealT>(filter->GetOutput());
 }
 
 class FcaOpcode : public Opcode {

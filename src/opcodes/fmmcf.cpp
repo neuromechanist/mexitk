@@ -12,7 +12,6 @@
 #include "mexitk_common.h"
 #include "opcode.h"
 
-#include "itkCastImageFilter.h"
 #include "itkMinMaxCurvatureFlowImageFilter.h"
 
 #include <cmath>
@@ -21,11 +20,12 @@
 namespace mexitk {
 namespace {
 
-// MinMaxCurvatureFlowImageFilter derives from CurvatureFlowImageFilter and
-// inherits its "output image pixels [must be] of a floating point type"
-// requirement (itkMinMaxCurvatureFlowImageFilter.h:58-60, quoting the base
-// class); see FcfRealType's comment in fcf.cpp for the same finding on the
-// sibling filter. Promoted per that precedent.
+// MinMaxCurvatureFlowImageFilter's own docstring requires "the output
+// image pixels are of a real type" (itkMinMaxCurvatureFlowImageFilter.h:
+// 59-60); it derives from CurvatureFlowImageFilter, whose own docstring is
+// more specific -- "of a floating point type" (itkCurvatureFlowImageFilter.h:
+// 69-70, the same base class fcf.cpp cites for the sibling filter). Promoted
+// per that precedent; see FcfRealType's comment in fcf.cpp.
 template <typename PixelT>
 using FmmcfRealType = std::conditional_t<std::is_floating_point<PixelT>::value, PixelT, float>;
 
@@ -36,21 +36,19 @@ void RunFmmcf(OpContext& ctx) {
   using RealImage = Image3<RealT>;
 
   typename InImage::Pointer input = ImportVolume<PixelT>(ctx.volumeA);
-
-  typename RealImage::Pointer real;
-  if constexpr (std::is_same<PixelT, RealT>::value) {
-    real = input;
-  } else {
-    using CastIn = itk::CastImageFilter<InImage, RealImage>;
-    typename CastIn::Pointer cast = CastIn::New();
-    cast->SetInput(input);
-    cast->Update();
-    real = cast->GetOutput();
-  }
+  typename RealImage::Pointer real = PromoteToReal<PixelT, RealT>(input);
 
   const std::vector<double>& p = *ctx.params;
 
   using FilterType = itk::MinMaxCurvatureFlowImageFilter<RealImage, RealImage>;
+  // RadiusValueType is documented as an unsigned integer
+  // (itkMinMaxCurvatureFlowImageFilter.h:112-113); asserted here so a
+  // future ITK typedef change that made it signed -- silently defeating
+  // CastParam's negative-value rejection below -- would fail to compile
+  // instead of silently accepting a negative stencilRadius.
+  static_assert(std::is_unsigned<typename FilterType::RadiusValueType>::value,
+               "FMMCF: FilterType::RadiusValueType is expected to be unsigned so "
+               "CastParam rejects a negative stencilRadius.");
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(real);
   // SetNumberOfIterations is inherited from CurvatureFlowImageFilter, which
@@ -81,12 +79,9 @@ void RunFmmcf(OpContext& ctx) {
       CastParam<typename FilterType::RadiusValueType>(p[2], "FMMCF", "stencilRadius"));
   filter->Update();
 
-  if constexpr (std::is_same<PixelT, RealT>::value) {
-    ctx.plhs[0] = ExportVolume<RealT>(filter->GetOutput());
-  } else {
-    // See FcaRealType's comment in fca.cpp for the saturation rationale.
-    ctx.plhs[0] = ClampExport<PixelT, RealT>(filter->GetOutput());
-  }
+  // See FcaRealType's comment in fca.cpp for the saturation rationale of
+  // ExportPromoted's promoted-path branch.
+  ctx.plhs[0] = ExportPromoted<PixelT, RealT>(filter->GetOutput());
 }
 
 class FmmcfOpcode : public Opcode {

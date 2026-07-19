@@ -12,7 +12,6 @@
 #include "mexitk_common.h"
 #include "opcode.h"
 
-#include "itkCastImageFilter.h"
 #include "itkCurvatureFlowImageFilter.h"
 
 #include <cmath>
@@ -37,17 +36,7 @@ void RunFcf(OpContext& ctx) {
   using RealImage = Image3<RealT>;
 
   typename InImage::Pointer input = ImportVolume<PixelT>(ctx.volumeA);
-
-  typename RealImage::Pointer real;
-  if constexpr (std::is_same<PixelT, RealT>::value) {
-    real = input;
-  } else {
-    using CastIn = itk::CastImageFilter<InImage, RealImage>;
-    typename CastIn::Pointer cast = CastIn::New();
-    cast->SetInput(input);
-    cast->Update();
-    real = cast->GetOutput();
-  }
+  typename RealImage::Pointer real = PromoteToReal<PixelT, RealT>(input);
 
   const std::vector<double>& p = *ctx.params;
 
@@ -76,12 +65,9 @@ void RunFcf(OpContext& ctx) {
   filter->SetTimeStep(p[1]);
   filter->Update();
 
-  if constexpr (std::is_same<PixelT, RealT>::value) {
-    ctx.plhs[0] = ExportVolume<RealT>(filter->GetOutput());
-  } else {
-    // See FcaRealType's comment in fca.cpp for the saturation rationale.
-    ctx.plhs[0] = ClampExport<PixelT, RealT>(filter->GetOutput());
-  }
+  // See FcaRealType's comment in fca.cpp for the saturation rationale of
+  // ExportPromoted's promoted-path branch.
+  ctx.plhs[0] = ExportPromoted<PixelT, RealT>(filter->GetOutput());
 }
 
 class FcfOpcode : public Opcode {

@@ -8,14 +8,13 @@
 //
 // SFM - fast marching (arrival-time map from seed(s)).
 // Wraps itk::FastMarchingImageFilter (module ITKFastMarching). Confirmed
-// (itkFastMarchingImageFilter.h:134) to NOT inherit FastMarchingImageFilterBase
+// (itkFastMarchingImageFilter.h:135) to NOT inherit FastMarchingImageFilterBase
 // / FastMarchingBase, so the ITK-2.4-era API (SetTrialPoints/SetStoppingValue)
 // is fully intact.
 
 #include "mexitk_common.h"
 #include "opcode.h"
 
-#include "itkCastImageFilter.h"
 #include "itkFastMarchingImageFilter.h"
 
 #include <type_traits>
@@ -42,19 +41,19 @@ void RunSfm(OpContext& ctx) {
   using RealImage = Image3<RealT>;
 
   typename InImage::Pointer input = ImportVolume<PixelT>(ctx.volumeA);
-
-  typename RealImage::Pointer speed;
-  if constexpr (std::is_same<PixelT, RealT>::value) {
-    speed = input;
-  } else {
-    using CastIn = itk::CastImageFilter<InImage, RealImage>;
-    typename CastIn::Pointer cast = CastIn::New();
-    cast->SetInput(input);
-    cast->Update();
-    speed = cast->GetOutput();
-  }
+  typename RealImage::Pointer speed = PromoteToReal<PixelT, RealT>(input);
 
   using FilterType = itk::FastMarchingImageFilter<RealImage, RealImage>;
+  // NodeType::IndexType is documented (itkFastMarchingImageFilter.h,
+  // LevelSetNode) as itk::Index<the level-set's own dimension>, which for
+  // RealImage (kDimension) is the same itk::Index<kDimension>
+  // SeedPointsToIndices returns; asserted here so a future ITK typedef
+  // change would fail to compile instead of silently mismatching
+  // node.SetIndex(idx) below.
+  static_assert(std::is_same<typename FilterType::NodeType::IndexType,
+                             itk::Index<kDimension>>::value,
+               "SFM: FilterType::NodeType::IndexType is expected to be "
+               "itk::Index<kDimension>, matching SeedPointsToIndices.");
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(speed);
 
@@ -93,15 +92,29 @@ void RunSfm(OpContext& ctx) {
   // fixture's LargeValue sentinel (NumericTraits<double>::max()/2, matched
   // exactly) is independent of it, and nothing in the registry or the
   // fixture evidence suggests the original set it to anything else.
+  // stoppingTime is passed through CastParam<double> with no extra guard:
+  // unlike FMMCF/FCF's timeStep, every value CastParam<double> lets through
+  // (negative, zero, NaN, +-Inf) is defined, ITK-internal behaviour here,
+  // verified directly rather than assumed, so none needs rejecting.
+  // GenerateData()'s own stopping check is `currentValue > m_StoppingValue`
+  // (itkFastMarchingImageFilter.hxx): a negative value is exceeded by the
+  // seed's own first (0-valued) heap pop, so marching stops immediately
+  // after the seed -- output is the seed voxel at 0 and every other voxel
+  // at LargeValue. NaN is never exceeded (every ordered comparison against
+  // NaN is false), so marching runs to its natural exhaustion instead of
+  // stopping early -- measured bit-identical to a sufficiently large finite
+  // stoppingTime (100 on this fixture already exceeds the volume's own
+  // longest reachable arrival time, so NaN and 100 produce the exact same
+  // output here); this does NOT mean every voxel loses its sentinel, only
+  // that stoppingTime itself no longer truncates the march -- voxels with
+  // no finite-speed path from a seed (this volume's zero-intensity
+  // background) stay at LargeValue regardless, a property of the speed
+  // image, not of stoppingTime.
   const std::vector<double>& p = *ctx.params;
   filter->SetStoppingValue(CastParam<double>(p[0], "SFM", "stoppingTime"));
   filter->Update();
 
-  if constexpr (std::is_same<PixelT, RealT>::value) {
-    ctx.plhs[0] = ExportVolume<RealT>(filter->GetOutput());
-  } else {
-    ctx.plhs[0] = ClampExport<PixelT, RealT>(filter->GetOutput());
-  }
+  ctx.plhs[0] = ExportPromoted<PixelT, RealT>(filter->GetOutput());
 }
 
 class SfmOpcode : public Opcode {

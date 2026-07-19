@@ -13,6 +13,7 @@
 
 #include "mex.h"
 
+#include "itkCastImageFilter.h"
 #include "itkImage.h"
 #include "itkImportImageFilter.h"
 
@@ -313,6 +314,42 @@ mxArray* ClampExport(const Image3<RealT>* img) {
     }
   }
   return out;
+}
+
+// Promotes an already-imported itk::Image<PixelT> to itk::Image<RealT>, the
+// shared entry half of every promote-to-real opcode (FCA, FCF, FMMCF, SFM):
+// a real-pixel-only ITK filter (a finite-difference solver or
+// FastMarching's speed image) needs a floating-point input, so integral
+// PixelT is cast up to RealT via itk::CastImageFilter, while a PixelT that
+// is already floating-point (RealT == PixelT by each opcode's own
+// RealType alias, e.g. FcaRealType) passes through with no cast at all --
+// the `if constexpr` branch is resolved at compile time, so the native
+// path never instantiates itk::CastImageFilter.
+template <typename PixelT, typename RealT>
+typename Image3<RealT>::Pointer PromoteToReal(typename Image3<PixelT>::Pointer input) {
+  if constexpr (std::is_same<PixelT, RealT>::value) {
+    return input;
+  } else {
+    using CastIn = itk::CastImageFilter<Image3<PixelT>, Image3<RealT>>;
+    typename CastIn::Pointer cast = CastIn::New();
+    cast->SetInput(input);
+    cast->Update();
+    return cast->GetOutput();
+  }
+}
+
+// The matching export half: PixelT == RealT (native floating-point input)
+// exports directly with ExportVolume; a promoted integral PixelT exports
+// through ClampExport instead, saturating out-of-range/non-finite RealT
+// values into PixelT's own range rather than an undefined-behaviour cast
+// (see ClampExport's own comment).
+template <typename PixelT, typename RealT>
+mxArray* ExportPromoted(const Image3<RealT>* img) {
+  if constexpr (std::is_same<PixelT, RealT>::value) {
+    return ExportVolume<RealT>(img);
+  } else {
+    return ClampExport<PixelT, RealT>(img);
+  }
 }
 
 // Converts the flat, 1-based seed vector ([d1 d2 d3 d1 d2 d3 ...], already
