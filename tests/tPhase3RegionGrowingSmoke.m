@@ -322,34 +322,35 @@ classdef tPhase3RegionGrowingSmoke < matlab.unittest.TestCase
             tc.verifyEmpty(setdiff(unique(out(:)), uint8([0 255])));
         end
 
-        function sotDoubleInsideValueIsRealmax(tc)
-            % Pins the "ITK default inside value" claim: catches an
-            % accidental hardcode to 255 on a double volume, where the
-            % correct default is the pixel type's own max.
+        function sotOutsideValueIsFixed255OnDouble(tc)
+            % Pins the mask-value claim: the original's SOT mask value is a
+            % FIXED 255 on every pixel type, not the pixel type's own max
+            % (realmax('double') for double). Fixture-proven: every
+            % captured sot_* fixture, double included, has unique output
+            % {0,255}, never {0,realmax}. See docs/COMPATIBILITY.md.
             out = mexitk('SOT', 128, tc.V);
             u = unique(out(:));
             tc.verifyEqual(numel(u), 2);
-            tc.verifyEqual(max(u), realmax('double'));
+            tc.verifyEqual(max(u), 255);
         end
 
         function sotMatchesFomtSingleThreshold(tc)
-            % Both label the low side (<=threshold) of a single Otsu cut,
-            % so the partitions should nearly match, but OtsuThresholdImageFilter
-            % (SOT) and OtsuMultipleThresholdsImageFilter at N=1 (FOMT) use
-            % different calculators and may pick threshold values differing
-            % by up to one bin edge. MEASURED on this data (not invented,
-            % not tuned): agreement is 0.997542769821 (441281 of 442368
-            % voxels agree), NOT exactly 1, so per the plan's protocol this
-            % asserts the measured bound rather than equality. Every
-            % disagreeing voxel has intensity exactly 33, consistent with a
-            % one-bin-edge difference between the two calculators' chosen
-            % thresholds. See docs/COMPATIBILITY.md.
+            % SOT labels the HIGH side of its Otsu cut (intensity >
+            % threshold) with its mask value; FOMT's single-class output
+            % (fomt==255) labels the LOW side (class 0). Reference-fixture
+            % Phase 3 work found and fixed two SOT bugs (polarity was
+            % inverted; the histogram range used the uint8 TYPE bound
+            % [0,255] instead of the data range) that, together, also
+            % happened to align SOT's chosen threshold with FOMT's: MEASURED
+            % on this data (not invented, not tuned) post-fix agreement is
+            % EXACTLY 1.0 (442368 of 442368 voxels), i.e. sotHigh is the
+            % exact complement of fomtLow, not merely a close approximation
+            % as it was pre-fix. See docs/COMPATIBILITY.md.
             sot = mexitk('SOT', 128, tc.Vu);
             fomt = mexitk('FOMT', [1 128], tc.Vu);
-            sotInside = (sot ~= 0);
-            fomtClass0 = (fomt == 255);
-            agree = nnz(sotInside == fomtClass0) / numel(sot);
-            tc.verifyGreaterThan(agree, 0.997);
+            sotHigh = (sot ~= 0);
+            fomtLow = (fomt == 255);
+            tc.verifyEqual(sotHigh, ~fomtLow);
         end
     end
 
