@@ -87,20 +87,43 @@ end
 vinB = [];
 if isfield(f, 'arg4Recipe') && ~isempty(f.arg4Recipe)
     vinB = reconstructRecipeInput(f.arg4Recipe);
-    if isfield(f, 'arg4Hash') && ~isempty(f.arg4Hash)
-        if isempty(which('local_md5'))
-            error('reconstructFixtureInput:missingHashTool', ...
-                ['%s: cannot verify arg4Hash because local_md5 is not on the ' ...
-                 'path (expected at tools/capture_reference/local_md5.m); ' ...
-                 'refusing to silently skip input verification'], name);
-        end
-        recomputedB = local_md5(vinB);
-        if ~strcmp(recomputedB, f.arg4Hash)
-            error('reconstructFixtureInput:arg4Hash', ...
-                ['%s: reconstructed arg4 hash %s does not match the fixture''s ' ...
-                 'recorded arg4Hash %s -- the recipe no longer reproduces the ' ...
-                 'captured second volume'], name, recomputedB, f.arg4Hash);
-        end
+end
+
+% arg4Hash verification is deliberately NOT nested inside the arg4Recipe
+% branch above: a fixture carrying arg4Hash but no arg4Recipe has nothing
+% to verify the hash against, and for a SUCCESSFUL capture that must be a
+% hard error, not a silent skip -- the same defense-in-depth principle
+% already applied to local_md5 being unresolvable just above. This is not
+% purely hypothetical: sct_arg4_mismatch_uint8 is a real, committed
+% fixture with exactly this shape (arg4Hash present, no arg4Recipe), but
+% it is a REJECTION record (f.success == false, capturing that the
+% original refused a class-mismatched arg4) -- its arg4Hash is
+% documentary only, nothing was ever meant to be reconstructed and
+% replayed from it, and mexitkAcceptsWhereOriginalRejected (see
+% tests/tReferenceRejections.m) never calls with a vinB for it. Only a
+% SUCCESSFUL fixture (f.success == true) with arg4Hash but no arg4Recipe
+% is the genuinely unreachable, actually-a-bug shape this guards against:
+% a two-volume opcode's own output cannot be verified without the second
+% volume that produced it.
+if f.success && isfield(f, 'arg4Hash') && ~isempty(f.arg4Hash)
+    if isempty(vinB)
+        error('reconstructFixtureInput:missingArg4Recipe', ...
+            ['%s: fixture carries arg4Hash %s but no arg4Recipe to ' ...
+             'reconstruct volume B from -- refusing to silently skip ' ...
+             'arg4 verification'], name, f.arg4Hash);
+    end
+    if isempty(which('local_md5'))
+        error('reconstructFixtureInput:missingHashTool', ...
+            ['%s: cannot verify arg4Hash because local_md5 is not on the ' ...
+             'path (expected at tools/capture_reference/local_md5.m); ' ...
+             'refusing to silently skip input verification'], name);
+    end
+    recomputedB = local_md5(vinB);
+    if ~strcmp(recomputedB, f.arg4Hash)
+        error('reconstructFixtureInput:arg4Hash', ...
+            ['%s: reconstructed arg4 hash %s does not match the fixture''s ' ...
+             'recorded arg4Hash %s -- the recipe no longer reproduces the ' ...
+             'captured second volume'], name, recomputedB, f.arg4Hash);
     end
 end
 end
