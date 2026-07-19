@@ -99,6 +99,36 @@ classdef tPhase5LevelSetSmoke < matlab.unittest.TestCase
                 'mexitk:FMMCF:timeStep');
         end
 
+        function fmmcfIntegralExportMatchesFloatPathTruncated(tc)
+            % uint8/int32 promote to float internally (FmmcfRealType);
+            % single input IS float, so the internal pipelines are
+            % otherwise identical up to the export step. Verified directly:
+            % int32's ClampExport output equals a plain truncating cast
+            % (fix, matching C++ static_cast's truncate-toward-zero, NOT
+            % MATLAB's rounding int32() cast) of the single-input path's
+            % own output -- 0 mismatches across all 442368 voxels; these
+            % output values (-3.9 to 95.2) are well within int32's range,
+            % so no saturation is exercised by that half of the assertion.
+            % uint8 additionally clamps: the single path does produce
+            % negative values (measured min -3.913) that ClampExport
+            % saturates to 0 on uint8's unsigned range, measured uint8
+            % output range [0, 95] -- this cannot pass vacuously, since a
+            % broken clamp (e.g. wraparound instead of saturation) would
+            % produce values far outside [0, 95].
+            outSingle = mexitk('FMMCF', [10 0.0625 1], single(tc.Vu));
+            tc.assumeTrue(any(outSingle(:) < 0), ...
+                'test assumes the float path produces a negative value to clamp on this volume');
+
+            outI32 = mexitk('FMMCF', [10 0.0625 1], int32(tc.Vu));
+            expectedI32 = int32(fix(double(outSingle)));
+            tc.verifyEqual(outI32, expectedI32);
+
+            outU8 = mexitk('FMMCF', [10 0.0625 1], tc.Vu);
+            expectedU8 = uint8(max(fix(double(outSingle)), 0));
+            tc.verifyEqual(outU8, expectedU8);
+            tc.verifyEqual(min(outU8(:)), uint8(0));
+        end
+
         function fmmcfRejectsNegativeStencilRadius(tc)
             % RadiusValueType is unsigned; CastParam's integral path
             % rejects a negative value.
@@ -182,6 +212,45 @@ classdef tPhase5LevelSetSmoke < matlab.unittest.TestCase
             outI32 = mexitk('SFM', 100, int32(tc.Vu), [], []);
             tc.verifyEqual(outU8(1, 1, 1), uint8(255));
             tc.verifyEqual(outI32(1, 1, 1), int32(intmax('int32')));
+        end
+
+        function sfmNegativeStoppingTimeStopsAtSeed(tc)
+            % Defined ITK behaviour, not a mexitk guard: GenerateData()'s
+            % own stopping check is `currentValue > m_StoppingValue`
+            % (itkFastMarchingImageFilter.hxx); a negative stoppingTime is
+            % exceeded by the seed's own first (0-valued) heap pop, so
+            % marching stops immediately after the seed. Measured directly:
+            % output is exactly two-valued, seed at 0, everywhere else at
+            % the sentinel.
+            sub = tPhase5LevelSetSmoke.Seed;
+            out = mexitk('SFM', -5, tc.V, [], sub);
+            tc.verifyEqual(numel(unique(out(:))), 2);
+            tc.verifyEqual(out(sub(1), sub(2), sub(3)), 0);
+            tc.verifyEqual(out(1, 1, 1), tPhase5LevelSetSmoke.DoubleSentinel);
+        end
+
+        function sfmNanStoppingTimeMatchesUnboundedMarch(tc)
+            % Defined ITK behaviour: NaN is never exceeded by the stopping
+            % check (every ordered comparison against NaN is false), so
+            % marching runs to its own natural exhaustion instead of
+            % stopping early. This does NOT mean every sentinel voxel
+            % clears: voxels with no finite-speed path from a seed (this
+            % volume's zero-intensity background) stay at LargeValue
+            % regardless of stoppingTime, a property of the speed image,
+            % not of stoppingTime. Measured directly: NaN produces a
+            % bit-identical output to stoppingTime=100, which already
+            % exceeds this volume's own longest reachable arrival time (so
+            % 100 is already "effectively unbounded" here) -- the
+            % non-vacuous assertion is that a genuinely SMALL stoppingTime
+            % (1, which measurably truncates the march early -- see
+            % sfmLargerStoppingTimeReachesAtLeastAsManyVoxels above) does
+            % NOT match, so this cannot pass by coincidence.
+            sub = tPhase5LevelSetSmoke.Seed;
+            outNan = mexitk('SFM', NaN, tc.V, [], sub);
+            outUnbounded = mexitk('SFM', 100, tc.V, [], sub);
+            outTruncated = mexitk('SFM', 1, tc.V, [], sub);
+            tc.verifyEqual(outNan, outUnbounded);
+            tc.verifyNotEqual(outNan, outTruncated);
         end
 
         function sfmRejectsShortParamCount(tc)
