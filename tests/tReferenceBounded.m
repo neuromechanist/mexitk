@@ -194,7 +194,19 @@ classdef tReferenceBounded < matlab.unittest.TestCase
             ... (unlike SGAC/SLLS): floating-point noise floor of a
             ... 50-iteration finite-difference solver, the same category as
             ... SFM's own bounded deviation -- see src/opcodes/ssdls.cpp.
-            'SSDLS', 'ssdls_ssdls_volB_seedS1_double', 6.69151e-08, 5.25301e-06};
+            'SSDLS', 'ssdls_ssdls_volB_seedS1_double', 6.69151e-08, 5.25301e-06; ...
+            ...
+            ... RD: HistogramMatching + DemonsRegistrationFilter + Warp
+            ... (Epic 4 Phase 1, the first RegistrationCategory opcode).
+            ... Far above the floating-point noise floor: a real numerics
+            ... difference in the iterative Demons solver, the same
+            ... category as FCA/FMMCF, not rounding. numberOfIterations=0
+            ... is confirmed an exact identity no-op (rules out a basic
+            ... wiring error); fixed/moving role assignment (volumeA
+            ... fixed, volumeB moving) was confirmed by a swap test
+            ... against this fixture (the swapped wiring measures RMS
+            ... 21.7/ndiff 189263) -- see src/opcodes/rd.cpp.
+            'RD', 'rd_demons_volB_double', 4.63626, 88.0};
     end
 
     methods (Static)
