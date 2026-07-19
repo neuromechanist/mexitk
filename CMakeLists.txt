@@ -4,7 +4,7 @@
 # Institute for Neural Computation (INC), UC San Diego.
 
 cmake_minimum_required(VERSION 3.16...4.4)
-project(mexitk VERSION 0.5.0 LANGUAGES CXX)
+project(mexitk VERSION 0.6.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

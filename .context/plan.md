@@ -1,6 +1,6 @@
 # mexitk plan
 
-Status as of 2026-07-19. Version 0.5.0.
+Status as of 2026-07-19. Version 0.6.0.
 
 ## Current state
 

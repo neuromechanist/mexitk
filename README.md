@@ -31,7 +31,7 @@ Keeping ITK keeps the algorithms.
 
 ## Status: honest summary
 
-This is version 0.5.0.
+This is version 0.6.0.
 **All 40 of the original's opcodes are now addressed: 39 implemented, 1 formally unsupported.**
 Epic 2 (Phases 1-3) extended reference capture to 30 of them and measured every one against
 the original binary; Epic 3 added `FMMCF` and `SFM` (Phase 1), then `SGAC`, `SLLS`, and `SSDLS`
@@ -54,9 +54,9 @@ The table below reflects that measurement, produced by `tools/classify_fixtures.
 Every claim in the table is enforced by the test suite
 (`tests/tReferenceExact.m`, `tests/tReferenceBounded.m`,
 `tests/tReferenceRejections.m`, plus the dedicated FCA/FOMT/SWS suites):
-843 tests, passing locally on macOS arm64 against Homebrew ITK for the tree this table
-describes. CI (Linux x86_64 static-artifact and macOS arm64 no-ITK-installed runs) has not
-yet run against this tree; update this line once it has.
+845 tests, run green in CI on Linux x86_64 and macOS arm64
+(including the no-ITK-installed static-artifact runs)
+for the tree this table describes.
 
 | Opcode | ITK filter | Status | What that means |
 |---|---|---|---|
@@ -138,8 +138,8 @@ Read it before relying on this for science.
 
 | Platform | State |
 |---|---|
-| macOS arm64 (`maca64`) | Builds, loads, 843/843 tests pass locally against Homebrew ITK. CI (including the full suite on a runner with **no ITK installed**, against static ITK) previously ran green through the RD/RTPS tree (774 tests, then more); it has not yet run against this Epic 4 Phase 2 tree (`FFFT`/`FGMS`/`SCSS`). |
-| Linux x86_64 (`glnxa64`) | Builds, loads, and previously ran the full suite green against static ITK on a runner with **no ITK installed**, through the RD/RTPS tree. Not yet re-verified against this Epic 4 Phase 2 tree (no Linux/static-ITK environment available for this phase's local work). Must be built with GCC 12 or older; see BUILDING.md. |
+| macOS arm64 (`maca64`) | Builds, loads, 845/845 tests pass. Verified locally against Homebrew ITK and in CI against static ITK, including the full suite on a runner with **no ITK installed**. |
+| Linux x86_64 (`glnxa64`) | Builds, loads, 845/845 tests pass. Verified in CI against static ITK, including the full suite on a runner with **no ITK installed**. Must be built with GCC 12 or older; see BUILDING.md. |
 | macOS x86_64 (`maci64`) | Legacy; built on a best-effort basis only. R2025b is MathWorks' final Intel-Mac release. |
 | Windows | Best-effort only; the ITK toolchain there is unresolved. Not attempted. |
 
