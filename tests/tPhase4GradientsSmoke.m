@@ -399,6 +399,15 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             tc.verifyError(@() mexitk('FBL', [-5 5], tc.V), 'mexitk:FBL:domainSigma');
         end
 
+        function fblRejectsNonFiniteDomainSigma(tc)
+            % `<= 0.0` does not catch NaN either; verified directly, a NaN
+            % domainSigma reached the same silent all-NaN path as
+            % domainSigma == 0 above, no exception (param-guard hardening,
+            % Epic 3 issue #26).
+            tc.verifyError(@() mexitk('FBL', [NaN 5], tc.V), 'mexitk:FBL:domainSigma');
+            tc.verifyError(@() mexitk('FBL', [Inf 5], tc.V), 'mexitk:FBL:domainSigma');
+        end
+
         function fblRejectsZeroDomainSigma(tc)
             % domainSigma == 0 is a distinct failure from the negative
             % case: GaussianSpatialFunction::Evaluate divides by
@@ -417,6 +426,13 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             % filter (before mexitk's export step -- ClampExport cannot
             % help here, unlike the promoted opcodes). Verified directly.
             tc.verifyError(@() mexitk('FBL', [2 0], tc.V), 'mexitk:FBL:rangeSigma');
+        end
+
+        function fblRejectsNonFiniteRangeSigma(tc)
+            % Same non-finite gap as domainSigma above, on rangeSigma
+            % instead (param-guard hardening, Epic 3 issue #26).
+            tc.verifyError(@() mexitk('FBL', [2 NaN], tc.V), 'mexitk:FBL:rangeSigma');
+            tc.verifyError(@() mexitk('FBL', [2 Inf], tc.V), 'mexitk:FBL:rangeSigma');
         end
 
         function fcaRejectsNegativeTimeStep(tc)
