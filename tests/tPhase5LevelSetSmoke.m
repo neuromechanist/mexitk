@@ -411,7 +411,7 @@ classdef tPhase5LevelSetSmoke < matlab.unittest.TestCase
             tc.verifyError(@() mexitk('SSDLS', [1 Inf 0.02 5], tc.V, tc.V), ...
                 'mexitk:SSDLS:curvatureScaling');
             tc.verifyError(@() mexitk('SSDLS', [1 1 -Inf 5], tc.V, tc.V), ...
-                'mexitk:SSDLS:MaximumRMSError');
+                'mexitk:SSDLS:SetMaximumRMSError');
         end
 
         function twoVolumeOpcodesRejectNonFiniteMaxIteration(tc)

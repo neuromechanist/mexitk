@@ -43,7 +43,7 @@ void RunSsdls(OpContext& ctx) {
   const std::vector<double>& p = *ctx.params;
 
   // Non-finite guards up front, per docs/COMPATIBILITY.md deviation 12; see
-  // SGAC's identical rationale. MaxIteration is self-guarded via
+  // SGAC's identical rationale. SetNumberOfIterations is self-guarded via
   // CastParam<itk::IdentifierType> below.
   if (!std::isfinite(p[0])) {
     throw OpcodeError("mexitk:SSDLS:propagationScaling", "propagationScaling must be finite.");
@@ -52,7 +52,7 @@ void RunSsdls(OpContext& ctx) {
     throw OpcodeError("mexitk:SSDLS:curvatureScaling", "curvatureScaling must be finite.");
   }
   if (!std::isfinite(p[2])) {
-    throw OpcodeError("mexitk:SSDLS:MaximumRMSError", "MaximumRMSError must be finite.");
+    throw OpcodeError("mexitk:SSDLS:SetMaximumRMSError", "SetMaximumRMSError must be finite.");
   }
 
   using FilterType = itk::ShapeDetectionLevelSetImageFilter<RealImage, RealImage, RealT>;
@@ -81,7 +81,8 @@ void RunSsdls(OpContext& ctx) {
   // 4-parameter list for this opcode (no AdvectionScaling slot), so nothing
   // is set here.
   filter->SetMaximumRMSError(p[2]);
-  filter->SetNumberOfIterations(CastParam<itk::IdentifierType>(p[3], "SSDLS", "MaxIteration"));
+  filter->SetNumberOfIterations(
+      CastParam<itk::IdentifierType>(p[3], "SSDLS", "SetNumberOfIterations"));
   filter->Update();
 
   // No threshold step: fixture-verified the original returns this filter's
@@ -102,8 +103,9 @@ class SsdlsOpcode : public Opcode {
   const char* StatusNote() const override {
     return "does not reproduce the original bit-for-bit on the one "
            "captured fixture (ssdls_ssdls_volB_seedS1_double: "
-           "propagationScaling=1, curvatureScaling=1, MaximumRMSError=0.02, "
-           "MaxIteration=50, seed [70 50 14], double): measured max-abs "
+           "propagationScaling=1, curvatureScaling=1, "
+           "SetMaximumRMSError=0.02, SetNumberOfIterations=50, seed "
+           "[70 50 14], double): measured max-abs "
            "5.25e-6, RMS 6.7e-8, on 26274/442368 voxels (5.94%), asserted "
            "by tests/tReferenceBounded.m -- the floating-point noise floor "
            "of a 50-iteration finite-difference solver (the same category "
@@ -126,11 +128,18 @@ class SsdlsOpcode : public Opcode {
   }
 
   const std::vector<ParamSpec>& Params() const override {
+    // propagationScaling/curvatureScaling are registry-verbatim descriptive
+    // names (docs/matitk_opcode_registry.txt lists them lowercase, with no
+    // "Set" prefix and no "usually" hint for either); SetMaximumRMSError/
+    // SetNumberOfIterations are registry-verbatim SETTER names instead --
+    // the original's own dump literally uses the ITK setter names for
+    // these two, the same convention as FVMI's SetSigma/SetAlpha1/
+    // SetAlpha2 (see fvmi.cpp).
     static const std::vector<ParamSpec> kParams = {
         {"propagationScaling", nullptr},
-        {"curvatureScaling", "1.0"},
-        {"MaximumRMSError", "0.02"},
-        {"MaxIteration", "800"},
+        {"curvatureScaling", nullptr},
+        {"SetMaximumRMSError", "0.02"},
+        {"SetNumberOfIterations", "800"},
     };
     return kParams;
   }

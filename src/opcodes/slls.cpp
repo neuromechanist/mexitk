@@ -146,7 +146,7 @@ class SllsOpcode : public Opcode {
   const std::vector<ParamSpec>& Params() const override {
     static const std::vector<ParamSpec> kParams = {
         {"IsoSurfaceValue", nullptr},
-        {"PropagationScaling", "1.0"},
+        {"PropagationScaling", nullptr},
         {"CurvatureScaling", "1.0"},
         {"MaximumRMSError", "0.02"},
         {"MaxIteration", "800"},
