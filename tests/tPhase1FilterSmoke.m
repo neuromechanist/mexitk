@@ -298,8 +298,24 @@ classdef tPhase1FilterSmoke < matlab.unittest.TestCase
             tc.verifyError(@() mexitk('FDG', [-5 5], tc.V), 'mexitk:FDG:gaussianVariance');
         end
 
+        function fdgRejectsNonFiniteVariance(tc)
+            % A plain `<= 0.0` guard does not catch NaN (every ordered
+            % comparison against NaN is false): verified directly before
+            % this guard existed, a NaN gaussianVariance silently produced
+            % an all-NaN output, no exception. +Inf is rejected the same
+            % way (param-guard hardening, Epic 3 issue #26).
+            tc.verifyError(@() mexitk('FDG', [NaN 5], tc.V), 'mexitk:FDG:gaussianVariance');
+            tc.verifyError(@() mexitk('FDG', [Inf 5], tc.V), 'mexitk:FDG:gaussianVariance');
+        end
+
         function fgaRejectsNonPositiveVariance(tc)
             tc.verifyError(@() mexitk('FGA', [-5 5], tc.V), 'mexitk:FGA:gaussianVariance');
+        end
+
+        function fgaRejectsNonFiniteVariance(tc)
+            % Shares ExecuteDiscreteGaussian with FDG; same rationale.
+            tc.verifyError(@() mexitk('FGA', [NaN 5], tc.V), 'mexitk:FGA:gaussianVariance');
+            tc.verifyError(@() mexitk('FGA', [Inf 5], tc.V), 'mexitk:FGA:gaussianVariance');
         end
 
         function sigmoidRejectsZeroAlpha(tc)
