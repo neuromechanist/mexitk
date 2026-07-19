@@ -396,12 +396,14 @@ classdef tPhase3RegionGrowingSmoke < matlab.unittest.TestCase
             % multiplier has no prior sign/range constraint (unlike
             % NumberOfIteration/ReplaceValue above, which go through
             % CastParam); verified directly, a NaN multiplier silently
-            % produced an all-zero (nnz=0) output, no exception. Only the
-            % non-finite case is guarded, no new sign/range constraint
-            % (param-guard hardening, Epic 3 issue #26).
+            % produced an all-zero (nnz=0) output, no exception, and +Inf/
+            % -Inf were both silently accepted too. Only the non-finite
+            % case is guarded, no new sign/range constraint (param-guard
+            % hardening, Epic 3 issue #26).
             sub = tPhase3RegionGrowingSmoke.regionGrowSeed();
             tc.verifyError(@() mexitk('SCC', [NaN 5 100], tc.V, [], sub), 'mexitk:SCC:multiplier');
             tc.verifyError(@() mexitk('SCC', [Inf 5 100], tc.V, [], sub), 'mexitk:SCC:multiplier');
+            tc.verifyError(@() mexitk('SCC', [-Inf 5 100], tc.V, [], sub), 'mexitk:SCC:multiplier');
         end
 
         function sotRejectsZeroBins(tc)
