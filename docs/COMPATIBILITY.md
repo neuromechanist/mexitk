@@ -569,12 +569,14 @@ or refuses to reproduce a defect.
 
 ## Coverage
 
-`mexitk` currently implements **30 of the original's 40 opcodes**. Epic 2
-Phases 1-3 extended the capture harness to all 30, captured reference
-fixtures for every one of them, and measured `mexitk`'s own agreement
-against every fixture (`tools/classify_fixtures.m`; see "Second capture
-campaign: Phase 3 findings" above for how). The status ladder now splits
-the 30 into three tiers by that measurement, not by guesswork:
+`mexitk` currently implements **32 of the original's 40 opcodes**. Epic 2
+Phases 1-3 extended the capture harness to 30 of them, captured reference
+fixtures for every one, and measured `mexitk`'s own agreement against every
+fixture (`tools/classify_fixtures.m`; see "Second capture campaign: Phase 3
+findings" above for how). Epic 3 Phase 1 added the remaining two,
+`FMMCF` and `SFM`, each with its own captured fixture, measured the same
+way. The status ladder now splits the 32 into three tiers by that
+measurement, not by guesswork:
 
 - **Validated (14):** FBB, FBD, FBE, FBT, FD, FF, FGM, FMEAN, FMEDIAN,
   FVBIH, SCC, SCT, SIC, SOT.
@@ -585,9 +587,9 @@ the 30 into three tiers by that measurement, not by guesswork:
   than a defined reference (SCC's empty-seed fixture; see above) — those
   are asserted separately in `tests/tReferenceRejections.m` with no
   agreement claim.
-- **Bounded deviation (15):** FCA, SWS (their own dedicated sections
-  above), FBL, FCF, FDG, FDM, FDMV, FGA, FGAD, FGMRG, FLS, FOMT, FSN,
-  FVMI, SNC.
+- **Bounded deviation (17):** FCA, SWS (their own dedicated sections
+  above), FBL, FCF, FDG, FDM, FDMV, FGA, FGAD, FGMRG, FLS, FMMCF, FOMT,
+  FSN, FVMI, SFM, SNC.
   Runs the same ITK filter with the same parameters, but does not
   reproduce the original bit-for-bit; the difference is measured and
   bounded (`tests/tReferenceBounded.m`, plus FCA/SWS/FOMT's own dedicated
@@ -596,7 +598,13 @@ the 30 into three tiers by that measurement, not by guesswork:
   floating-point output and uint8 N=1 are still asserted bit-identical
   by `tests/tFomtReference.m` (see its own section above). A validated
   badge would overstate the uint8 multi-threshold agreement, and the
-  status ladder never conflates tiers.
+  status ladder never conflates tiers. FMMCF and SFM (Epic 3 Phase 1)
+  each have exactly one captured fixture (double only): FMMCF's residual
+  (RMS 1.60, max 43.3, 33% of voxels) is a real numerics drift, the same
+  class as FCA/SWS; SFM's residual (RMS 6.1e-15, max 9.0e-14) is at the
+  floating-point noise floor, with its 270838 sentinel-valued voxels
+  matching the original exactly — see their own `StatusNote`s in
+  `src/opcodes/fmmcf.cpp` / `src/opcodes/sfm.cpp`.
 - **Smoke-tested (1):** FAAB. Its disagreement with the
   original is large enough (RMS in the hundreds) that pinning a bound
   would not be a useful signal — see "SWS and FAAB: not bounded" below.
@@ -625,9 +633,11 @@ status reflects its OTHER captured points, not that class.
 | FLS | 98.7 (uint8) | 255.0 (uint8) | double/single at noise floor; int32 exact at sigma=2 |
 | FDM | 0.218 (uint8) | 6.0 (uint8) | double/single/int32 exact |
 | FDMV | 11.4 (uint8) | 255.0 (uint8) | double at noise floor (~3e-12); single/int32 exact |
+| FMMCF | 1.60 (double) | 43.3 (double) | only one fixture (double); uint8/int32 unmeasured |
+| SFM | 6.1e-15 (double) | 9.0e-14 (double) | floating-point noise floor; only one fixture (double); uint8/int32 unmeasured |
 | SNC | 73.3 (double) | 255.0 (double) | radius [1,1,1] and base-threshold fixtures exact |
 
-The remaining 10 opcodes are catalogued in `docs/matitk_opcode_registry.txt`
+The remaining 8 opcodes are catalogued in `docs/matitk_opcode_registry.txt`
 (the original binary's own parameter dump)
 and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`,
 but they are **not implemented**.
@@ -651,7 +661,7 @@ numbers above are the honest record, not a target.
 
 ## Opcode-to-ITK-class reference
 
-This table covers all 30 implemented opcodes regardless of tier (it
+This table covers all 32 implemented opcodes regardless of tier (it
 predates the validated/bounded-deviation/smoke-tested split above, and is
 kept as a single reference rather than split three ways).
 
@@ -676,11 +686,13 @@ kept as a single reference rather than split three ways).
 | FLS | `LaplacianRecursiveGaussianImageFilter` |
 | FMEAN | `MeanImageFilter` |
 | FMEDIAN | `MedianImageFilter` |
+| FMMCF | `MinMaxCurvatureFlowImageFilter` |
 | FSN | `SigmoidImageFilter` |
 | FVBIH | `VotingBinaryIterativeHoleFillingImageFilter` |
 | FVMI | `HessianRecursiveGaussianImageFilter` + `Hessian3DToVesselnessMeasureImageFilter` |
 | SCC | `ConfidenceConnectedImageFilter` |
 | SCT | `ConnectedThresholdImageFilter` |
+| SFM | `FastMarchingImageFilter` |
 | SIC | `IsolatedConnectedImageFilter` |
 | SNC | `NeighborhoodConnectedImageFilter` |
 | SOT | `OtsuThresholdImageFilter` |

@@ -32,15 +32,15 @@ Keeping ITK keeps the algorithms.
 ## Status: honest summary
 
 This is version 0.4.0.
-**30 of the original's 40 opcodes are implemented.**
-Epic 2 (Phases 1-3) extended reference capture to all 30 and measured every one of them
-against the original binary; the table below reflects that measurement, produced by
-`tools/classify_fixtures.m`.
+**32 of the original's 40 opcodes are implemented.**
+Epic 2 (Phases 1-3) extended reference capture to 30 of them and measured every one against
+the original binary; Epic 3 Phase 1 added `FMMCF` and `SFM` with their own captured fixtures.
+The table below reflects that measurement, produced by `tools/classify_fixtures.m`.
 Every claim in the table is enforced by the test suite
 (`tests/tReferenceExact.m`, `tests/tReferenceBounded.m`,
 `tests/tReferenceRejections.m`, plus the dedicated FCA/FOMT/SWS suites):
-721 tests, run green in CI on Linux x86_64 and macOS arm64
-for the tree this table describes.
+741 tests locally (CI verification on this tree is pending; 721 of these were
+run green in CI on Linux x86_64 and macOS arm64 before `FMMCF`/`SFM` landed).
 
 | Opcode | ITK filter | Status | What that means |
 |---|---|---|---|
@@ -69,9 +69,11 @@ for the tree this table describes.
 | `FGAD` | `GradientAnisotropicDiffusionImageFilter` | **bounded deviation** | Gradient-conductance sibling of `FCA`. RMS order 5e-5 to 0.35 on double/single; `uint8`/`int32` promote to `float` internally with a larger residual (RMS up to ~11.7 on uint8). |
 | `FGMRG` | `GradientMagnitudeRecursiveGaussianImageFilter` | **bounded deviation** | Bit-identical on int32/uint8 at sigma=2; double/single have a floating-point-noise-floor residual otherwise. Distinct algorithm from `FGM`. |
 | `FLS` | `LaplacianRecursiveGaussianImageFilter` | **bounded deviation** | Bit-identical on int32 at sigma=2; double/single at the floating-point noise floor. `uint8`'s clamp-to-0 export of the signed field amplifies that tiny difference into a much larger measured residual (RMS ~98.7). |
+| `FMMCF` | `MinMaxCurvatureFlowImageFilter` | **bounded deviation** | Not bit-identical on the one captured fixture (double, RMS 1.60, max 43.3 on 33% of voxels); a real numerics drift, not floating-point noise -- verified 0 iterations is an exact no-op and the deviation compounds with iteration count, the same shape as `FCF`'s. `uint8`/`int32` promote to `float` internally; no fixture exists for them. |
 | `FOMT` | `OtsuMultipleThresholdsImageFilter` | **bounded deviation** | Bit-identical to the original for `double`/`single` at N=2,3,4, and for `uint8` at N=1 (asserted exactly). `uint8` at N=2,3,4 deviates (0.17%/0.38%/0.84% of voxels, measured); confirmed a genuine ITK 2.4-to-5.x integral-histogram-binning difference, not the same fixable bug SOT had. |
 | `FSN` | `SigmoidImageFilter` | **bounded deviation** | Bit-identical on 5 of 6 captured fixtures; the sixth has a floating-point-noise-floor residual. |
 | `FVMI` | `HessianRecursiveGaussianImageFilter` + `Hessian3DToVesselnessMeasureImageFilter` | **bounded deviation** | Not bit-identical on any captured fixture; RMS 0.08-0.51, a real algorithmic drift from ITK's evolving Hessian/vesselness numerics, not noise. |
+| `SFM` | `FastMarchingImageFilter` | **bounded deviation** | Not bit-identical on the one captured fixture (double, stoppingTime=100; RMS 6.1e-15, max 9.0e-14), at the floating-point noise floor. Returns the RAW arrival-time map with ITK's own LargeValue sentinel intact (`NumericTraits<double>::max()/2`, 61% of voxels here); the 270838 sentinel voxels match the original exactly. `uint8`/`int32` promote to `float` internally and saturate the sentinel on export; no fixture exists for them. |
 | `SNC` | `NeighborhoodConnectedImageFilter` | **bounded deviation** | Bit-identical at radius [1,1,1] and the base threshold fixtures; other radii have a measured residual independent of axis order (an upstream algorithm difference, the same class as FCA/SWS). |
 | `FAAB` | `AntiAliasBinaryImageFilter` | **smoke-tested** | Runs and returns plausible output; reference fixtures exist but disagreement is too large to bound meaningfully (RMS in the hundreds). Output is a signed level-set field (positive inside). Integral input promotes to `float`; on `uint8` the negative (outside) half saturates to 0 on export. |
 
@@ -84,7 +86,7 @@ Status vocabulary, used consistently in the code, in `mexitk('?')`, and here:
 - **smoke-tested**: runs and returns plausible output, but no reference capture exists.
 - **untested**: implemented from the ITK mapping only; never run against a reference.
 
-The remaining 10 opcodes are **not implemented**.
+The remaining 8 opcodes are **not implemented**.
 They are catalogued in `docs/matitk_opcode_registry.txt` (the original binary's own parameter dump)
 and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`.
 
@@ -106,8 +108,8 @@ Read it before relying on this for science.
 
 | Platform | State |
 |---|---|
-| macOS arm64 (`maca64`) | Builds, loads, 721/721 tests pass. Verified locally against Homebrew ITK and in CI against static ITK, including the full suite on a runner with **no ITK installed**. |
-| Linux x86_64 (`glnxa64`) | Builds, loads, 721/721 tests pass. Verified in CI against static ITK, including the full suite on a runner with **no ITK installed**. Must be built with GCC 12 or older; see BUILDING.md. |
+| macOS arm64 (`maca64`) | Builds, loads, 741/741 tests pass locally against Homebrew ITK. CI verification of this exact tree (including the no-ITK-installed static-artifact run) is pending; the prior 721/721 ran green in CI before `FMMCF`/`SFM` landed. |
+| Linux x86_64 (`glnxa64`) | 721/721 previously verified in CI against static ITK, including the full suite on a runner with **no ITK installed**; CI verification of the 741-test tree with `FMMCF`/`SFM` is pending. Must be built with GCC 12 or older; see BUILDING.md. |
 | macOS x86_64 (`maci64`) | Legacy; built on a best-effort basis only. R2025b is MathWorks' final Intel-Mac release. |
 | Windows | Best-effort only; the ITK toolchain there is unresolved. Not attempted. |
 

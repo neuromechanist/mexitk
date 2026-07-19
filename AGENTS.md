@@ -31,7 +31,7 @@ src/
 ├── mexitk.cpp          # mexFunction entry: arg parsing, validation, dispatch, diagnostics
 ├── mexitk_common.h     # pixel-type dispatch + mxArray <-> itk::Image bridge (zero-copy import)
 ├── opcode.h/.cpp       # the opcode registry; RegisterBuiltinOpcodes() is the one list
-└── opcodes/            # 28 files for 30 opcodes: one file per opcode, except
+└── opcodes/            # 30 files for 32 opcodes: one file per opcode, except
                         # fdg.cpp (FDG + FGA) and fdm.cpp (FDM + FDMV), each a
                         # deliberate shared pair, not an accident
 matlab/                 # built MEX lands here; run_mexitk_tests.m
