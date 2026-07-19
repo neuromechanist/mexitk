@@ -1,8 +1,15 @@
 classdef tFomtReference < matlab.unittest.TestCase
     % Reference tests for FOMT (Otsu multiple thresholds).
     %
-    % FOMT is the one opcode that reproduces the original bit-for-bit on
-    % floating-point input, so these are equality assertions, not tolerances.
+    % FOMT reproduces the original bit-for-bit on floating-point input at
+    % every captured threshold count, and on uint8 input at N=1, so these
+    % are equality assertions, not tolerances. uint8 at N=2,3,4 does NOT
+    % reproduce bit-for-bit (see uint8DeviationStaysWithinMeasuredBound):
+    % Epic 2 Phase 3 investigated this directly (tried, and ruled out, the
+    % same histogram-auto-range root cause that explained SOT's own
+    % deviation) and confirmed it is a genuine ITK 2.4-to-5.x difference in
+    % integral histogram binning, not a mexitk bug. See
+    % docs/COMPATIBILITY.md and FomtOpcode::StatusNote.
     %
     % SPDX-License-Identifier: BSD-3-Clause
     % Copyright (c) 2026, Seyed Yahya Shirazi <shirazi@ieee.org>
@@ -10,8 +17,13 @@ classdef tFomtReference < matlab.unittest.TestCase
     % Institute for Neural Computation (INC), UC San Diego.
 
     properties (TestParameter)
-        % Every (N, class) combination captured from the original. N=2 and N=4
-        % are the threshold counts NFT itself uses (segm_scalp, segm_brain).
+        % Every (N, class) combination captured from the original that is
+        % bit-exact AND uses the multi-output fixture shape (numel(outs)
+        % == N, one mask per threshold; see bitIdenticalToOriginal). N=2
+        % and N=4 are the threshold counts NFT itself uses (segm_scalp,
+        % segm_brain). N=1's fixtures (fomt_1_128_double/uint8) are
+        % single-output-shaped instead (a single mask, no cell array) and
+        % are asserted separately by n1IsBitIdenticalIncludingUint8 below.
         exactCase = {'fomt_N2_bins50_double', 'fomt_N2_bins50_single', ...
                      'fomt_N3_bins128_double', 'fomt_N3_bins128_single', ...
                      'fomt_N4_bins100_double', 'fomt_N4_bins100_single'};
@@ -33,6 +45,26 @@ classdef tFomtReference < matlab.unittest.TestCase
                     sprintf('output %d class must match the original', k));
                 tc.verifyEqual(outs{k}, fx.outputs{k}, ...
                     sprintf('output %d must be bit-identical to matitk', k));
+            end
+        end
+
+        function n1IsBitIdenticalIncludingUint8(tc)
+            % N=1's fixtures (fomt_1_128_double, fomt_1_128_uint8) use the
+            % single-output fixture shape, not the multi-output shape
+            % exactCase/bitIdenticalToOriginal handle, so they get their
+            % own assertion here. uint8 at N=1 is a genuinely different
+            % result than uint8 at N=2,3,4 (see the class docstring): the
+            % original itself computes only ONE Otsu threshold for N=1,
+            % and that single-threshold binning agrees exactly, even
+            % though the same ITK-version binning difference causes
+            % disagreement once multiple thresholds are computed together.
+            for name = {'fomt_1_128_double', 'fomt_1_128_uint8'}
+                [fx, vin] = mexitkFixture(name{1});
+                out = mexitk('FOMT', fx.params, vin);
+                tc.verifyClass(out, fx.outputClass, sprintf( ...
+                    '%s: output class must match the original', name{1}));
+                tc.verifyEqual(out, fx.output, sprintf( ...
+                    '%s: output must be bit-identical to matitk', name{1}));
             end
         end
 

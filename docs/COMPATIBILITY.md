@@ -305,6 +305,17 @@ see `tests/tPhase3RegionGrowingSmoke.m`'s `sotMatchesFomtSingleThreshold`)
 — the histogram-range fix pulled `SOT`'s chosen threshold onto the same
 value `FOMT` was already using.
 
+**`SOT`'s histogram-range bug is NOT also `FOMT`'s bug.** `FOMT`
+(`OtsuMultipleThresholdsImageFilter`) shows the identical symptom as
+pre-fix `SOT` — `uint8` deviates, double/single exact — and was tested
+directly on that hypothesis. Ruled out empirically, not just by reading
+ITK's headers: `OtsuMultipleThresholdsImageFilter`'s own histogram
+generator already defaults to the image's real min/max (unlike `SOT`'s
+base class), and forcing the identical bounds explicitly changed nothing
+on any of the three deviating fixtures. See "FOMT: bit-identical for
+floating-point input, and for uint8 at N=1" below for the full
+investigation and the measured per-N numbers.
+
 **`FGA`==`FDG` alias, confirmed.** The "FGA is implemented as a
 deliberate duplicate of FDG" claim below predates any reference capture
 for either opcode and was inferred from the registry's identical
@@ -365,18 +376,49 @@ so their output differs by a small, measured amount.
 This is a categorically different situation from swapping in a different algorithm,
 but it is not bit-identity, and it is not described as such anywhere in this project.
 
-## FOMT: bit-identical for floating-point input
+## FOMT: bit-identical for floating-point input, and for uint8 at N=1
 
 `FOMT` reproduces the original **exactly**, bit for bit,
 for `double` and `single` input
 at N = 2 (50 bins), N = 3 (128 bins) and N = 4 (100 bins).
 Those cover every threshold count NFT uses.
+`uint8` input at N = 1 (128 bins, `fomt_1_128_uint8`) is also exact.
 
-`uint8` input does **not** match exactly:
-outputs disagree on roughly 0.2% of voxels
-(for example 755 of 442,368 voxels on output 2 at N=2).
+`uint8` input at N = 2, 3, 4 does **not** match exactly:
+
+| N (bins) | voxel disagreement |
+|---|---|
+| 2 (50) | 0.17% (755 of 442,368 on output 2) |
+| 3 (128) | 0.38% (worst of 3 outputs) |
+| 4 (100) | 1.80% (worst of 4 outputs) |
+
 ITK changed how integral pixel types are binned into the Otsu histogram since 2.4.
-The disagreement is asserted to stay under 2% by `tests/tFomtReference.m`.
+The disagreement is asserted to stay under 2% by `tests/tFomtReference.m`
+(`uint8DeviationStaysWithinMeasuredBound`).
+
+**Epic 2 Phase 3 investigated this directly and ruled out SOT's own root
+cause.** `SOT` (`OtsuThresholdImageFilter`, a single-threshold sibling class)
+had a genuine histogram-range bug: its base class defaults to the pixel
+type's TYPE range rather than the image's actual data range unless
+`SetAutoMinimumMaximum(true)` is called explicitly (see "SOT inside/outside
+defaults and polarity" below). `FOMT`'s `OtsuMultipleThresholdsImageFilter`
+looked like a plausible candidate for the identical bug given the matching
+symptom (uint8 deviates, double/single exact) and having no reference
+capture to check against for the four years since it was written. It is
+NOT the same bug: traced directly in ITK's headers,
+`OtsuMultipleThresholdsImageFilter` builds its histogram via
+`itk::Statistics::ScalarImageToHistogramGenerator`, whose underlying
+`SampleToHistogramFilter` defaults `AutoMinimumMaximum` to `true` in its own
+constructor — the image's actual min/max, not the pixel type's range,
+already the default with no code change needed. Confirmed empirically, not
+just by reading the header: forcing the exact same bounds explicitly (via
+`itk::MinimumMaximumImageCalculator`, `SetAutoHistogramMinimumMaximum(false)`,
+manual `SetHistogramMin`/`SetHistogramMax`) produced bit-identical output to
+the unmodified default on all three deviating `uint8` fixtures — the
+disagreement did not shrink by a single voxel. The uint8 N&ge;2 deviation is
+therefore a genuine ITK 2.4-to-5.x difference in how the multi-threshold
+Otsu calculator itself bins integral pixel values, not a histogram-range
+bug, and not something a bounds fix can close.
 
 ### Quirks reproduced deliberately
 
@@ -532,8 +574,9 @@ against every fixture (`tools/classify_fixtures.m`; see "Second capture
 campaign: Phase 3 findings" above for how). The status ladder now splits
 the 30 into three tiers by that measurement, not by guesswork:
 
-- **Validated (13):** FOMT (floating-point input only; see its own section
-  above), FBB, FBE, FD, FF, FGM, FMEAN, FMEDIAN, FVBIH, SCC, SCT, SIC, SOT.
+- **Validated (15):** FOMT (floating-point input, plus uint8 at N=1; see
+  its own section above), FBB, FBD, FBE, FBT, FD, FF, FGM, FMEAN, FMEDIAN,
+  FVBIH, SCC, SCT, SIC, SOT.
   Bit-identical to the original on every comparable captured fixture
   (`tests/tReferenceExact.m`, plus FOMT's own `tests/tFomtReference.m`).
   "Comparable" excludes fixtures where the original itself rejected the
@@ -546,15 +589,14 @@ the 30 into three tiers by that measurement, not by guesswork:
   Runs the same ITK filter with the same parameters, but does not
   reproduce the original bit-for-bit; the difference is measured and
   bounded (`tests/tReferenceBounded.m`, plus FCA/SWS's own dedicated
-  suites), not merely asserted to exist.
-- **Smoke-tested (3):** FAAB, FBD, FBT. FAAB's disagreement with the
+  suites), not merely asserted to exist. FOMT's uint8 output at N&ge;2 is
+  the same kind of bounded, non-exact residual, but FOMT's own overall
+  status stays validated (see its own section above) rather than moving
+  the whole opcode to this tier, matching the project's pre-existing
+  per-opcode (not per-pixel-type) status granularity.
+- **Smoke-tested (1):** FAAB. Its disagreement with the
   original is large enough (RMS in the hundreds) that pinning a bound
   would not be a useful signal — see "SWS and FAAB: not bounded" below.
-  FBD and FBT were not part of this epic's Phase 3 scope; their own
-  captured fixtures agree closely on inspection (see
-  `tools/classify_fixtures.m`'s own output), which is worth a promotion
-  pass in its own right, but that pass has not been done and is not
-  claimed here.
 
 The remaining 10 opcodes are catalogued in `docs/matitk_opcode_registry.txt`
 (the original binary's own parameter dump)

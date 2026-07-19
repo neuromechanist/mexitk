@@ -44,9 +44,11 @@ on this exact tree.
 
 | Opcode | ITK filter | Status | What that means |
 |---|---|---|---|
-| `FOMT` | `OtsuMultipleThresholdsImageFilter` | **validated** | Bit-identical to the original for `double` and `single` at N=2,3,4. `uint8` differs on ~0.2% of voxels. |
+| `FOMT` | `OtsuMultipleThresholdsImageFilter` | **validated** | Bit-identical to the original for `double`/`single` at N=2,3,4, and for `uint8` at N=1. `uint8` at N=2,3,4 deviates (0.17%/0.38%/1.80% of voxels, measured); confirmed a genuine ITK 2.4-to-5.x integral-histogram-binning difference, not the same fixable bug SOT had. |
 | `FBB` | `BinomialBlurImageFilter` | **validated** | Bit-identical to the original on every captured fixture (4 of 4, all four pixel types). |
+| `FBD` | `BinaryDilateImageFilter` | **validated** | Bit-identical to the original on every fixture it itself accepted (7 of 8 captured, all four pixel types); the eighth is a deliberate out-of-range rejection. Non-foreground output is the original input value, unchanged. |
 | `FBE` | `BinaryErodeImageFilter` | **validated** | Bit-identical to the original on every captured fixture (7 of 7, all four pixel types). |
+| `FBT` | `BinaryThresholdImageFilter` | **validated** | Bit-identical to the original on every fixture it itself accepted (7 of 9 captured, all four pixel types); the other two are deliberate out-of-range rejections. |
 | `FD` | `DerivativeImageFilter` | **validated** | Bit-identical on every fixture the original itself accepted (double/single). `uint8`/`int32` are rejected outright by the original; `mexitk` accepts both and returns a defined result, with no agreement claim for that pair. |
 | `FF` | `FlipImageFilter` | **validated** | Bit-identical to the original on every captured fixture (12 of 12, all four pixel types). `XDIRECTION`/`YDIRECTION` are axis-swapped relative to their registry order. |
 | `FGM` | `GradientMagnitudeImageFilter` | **validated** | Bit-identical to the original on every captured fixture (4 of 4, all four pixel types). Zero parameters. Distinct algorithm from `FGMRG`. |
@@ -72,8 +74,6 @@ on this exact tree.
 | `FVMI` | `HessianRecursiveGaussianImageFilter` + `Hessian3DToVesselnessMeasureImageFilter` | **bounded deviation** | Not bit-identical on any captured fixture; RMS 0.08-0.51, a real algorithmic drift from ITK's evolving Hessian/vesselness numerics, not noise. |
 | `SNC` | `NeighborhoodConnectedImageFilter` | **bounded deviation** | Bit-identical at radius [1,1,1] and the base threshold fixtures; other radii have a measured residual independent of axis order (an upstream algorithm difference, the same class as FCA/SWS). |
 | `FAAB` | `AntiAliasBinaryImageFilter` | **smoke-tested** | Runs and returns plausible output; reference fixtures exist but disagreement is too large to bound meaningfully (RMS in the hundreds). Output is a signed level-set field (positive inside). Integral input promotes to `float`; on `uint8` the negative (outside) half saturates to 0 on export. |
-| `FBD` | `BinaryDilateImageFilter` | **smoke-tested** | Runs and returns plausible output; reference fixtures now exist and agree closely, but no promotion pass has been done this epic. Non-foreground output is the original input value, unchanged. |
-| `FBT` | `BinaryThresholdImageFilter` | **smoke-tested** | Runs and returns plausible output; reference fixtures now exist and agree closely, but no promotion pass has been done this epic. |
 
 Status vocabulary, used consistently in the code, in `mexitk('?')`, and here:
 
