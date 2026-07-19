@@ -113,6 +113,12 @@ ff_1_0_0_uint8.mat
 ff_1_0_1_double.mat
 ff_1_0_1_uint8.mat
 ffft_complex1_double.mat
+ffft_const_complex_double.mat
+ffft_const_real_double.mat
+ffft_impoff_complex_double.mat
+ffft_impoff_real_double.mat
+ffft_imporig_complex_double.mat
+ffft_imporig_real_double.mat
 ffft_real0_double.mat
 fga_4_5_double.mat
 fga_4_5_int32.mat
