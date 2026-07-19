@@ -104,4 +104,5 @@ capture_case(cfg, 'FDMV', 'bin_uint8', [], binUint8, struct('inputRecipe', binRe
 capture_case(cfg, 'FDMV', 'lab_double', [], labDouble, struct('inputRecipe', labRecipeDouble));
 capture_case(cfg, 'FDMV', 'lab_uint8', [], labUint8, struct('inputRecipe', labRecipeUint8));
 
+local_mark_complete(cfg, 's08');
 diary off;

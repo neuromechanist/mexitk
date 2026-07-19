@@ -64,10 +64,23 @@ script cannot take an earlier script's already-saved fixtures with it.
 MATITK_DIR=/path/to/dir MEXITK_REFCAP_OUT=/path/to/output \
   matlab -batch "s07_filters_capture"
 # ...repeat for s08_morphology_capture, s09_regiongrow_capture,
-# s10_gradients_capture, s11_fca_sws_integral_capture, s12_inference_probes...
+# s10_gradients_capture, s10b_faab_crash_probe, s11_fca_sws_integral_capture,
+# s12_inference_probes...
 MATITK_DIR=/path/to/dir MEXITK_REFCAP_OUT=/path/to/output \
   matlab -batch "s13_unimplemented_probes"   # its OWN run; may crash
 ```
+
+`s10b_faab_crash_probe.m` runs after `s10`, in its own invocation, for the
+same crash-isolation reason as `s13`: `FAAB` on `uint8` input was measured,
+across two campaign runs, to kill the original's process with a floating
+point exception, not a catchable `itk::ExceptionObject` — first on raw
+mri (run 1), then again on the already-binarized `bin33` input (run 2).
+The crash is about the pixel type, not the pixel value distribution:
+binarizing first does not avoid it. `s10` itself only captures `FAAB` on
+`double`/`single`, both raw and `bin33` (all of which completed cleanly
+in both runs); `s10b` isolates every integral-class `FAAB` case — raw and
+`bin33`, `uint8` and `int32` (presumed to crash the same way, not yet
+directly confirmed) — so a crash there cannot cost `s10`'s other cases.
 
 ## Two real gotchas
 
@@ -96,18 +109,30 @@ why these are named `s00_...`, `s01_...`, etc. rather than `00_...`.
 ## No fixture may embed a path or hostname
 
 This is a public repo, so **no fixture may contain any absolute path,
-hostname, or `cfg.matitkDir` value.** `s07`–`s13` add no path-bearing
-field at all — every value they save is either a captured array, a hash,
-a parameter, or a recipe string whose only free variable is `V` (the
-`mri` base volume). `s06_provenance.m` is the one script that ever
-embeds a path (`provenance.binaryPath`, `provenance.md5sumRaw`), and only
-because provenance is the point of that script; the **committed**
-`tests/fixtures/provenance.mat` replaces the real path with the literal
-placeholder string `$MATITK_DIR` before it is committed — that
-substitution happens by hand at commit time, not automatically by the
-script, so if you ever re-run `s06` and commit its output, repeat the
+hostname, or `cfg.matitkDir` value belonging to *this project's own
+infrastructure*** — the capture machine, `MATITK_DIR`, or anything else
+under this harness's control. `s07`–`s13` add no such path-bearing field
+at all — every value they save is either a captured array, a hash, a
+parameter, or a recipe string whose only free variable is `V` (the `mri`
+base volume). `s06_provenance.m` is the one script that ever embeds one
+of *this project's* paths (`provenance.binaryPath`, `provenance.md5sumRaw`),
+and only because provenance is the point of that script; the
+**committed** `tests/fixtures/provenance.mat` replaces the real path with
+the literal placeholder string `$MATITK_DIR` before it is committed —
+that substitution happens by hand at commit time, not automatically by
+the script, so if you ever re-run `s06` and commit its output, repeat the
 substitution. See the project's public-repo rule: never expose internal
 cluster paths or hostnames.
+
+This rule does **not** apply to the original binary's own strings.
+`consoleText`/`errmsg` routinely preserve paths the *2006 binary itself*
+has compiled in — e.g. `itkGaussianOperator`'s warnings cite
+`/cs/guests/vwchu/myfiles/LinuxBuildMATITK64/InsightToolkit-2.8.1/...`,
+the original author's own SFU build tree from 2006. That is authentic
+captured output, not a leak: the rule concerns this project's
+infrastructure, and scrubbing the reference binary's own embedded
+strings would falsify the very console text the campaign exists to
+record faithfully.
 
 ## Derived-input recipe convention
 
@@ -173,6 +198,78 @@ for i = 1:numel(files)
 end
 ```
 
+## Completion sentinels: telling exit-time corruption from a mid-script crash
+
+The original binary was measured (run 1) to sometimes corrupt the heap
+**after** a script's diary shows every case completed successfully —
+`munmap_chunk(): invalid pointer` printed only once MATLAB itself was
+shutting down, well after the script's last `capture_case` call had
+already returned and saved. That still exits nonzero (typically `137`,
+SIGKILL), which is indistinguishable from a genuine mid-script crash by
+exit code alone — except that a script which finished has nothing left
+to lose, and one that crashed mid-script may have lost every case after
+the crash point.
+
+Every `s07`–`s13` script (and `s10b`) resolves this ambiguity itself:
+each writes a zero-byte completion marker,
+`<MEXITK_REFCAP_OUT>/COMPLETE_<scriptId>` (e.g. `COMPLETE_s09`), as its
+last act before `diary off` — after every case in its table has already
+been captured and saved. If that marker exists after a run, the script
+completed in full regardless of its exit code or what happened during
+MATLAB's own shutdown; if it does not, the script was interrupted
+mid-script and its diary log (see above) is the way to find out how far
+it got.
+
+## Resume mode
+
+Set `MEXITK_REFCAP_RESUME=1` to make a rerun after a crash incremental:
+`capture_case` checks, for every case, whether its target `.mat` already
+exists in `fixturesDir` before doing anything else, and if so skips that
+case entirely — no re-hashing, no re-running `matitk` — logging one line
+and returning the previously saved fixture instead (so a script whose
+later probes depend on an earlier capture's output, like `s12`'s
+identity/accessor cross-checks, still behaves correctly across a
+resumed run). Combine with the completion sentinels above: if a script's
+marker is missing, rerun it with `MEXITK_REFCAP_RESUME=1` set and only
+the cases that never got captured the first time will actually call
+`matitk` again.
+
+```sh
+MATITK_DIR=/path/to/dir MEXITK_REFCAP_OUT=/path/to/output \
+  MEXITK_REFCAP_RESUME=1 matlab -batch "s09_regiongrow_capture"
+```
+
+## Seeded calls need a class-matched empty arg4
+
+Measured directly against the real binary (run 1): a seeded call
+(`SCT`/`SCC`/`SNC`/`SIC`, or any `capture_case` row with `seedArg` but no
+real `arg4`) on `single`/`uint8`/`int32` input failed uniformly with
+`Both images (inputArrays) must be of the same data type.` — the
+original type-checks `arg4` against the input's class even when `arg4`
+is conceptually absent, and a bare MATLAB `[]` is a *double* empty, which
+mismatches anything non-`double`. `capture_case` now passes
+`cast([], class(input))` instead of a bare `[]` whenever a seed is
+present without a real second image — `uint8([])`, `single([])`,
+`int32([])`, or plain `[]` for `double` input, uniformly, with no
+per-script special-casing needed. This is a no-op for `double` input, so
+it changes nothing about the cases that already worked.
+
+## Open question: is the original's seed indexing 0-based or 1-based?
+
+Run 1 found that seeds sitting exactly at a dimension maximum — `[70 50
+27]` (`z` = the volume's own z-extent) and `SIC`'s old second seed
+`[1 128 1]` (`y` = the volume's own y-extent) — both error with
+`Location of seed outside volume`, regardless of which axis was at the
+maximum. That's consistent with more than one indexing rule (0-based
+with an exclusive upper bound, 1-based with an off-by-one, etc.), so
+`s12`'s `probe9_seed_base_indexing` brackets the known-good seed
+`[70 50 14]` by -1/0/+1 on every axis at once — `[0 0 0]` in particular
+is valid *only* if the original reads coordinates as literal 0-based ITK
+indices with no MATLAB-side conversion. Either an output or the
+outside-volume error at each bracketed point is itself the answer; this
+is not resolved yet, it is instrumented so the next campaign's fixtures
+can resolve it.
+
 ## Runtimes are unknown but logged
 
 Expected runtimes per script against the real binary are not known ahead
@@ -215,9 +312,12 @@ byte-for-byte identical; only path plumbing should ever change here.
 `s00`–`s06`, `refcap_config.m`, and `local_md5.m` are byte-identical
 locked: mexitk's committed fixtures (`tests/fixtures/`) were captured by
 their exact current text, so nothing in them may change, ever, ideally not
-even a comment. `s07`–`s13` and the shared helpers (`capture_case.m`,
-`capture_classes.m`, `local_summarize.m`, `local_isdryrun.m`) are not
-under that lock yet — no fixture from them is committed as of this
-phase, fixture selection is a later phase's job — but once a fixture
-they produced is committed, this same rule starts applying to whatever
-produced it.
+even a comment. `s07`–`s13`, `s10b`, and the shared helpers
+(`capture_case.m`, `capture_classes.m`, `local_summarize.m`,
+`local_isdryrun.m`, `local_isresume.m`, `local_mark_complete.m`) are now
+under that same lock too: this phase committed the 256 fixtures they
+produced (guarded by `tests/tFixtureHygiene.m` and `MANIFEST.txt`), so
+per the rule above, whatever produced an already-committed fixture may
+not change. What is still a later phase's job is fixture *selection* —
+deciding which of these captures become the basis for correctness
+assertions the way FCA/FOMT/SWS's fixtures already are.

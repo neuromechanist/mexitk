@@ -12,6 +12,19 @@ end
 hasSeed = isfield(opts, 'seedArg');
 hasArg4 = isfield(opts, 'arg4');
 
+outfile = fullfile(cfg.fixturesDir, sprintf('%s_%s.mat', lower(opcode), tag));
+
+% RESUME MODE: skip this case entirely (no hashing, no matitk call) when
+% it was already captured by an earlier, interrupted run. Loads and
+% returns the existing fixture so callers that use the return value
+% (e.g. s12's cross-check probes) keep working across a resumed campaign.
+if local_isresume() && isfile(outfile)
+    fprintf('  [resume] %s: already captured, skipping\n', tag);
+    loaded = load(outfile, 'fixture');
+    fixture = loaded.fixture;
+    return;
+end
+
 fixture = struct();
 fixture.opcode = opcode;
 fixture.params = params;
@@ -25,13 +38,11 @@ if hasSeed
     fixture.seedArg = opts.seedArg;
 end
 if hasArg4
-    fixture.arg4Hash = local_md5(opts.arg4);
+    fixture.arg4Hash = hash_or_empty(opts.arg4);
     if isfield(opts, 'arg4Recipe') && ~isempty(opts.arg4Recipe)
         fixture.arg4Recipe = opts.arg4Recipe;
     end
 end
-
-outfile = fullfile(cfg.fixturesDir, sprintf('%s_%s.mat', lower(opcode), tag));
 
 if local_isdryrun()
     fixture.success = false;
@@ -45,6 +56,15 @@ end
 arg4 = []; %#ok<NASGU>
 if hasArg4
     arg4 = opts.arg4; %#ok<NASGU>
+elseif hasSeed
+    % The original type-checks arg4 against the input class even when
+    % arg4 is conceptually absent: a bare double [] mismatches uint8/
+    % single/int32 input with "Both images (inputArrays) must be of the
+    % same data type." (measured directly against the real binary on
+    % seeded calls). Pass an empty of the INPUT's class instead whenever
+    % a seed is present but no real second image is; a no-op for double
+    % input (cast([], 'double') is still []).
+    arg4 = cast([], class(input)); %#ok<NASGU>
 end
 seedArg = [];
 if hasSeed
@@ -53,14 +73,19 @@ end
 ok = true;
 o = [];
 
+% Char concatenation (single-quoted, s05's pattern), NOT double-quoted:
+% disp(["CAUGHT ERROR: " me2.message]) would promote the whole thing to a
+% 1x2 string array (mixing a string literal with a char via []), which
+% MATLAB truncates with an ellipsis on display for long messages --
+% silently losing data in the very field the campaign exists to capture.
 if hasSeed && ischar(seedArg) && strcmp(seedArg, 'OMIT')
-    cmd = 'try; o = matitk(opcode, params, input); ok=true; catch me2; disp(["CAUGHT ERROR: " me2.message]); ok=false; end';
+    cmd = 'try; o = matitk(opcode, params, input); ok=true; catch me2; disp([''CAUGHT ERROR: '' me2.message]); ok=false; end';
 elseif hasSeed
-    cmd = 'try; o = matitk(opcode, params, input, arg4, seedArg); ok=true; catch me2; disp(["CAUGHT ERROR: " me2.message]); ok=false; end';
+    cmd = 'try; o = matitk(opcode, params, input, arg4, seedArg); ok=true; catch me2; disp([''CAUGHT ERROR: '' me2.message]); ok=false; end';
 elseif hasArg4
-    cmd = 'try; o = matitk(opcode, params, input, arg4); ok=true; catch me2; disp(["CAUGHT ERROR: " me2.message]); ok=false; end';
+    cmd = 'try; o = matitk(opcode, params, input, arg4); ok=true; catch me2; disp([''CAUGHT ERROR: '' me2.message]); ok=false; end';
 else
-    cmd = 'try; o = matitk(opcode, params, input); ok=true; catch me2; disp(["CAUGHT ERROR: " me2.message]); ok=false; end';
+    cmd = 'try; o = matitk(opcode, params, input); ok=true; catch me2; disp([''CAUGHT ERROR: '' me2.message]); ok=false; end';
 end
 
 fprintf('\n===== %s %s (params=%s, class=%s) =====\n', opcode, tag, mat2str(params), class(input));
@@ -81,4 +106,26 @@ else
     fprintf('  FAILED (captured above)\n');
 end
 save(outfile, 'fixture', '-v7');
+end
+
+function h = hash_or_empty(x)
+% local_md5 (locked; not modifiable here) hits Java's
+% MessageDigest.update(byte[]) via MATLAB's automatic overload dispatch,
+% which fails on ANY empty array -- "A Non-scalar value was passed for a
+% scalar argument" -- because MATLAB cannot disambiguate a 0-element
+% array from the scalar update(byte) overload. Returns the well-known,
+% independently verified MD5-of-zero-bytes constant for an empty input
+% instead of calling local_md5 on it (confirmed directly: `printf '' |
+% md5sum` -> d41d8cd98f00b204e9800998ecf8427e); calls local_md5
+% otherwise. The single point of truth for every place in this harness
+% an empty array can reach a hash call, so a future one can't diverge
+% from this one -- currently that is capture_case's own arg4Hash, when
+% opts.arg4 is explicitly an empty array (s12's probe10 does this on
+% purpose). input/output are never empty on any capture_case call in
+% this harness, so they still call local_md5 directly.
+if isempty(x)
+    h = 'd41d8cd98f00b204e9800998ecf8427e';
+else
+    h = local_md5(x);
+end
 end

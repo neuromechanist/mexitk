@@ -66,4 +66,5 @@ capture_classes(cfg, 'FD', '1_0', [1 0], classNames, classVals, 1:4);
 capture_case(cfg, 'FD', '1_1_double', [1 1], Vd);
 capture_classes(cfg, 'FD', '0_0', [0 0], classNames, classVals, [1 3]);
 
+local_mark_complete(cfg, 's07');
 diary off;
