@@ -67,14 +67,24 @@ classdef tPhase3RegionGrowingSmoke < matlab.unittest.TestCase
         end
 
         function sub = isolatedBackgroundSeed()
-            % [1 128 1], value 0: SIC's second seed group. A mid-band
+            % [2 120 2], value 0: SIC's second seed group. A mid-band
             % candidate (value ~40, still bright brain tissue) was tried
             % first and empirically FAILED to isolate: ITK's internal
             % binary search could not find a separating threshold between
             % it and regionGrowSeed's band, so both seeds came back
             % unlabelled. Pure background is far enough in intensity that
             % isolation succeeds. Verified, not assumed.
-            sub = [1 128 1];
+            %
+            % NOT [1 128 1]: the second capture campaign found the
+            % original rejects a seed sitting exactly at a dimension's own
+            % extent (dim 2 has size 128 on this volume, so index 128 is
+            % out of the original's valid 1..N-1 range) with "Location of
+            % seed outside volume". mexitk deliberately accepts strictly
+            % more here -- see dimensionMaximumSeedIsAcceptedButNotByOriginal
+            % below and docs/COMPATIBILITY.md -- so [1 128 1] is no longer
+            % used as the everyday second-seed fixture, matching
+            % tools/capture_reference/s09_regiongrow_capture.m's own S2.
+            sub = [2 120 2];
         end
     end
 
@@ -300,6 +310,22 @@ classdef tPhase3RegionGrowingSmoke < matlab.unittest.TestCase
         function sicOutOfBoundsSeedRejected(tc)
             tc.verifyError(@() mexitk('SIC', [20 255], tc.V, [], [9999 9999 9999, 1 1 1]), ...
                 'mexitk:seeds');
+        end
+
+        function dimensionMaximumSeedIsAcceptedButNotByOriginal(tc)
+            % [1 128 1]: dim 2 has size 128 on this volume, so index 128
+            % sits exactly at that dimension's own extent. The second
+            % capture campaign found the original rejects this with its
+            % own "Location of seed outside volume" message (fixture
+            % sic_dimmax_double), i.e. the original's valid range for a
+            % dimension of size N is 1..N-1, not 1..N. mexitk accepts it:
+            % SeedPointsToIndices validates against [1, size(axis)]
+            % inclusive, a deliberate "accept strictly more" deviation
+            % (see docs/COMPATIBILITY.md). No agreement claim is made
+            % about the resulting labelling, only that mexitk runs.
+            sub1 = tPhase3RegionGrowingSmoke.regionGrowSeed();
+            out = mexitk('SIC', [20 255], tc.V, [], [sub1, 1 128 1]);
+            tc.verifySize(out, size(tc.V));
         end
 
         function sicIgnoresOutOfBoundsExtraSeed(tc)
