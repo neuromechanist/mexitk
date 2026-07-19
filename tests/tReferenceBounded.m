@@ -23,6 +23,16 @@ classdef tReferenceBounded < matlab.unittest.TestCase
     % Swartz Center for Computational Neuroscience (SCCN),
     % Institute for Neural Computation (INC), UC San Diego.
 
+    properties (TestParameter)
+        % One parameterization per row of Cases below, keyed by fixture
+        % name (each name is unique and a valid MATLAB identifier, so it
+        % doubles as the test-instance name in output). Parameterized
+        % rather than a single method looping over Cases: a loop means one
+        % bad fixture aborts every case after it in the same test run,
+        % where TestParameter runs each case as its own independent test.
+        boundedCase = tReferenceBounded.caseParams();
+    end
+
     properties (Constant)
         % opcode, fixture name, measured RMS, measured max-abs.
         Cases = { ...
@@ -73,7 +83,7 @@ classdef tReferenceBounded < matlab.unittest.TestCase
             'FBL', 'fbl_5_5_double',   4.50544e-13, 3.92220e-12; ...
             ...
             ... FSN: SigmoidImageFilter. One fixture at the floating-point
-            ... noise floor; the other three captured fixtures are
+            ... noise floor; the other five captured fixtures are
             ... bit-exact (see tReferenceExact.m).
             'FSN', 'fsn_10_240_10_44_double', 1.73979e-15, 2.84217e-14; ...
             ...
@@ -148,51 +158,65 @@ classdef tReferenceBounded < matlab.unittest.TestCase
             'SNC', 'snc_rz_wide_seedS1_double', 62.2875, 255.0};
     end
 
+    methods (Static)
+        function s = caseParams()
+            % Converts the Cases table above into the struct TestParameter
+            % needs: one field per row, field name == fixture name, field
+            % value == a struct carrying that row's own (opcode, name,
+            % rmsMeasured, maxMeasured).
+            rows = tReferenceBounded.Cases;
+            s = struct();
+            for i = 1:size(rows, 1)
+                name = rows{i, 2};
+                s.(name) = struct('opcode', rows{i, 1}, 'name', name, ...
+                    'rmsMeasured', rows{i, 3}, 'maxMeasured', rows{i, 4});
+            end
+        end
+    end
+
     methods (Test)
-        function deviationMatchesDocumentedBound(tc)
-            for i = 1:size(tReferenceBounded.Cases, 1)
-                opcode = tReferenceBounded.Cases{i, 1};
-                name = tReferenceBounded.Cases{i, 2};
-                rmsMeasured = tReferenceBounded.Cases{i, 3};
-                maxMeasured = tReferenceBounded.Cases{i, 4};
+        function deviationMatchesDocumentedBound(tc, boundedCase)
+            opcode = boundedCase.opcode;
+            name = boundedCase.name;
+            rmsMeasured = boundedCase.rmsMeasured;
+            maxMeasured = boundedCase.maxMeasured;
 
-                [fx, vin] = mexitkFixture(name);
-                tc.assertTrue(fx.success, sprintf( ...
-                    '%s: fixture recorded success=false', name));
-                if isfield(fx, 'seedArg')
-                    got = mexitk(opcode, fx.params, vin, cast([], class(vin)), fx.seedArg);
-                else
-                    got = mexitk(opcode, fx.params, vin);
-                end
+            [fx, vin] = mexitkFixture(name);
+            tc.assertTrue(fx.success, sprintf( ...
+                '%s: fixture recorded success=false', name));
+            if isfield(fx, 'seedArg')
+                got = mexitk(opcode, fx.params, vin, cast([], class(vin)), fx.seedArg);
+            else
+                got = mexitk(opcode, fx.params, vin);
+            end
 
-                e = abs(double(got(:)) - double(fx.output(:)));
-                rms = sqrt(mean(e .^ 2));
-                mx = max(e);
+            e = abs(double(got(:)) - double(fx.output(:)));
+            rms = sqrt(mean(e .^ 2));
+            mx = max(e);
 
-                % 10% headroom over the measured value: enough to absorb
-                % platform floating-point ordering, far too tight to hide
-                % a real behavioural change. A floor keeps this meaningful
-                % for measurements at (or near) zero.
-                rmsCeiling = max(rmsMeasured * 1.1, rmsMeasured + 1e-12);
-                maxCeiling = max(maxMeasured * 1.1, maxMeasured + 1e-9);
-                tc.verifyLessThan(rms, rmsCeiling, sprintf( ...
-                    '%s (%s): RMS deviation %.6g exceeds documented %.6g', ...
-                    name, opcode, rms, rmsMeasured));
-                tc.verifyLessThan(mx, maxCeiling, sprintf( ...
-                    '%s (%s): max deviation %.6g exceeds documented %.6g', ...
-                    name, opcode, mx, maxMeasured));
+            % 10% headroom over the measured value: enough to absorb
+            % platform floating-point ordering, far too tight to hide
+            % a real behavioural change. A floor keeps this meaningful
+            % for measurements at (or near) zero.
+            rmsCeiling = max(rmsMeasured * 1.1, rmsMeasured + 1e-12);
+            maxCeiling = max(maxMeasured * 1.1, maxMeasured + 1e-9);
+            tc.verifyLessThan(rms, rmsCeiling, sprintf( ...
+                '%s (%s): RMS deviation %.6g exceeds documented %.6g', ...
+                name, opcode, rms, rmsMeasured));
+            tc.verifyLessThan(mx, maxCeiling, sprintf( ...
+                '%s (%s): max deviation %.6g exceeds documented %.6g', ...
+                name, opcode, mx, maxMeasured));
 
-                % Guard the other direction too, but only for measurements
-                % well above the floating-point noise floor: a value
-                % already near double precision's own limit (< 1e-8) can
-                % legitimately shift by a platform-dependent factor of 2-3
-                % without indicating any real change in agreement.
-                if rmsMeasured > 1e-8
-                    tc.verifyGreaterThan(rms, rmsMeasured * 0.1, sprintf( ...
-                        ['%s (%s): now agrees with matitk far better than ' ...
-                         'documented (RMS %.6g vs %.6g); re-baseline and ' ...
-                         'update docs/COMPATIBILITY.md'], name, opcode, rms, rmsMeasured));
-                end
+            % Guard the other direction too, but only for measurements
+            % well above the floating-point noise floor: a value
+            % already near double precision's own limit (< 1e-8) can
+            % legitimately shift by a platform-dependent factor of 2-3
+            % without indicating any real change in agreement.
+            if rmsMeasured > 1e-8
+                tc.verifyGreaterThan(rms, rmsMeasured * 0.1, sprintf( ...
+                    ['%s (%s): now agrees with matitk far better than ' ...
+                     'documented (RMS %.6g vs %.6g); re-baseline and ' ...
+                     'update docs/COMPATIBILITY.md'], name, opcode, rms, rmsMeasured));
             end
         end
     end
