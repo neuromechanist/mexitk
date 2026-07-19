@@ -36,10 +36,12 @@ void RunFmedian(OpContext& ctx) {
   // YRADIUS=1, symmetric so the swap is a no-op) is already exact. See
   // docs/COMPATIBILITY.md, second capture campaign findings.
   typename FilterType::RadiusType radius;
-  AssignSwappedXY(radius,
-                  CastParam<itk::SizeValueType>(p[0], "FMEDIAN", "XRADIUS"),
-                  CastParam<itk::SizeValueType>(p[1], "FMEDIAN", "YRADIUS"),
-                  CastParam<itk::SizeValueType>(p[2], "FMEDIAN", "ZRADIUS"));
+  // Validate in declared parameter order; as call arguments the evaluation
+  // order (and so which name an error cites) would be unspecified.
+  const auto rx = CastParam<itk::SizeValueType>(p[0], "FMEDIAN", "XRADIUS");
+  const auto ry = CastParam<itk::SizeValueType>(p[1], "FMEDIAN", "YRADIUS");
+  const auto rz = CastParam<itk::SizeValueType>(p[2], "FMEDIAN", "ZRADIUS");
+  AssignSwappedXY(radius, rx, ry, rz);
   filter->SetRadius(radius);
   filter->Update();
 
