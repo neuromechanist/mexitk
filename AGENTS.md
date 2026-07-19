@@ -117,6 +117,12 @@ Quirks that ARE reproduced (do not "fix" these):
   `-Wl,-ld_classic` is the current fix and is itself deprecated; revisit when MathWorks updates FindMatlab.
 - **`SetReturnBinMidpoint` looks like the fix for `FOMT` and is not.** ITK 2.4 semantics suggest
   midpoint; setting it makes every exact case diverge. Left explicit with a comment. Do not change it.
+- **`SLLS`'s threshold polarity looks backwards and is not.** `LaplacianSegmentationLevelSetImageFilter`'s
+  own header documents positive-inside/negative-outside; wiring the threshold to match that
+  documentation is wrong -- it diverges from the fixture by nearly the entire volume. The polarity
+  that actually matches (negative-inside, the same as `SGAC`) was confirmed against the fixture, not
+  assumed from the docstring. Left explicit with a comment in `src/opcodes/slls.cpp`. Do not "fix" it
+  to match the documented convention.
 - **MATLAB `-batch` cd's to the script's directory**, so `addpath` explicitly.
   Script filenames cannot start with a digit.
 

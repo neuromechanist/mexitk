@@ -93,7 +93,10 @@ void RunSlls(OpContext& ctx) {
   // matches, confirmed against the fixture, is the SAME as SGAC: negative
   // values -> 255 (inside), bounds [lowest, 0] inclusive of the zero
   // crossing. This is not a reproduction of the documented semantics; it
-  // is what the fixture evidence shows the original actually did. See
+  // is what the fixture evidence shows the original actually did. The
+  // polarity below looks backwards against the class's own documentation
+  // and is not a bug: do not "fix" it to match the docstring, the same
+  // FOMT/SetReturnBinMidpoint trap documented in AGENTS.md. See
   // StatusNote for the residual this leaves.
   using ThresholdType = itk::BinaryThresholdImageFilter<RealImage, InImage>;
   typename ThresholdType::Pointer thresh = ThresholdType::New();
