@@ -15,6 +15,7 @@
 #include "itkCastImageFilter.h"
 #include "itkWatershedImageFilter.h"
 
+#include <cmath>
 #include <type_traits>
 
 namespace mexitk {
@@ -94,6 +95,26 @@ class SwsOpcode : public Opcode {
   }
 
   void Execute(OpContext& ctx) const override {
+    // Neither level nor threshold has a prior mexitk-level sign/range
+    // constraint (the "0.0-1.0" registry hint above is documentation, not
+    // an enforced range, and is left that way here too -- only the
+    // non-finite gap is closed, nothing tightened beyond it). Re-verified
+    // empirically for this hardening pass, per param, in isolated runs:
+    // level=NaN and level=+Inf each silently returned a defined-looking
+    // but degenerate labeling (no exception); threshold=NaN silently
+    // returned a defined-looking labeling too; threshold=+Inf was the one
+    // combination already caught, by luck rather than design, by ITK's own
+    // internal consistency check inside WatershedSegmentTreeGenerator
+    // (surfaced as mexitk:itkException) -- not a guarantee for the other
+    // three non-finite cases, which this guard now covers uniformly and
+    // predictably instead of relying on that inconsistent side effect.
+    const std::vector<double>& p = *ctx.params;
+    if (!std::isfinite(p[0])) {
+      throw OpcodeError("mexitk:SWS:level", "level must be finite.");
+    }
+    if (!std::isfinite(p[1])) {
+      throw OpcodeError("mexitk:SWS:threshold", "threshold must be finite.");
+    }
     DispatchOnPixelType(mxGetClassID(ctx.volumeA),
                         [&](auto tag) { RunSws<typename decltype(tag)::type>(ctx); });
   }
