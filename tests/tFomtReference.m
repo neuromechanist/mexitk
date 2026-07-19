@@ -151,6 +151,8 @@ classdef tFomtReference < matlab.unittest.TestCase
                 'mexitk:paramRange');
             tc.verifyError(@() withOutputs(3, @() mexitk('FOMT', [3 Inf], vin)), ...
                 'mexitk:paramRange');
+            tc.verifyError(@() withOutputs(3, @() mexitk('FOMT', [3 -Inf], vin)), ...
+                'mexitk:paramRange');
         end
 
         function uint8DeviationStaysWithinMeasuredBound(tc, uint8DeviationCase)
