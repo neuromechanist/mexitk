@@ -97,6 +97,7 @@ set(MEXITK_SOURCES
   src/opcodes/slls.cpp
   src/opcodes/snc.cpp
   src/opcodes/sot.cpp
+  src/opcodes/ssdls.cpp
   src/opcodes/sws.cpp
 )
 
