@@ -29,10 +29,19 @@ void RunFvbih(OpContext& ctx) {
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(input);
 
+  // The 2006 original maps X-named parameters to MATLAB dim 2 (ITK axis 1)
+  // and Y-named parameters to MATLAB dim 1 (ITK axis 0); Z is unchanged.
+  // Proven by fixture evidence: fvbih_distinct_hole (radiusX=2, radiusY=1,
+  // asymmetric) deviates under the unswapped mapping, while
+  // fvbih_baseline_hole (radiusX=radiusY=1, symmetric) is already exact.
+  // See docs/COMPATIBILITY.md, second capture campaign findings.
   typename FilterType::InputSizeType radius;
-  radius[0] = CastParam<itk::SizeValueType>(p[0], "FVBIH", "radiusX");
-  radius[1] = CastParam<itk::SizeValueType>(p[1], "FVBIH", "radiusY");
-  radius[2] = CastParam<itk::SizeValueType>(p[2], "FVBIH", "radiusZ");
+  // Validate in declared parameter order; as call arguments the evaluation
+  // order (and so which name an error cites) would be unspecified.
+  const auto rx = CastParam<itk::SizeValueType>(p[0], "FVBIH", "radiusX");
+  const auto ry = CastParam<itk::SizeValueType>(p[1], "FVBIH", "radiusY");
+  const auto rz = CastParam<itk::SizeValueType>(p[2], "FVBIH", "radiusZ");
+  AssignSwappedXY(radius, rx, ry, rz);
   filter->SetRadius(radius);
   filter->SetBackgroundValue(
       CastParam<PixelT>(p[3], "FVBIH", "binaryImageBackgroundColor"));
@@ -65,12 +74,18 @@ class FvbihOpcode : public Opcode {
   const char* Description() const override {
     return "Iterative binary voting hole filling";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kValidated; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists. "
-           "MajorityThreshold is an offset above 50% of the neighborhood, not "
-           "an absolute vote count; a large value silently makes the filter "
-           "a no-op, matching ITK/original semantics.";
+    return "bit-identical to the original on every fixture the original "
+           "itself accepted (9 of 10 captured), asserted by "
+           "tests/tReferenceExact.m; the tenth (foreground=300 on uint8) is "
+           "a deliberate mexitk:paramRange rejection, see "
+           "tests/tReferenceRejections.m. radiusX/radiusY are axis-swapped; "
+           "see the axis-mapping comment in this file and "
+           "docs/COMPATIBILITY.md. MajorityThreshold is an offset above 50% "
+           "of the neighborhood, not an absolute vote count; a large value "
+           "silently makes the filter a no-op, matching ITK/original "
+           "semantics.";
   }
 
   const std::vector<ParamSpec>& Params() const override {

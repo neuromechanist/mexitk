@@ -1,7 +1,18 @@
 classdef tPhase1FilterSmoke < matlab.unittest.TestCase
-    % Smoke tests for the Phase 1 filter opcodes. No reference fixtures exist
-    % for these, so the suite asserts structural invariants (shape, class,
-    % parameter validation, and per-filter behaviour) rather than bit-exactness.
+    % Smoke tests for the Phase 1 filter opcodes. This suite asserts
+    % STRUCTURAL invariants (shape, class, parameter validation, and
+    % per-filter behaviour) regardless of validation tier; it does not
+    % itself assert bit-exactness or measured deviation bounds.
+    %
+    % Reference fixtures now exist for every opcode in the `op` list below
+    % (captured in Epic 2 Phase 1, exactness/bounds established in Phase
+    % 3): FMEDIAN, FMEAN, FBB, FF, FD, FBT, and (partially) FSN are
+    % asserted bit-exact against the original in tests/tReferenceExact.m;
+    % FDG and FGA are bounded-deviation opcodes with no bit-exact captured
+    % point, asserted in tests/tReferenceBounded.m. This file's own
+    % assertions stay useful regardless -- they catch a broken dispatch or
+    % a malformed parameter guard even when the numeric comparison
+    % suites are skipped or an opcode has no reference fixture at all.
     %
     % SPDX-License-Identifier: BSD-3-Clause
     % Copyright (c) 2026, Seyed Yahya Shirazi <shirazi@ieee.org>
@@ -78,12 +89,17 @@ classdef tPhase1FilterSmoke < matlab.unittest.TestCase
 
         function flipMatchesBuiltinPerAxis(tc)
             % Not just a no-op / round-trip check: pin FF against MATLAB's own
-            % flip() on each axis independently.
+            % flip() on each axis independently. XDIRECTION/YDIRECTION are
+            % swapped relative to their param position: the original's
+            % XDIRECTION flips MATLAB dim 2, YDIRECTION flips MATLAB dim 1
+            % (ZDIRECTION flips dim 3 unchanged). Fixture-proven bit-exact
+            % against ff_* reference captures; see docs/COMPATIBILITY.md.
             params = {[1 0 0], [0 1 0], [0 0 1]};
+            flipAxis = [2 1 3];
             for a = 1:3
                 for f = {@double, @uint8}
                     vin = f{1}(tc.Vu);
-                    tc.verifyEqual(mexitk('FF', params{a}, vin), flip(vin, a));
+                    tc.verifyEqual(mexitk('FF', params{a}, vin), flip(vin, flipAxis(a)));
                 end
             end
         end

@@ -88,9 +88,17 @@ class FvmiOpcode : public Opcode {
   const char* Description() const override {
     return "Vesselness measure (Hessian eigenvalues, Sato)";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kBoundedDeviation; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists. "
+    return "does not reproduce the original bit-for-bit: both stages' "
+           "internal numerics (HessianRecursiveGaussianImageFilter, "
+           "Hessian3DToVesselnessMeasureImageFilter) moved between ITK 2.4 "
+           "and 5.x. Measured RMS ranges from about 0.08 to 0.51 across "
+           "the captured double/single/int32/uint8 fixtures, with max "
+           "absolute differences around 1-10 -- large relative to the "
+           "vesselness measure's own typical range, so this is a real "
+           "algorithmic drift, not noise. See tests/tReferenceBounded.m "
+           "for the exact measured numbers per fixture. "
            "The three registry parameters land on two different ITK filters "
            "(SetSigma on HessianRecursiveGaussianImageFilter; SetAlpha1/"
            "SetAlpha2 on Hessian3DToVesselnessMeasureImageFilter); the "

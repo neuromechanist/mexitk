@@ -67,14 +67,24 @@ classdef tPhase3RegionGrowingSmoke < matlab.unittest.TestCase
         end
 
         function sub = isolatedBackgroundSeed()
-            % [1 128 1], value 0: SIC's second seed group. A mid-band
+            % [2 120 2], value 0: SIC's second seed group. A mid-band
             % candidate (value ~40, still bright brain tissue) was tried
             % first and empirically FAILED to isolate: ITK's internal
             % binary search could not find a separating threshold between
             % it and regionGrowSeed's band, so both seeds came back
             % unlabelled. Pure background is far enough in intensity that
             % isolation succeeds. Verified, not assumed.
-            sub = [1 128 1];
+            %
+            % NOT [1 128 1]: the second capture campaign found the
+            % original rejects a seed sitting exactly at a dimension's own
+            % extent (dim 2 has size 128 on this volume, so index 128 is
+            % out of the original's valid 1..N-1 range) with "Location of
+            % seed outside volume". mexitk deliberately accepts strictly
+            % more here -- see dimensionMaximumSeedIsAcceptedButNotByOriginal
+            % below and docs/COMPATIBILITY.md -- so [1 128 1] is no longer
+            % used as the everyday second-seed fixture, matching
+            % tools/capture_reference/s09_regiongrow_capture.m's own S2.
+            sub = [2 120 2];
         end
     end
 
@@ -302,6 +312,22 @@ classdef tPhase3RegionGrowingSmoke < matlab.unittest.TestCase
                 'mexitk:seeds');
         end
 
+        function dimensionMaximumSeedIsAcceptedButNotByOriginal(tc)
+            % [1 128 1]: dim 2 has size 128 on this volume, so index 128
+            % sits exactly at that dimension's own extent. The second
+            % capture campaign found the original rejects this with its
+            % own "Location of seed outside volume" message (fixture
+            % sic_dimmax_double), i.e. the original's valid range for a
+            % dimension of size N is 1..N-1, not 1..N. mexitk accepts it:
+            % SeedPointsToIndices validates against [1, size(axis)]
+            % inclusive, a deliberate "accept strictly more" deviation
+            % (see docs/COMPATIBILITY.md). No agreement claim is made
+            % about the resulting labelling, only that mexitk runs.
+            sub1 = tPhase3RegionGrowingSmoke.regionGrowSeed();
+            out = mexitk('SIC', [20 255], tc.V, [], [sub1, 1 128 1]);
+            tc.verifySize(out, size(tc.V));
+        end
+
         function sicIgnoresOutOfBoundsExtraSeed(tc)
             % Lead override of this plan's own default: SIC bounds-checks
             % ONLY the two consumed seed points, not ignored extras (the
@@ -322,34 +348,35 @@ classdef tPhase3RegionGrowingSmoke < matlab.unittest.TestCase
             tc.verifyEmpty(setdiff(unique(out(:)), uint8([0 255])));
         end
 
-        function sotDoubleInsideValueIsRealmax(tc)
-            % Pins the "ITK default inside value" claim: catches an
-            % accidental hardcode to 255 on a double volume, where the
-            % correct default is the pixel type's own max.
+        function sotOutsideValueIsFixed255OnDouble(tc)
+            % Pins the mask-value claim: the original's SOT mask value is a
+            % FIXED 255 on every pixel type, not the pixel type's own max
+            % (realmax('double') for double). Fixture-proven: every
+            % captured sot_* fixture, double included, has unique output
+            % {0,255}, never {0,realmax}. See docs/COMPATIBILITY.md.
             out = mexitk('SOT', 128, tc.V);
             u = unique(out(:));
             tc.verifyEqual(numel(u), 2);
-            tc.verifyEqual(max(u), realmax('double'));
+            tc.verifyEqual(max(u), 255);
         end
 
         function sotMatchesFomtSingleThreshold(tc)
-            % Both label the low side (<=threshold) of a single Otsu cut,
-            % so the partitions should nearly match, but OtsuThresholdImageFilter
-            % (SOT) and OtsuMultipleThresholdsImageFilter at N=1 (FOMT) use
-            % different calculators and may pick threshold values differing
-            % by up to one bin edge. MEASURED on this data (not invented,
-            % not tuned): agreement is 0.997542769821 (441281 of 442368
-            % voxels agree), NOT exactly 1, so per the plan's protocol this
-            % asserts the measured bound rather than equality. Every
-            % disagreeing voxel has intensity exactly 33, consistent with a
-            % one-bin-edge difference between the two calculators' chosen
-            % thresholds. See docs/COMPATIBILITY.md.
+            % SOT labels the HIGH side of its Otsu cut (intensity >
+            % threshold) with its mask value; FOMT's single-class output
+            % (fomt==255) labels the LOW side (class 0). Reference-fixture
+            % Phase 3 work found and fixed two SOT bugs (polarity was
+            % inverted; the histogram range used the uint8 TYPE bound
+            % [0,255] instead of the data range) that, together, also
+            % happened to align SOT's chosen threshold with FOMT's: MEASURED
+            % on this data (not invented, not tuned) post-fix agreement is
+            % EXACTLY 1.0 (442368 of 442368 voxels), i.e. sotHigh is the
+            % exact complement of fomtLow, not merely a close approximation
+            % as it was pre-fix. See docs/COMPATIBILITY.md.
             sot = mexitk('SOT', 128, tc.Vu);
             fomt = mexitk('FOMT', [1 128], tc.Vu);
-            sotInside = (sot ~= 0);
-            fomtClass0 = (fomt == 255);
-            agree = nnz(sotInside == fomtClass0) / numel(sot);
-            tc.verifyGreaterThan(agree, 0.997);
+            sotHigh = (sot ~= 0);
+            fomtLow = (fomt == 255);
+            tc.verifyEqual(sotHigh, ~fomtLow);
         end
     end
 

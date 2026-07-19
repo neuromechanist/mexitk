@@ -79,13 +79,24 @@ class FomtOpcode : public Opcode {
   const char* Description() const override {
     return "Otsu multiple thresholds; returns one 0/255 mask per class";
   }
-  Status GetStatus() const override { return Status::kValidated; }
+  Status GetStatus() const override { return Status::kBoundedDeviation; }
   const char* StatusNote() const override {
     return "bit-identical to the original for double and single at N=2,3,4 "
-           "(every threshold count NFT uses). uint8 differs on ~0.2% of voxels "
-           "because ITK changed integral histogram binning since 2.4. Returns N "
-           "masks for N thresholds, dropping the top Otsu class, as the "
-           "original does";
+           "(every threshold count NFT uses), and for uint8 at N=1, "
+           "asserted exactly by tests/tFomtReference.m. uint8 at N=2,3,4 "
+           "deviates (0.17%/0.38%/0.84% of voxels respectively, measured), "
+           "asserted as a bound (not equality) by "
+           "tests/tFomtReference.m's uint8DeviationStaysWithinMeasuredBound. "
+           "Epic 2 Phase 3 tested and ruled out SOT's own root cause here "
+           "(SOT's histogram needed an explicit auto-range call; FOMT's "
+           "OtsuMultipleThresholdsImageFilter already auto-ranges to the "
+           "image's actual min/max by default, confirmed empirically: "
+           "forcing the same bounds explicitly changes nothing) -- the "
+           "uint8 multi-threshold deviation is a genuine ITK 2.4-to-5.x "
+           "difference in how integral pixel types are binned into the "
+           "Otsu histogram, not a mexitk bug. See docs/COMPATIBILITY.md. "
+           "Returns N masks for N thresholds, dropping the top Otsu class, "
+           "as the original does";
   }
 
   const std::vector<ParamSpec>& Params() const override {

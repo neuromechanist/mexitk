@@ -33,14 +33,40 @@ void RunSot(OpContext& ctx) {
   // silently disagree with the original's intent.
   filter->SetNumberOfHistogramBins(
       CastParam<unsigned int>(p[0], "SOT", "numberOfHistogram"));
-  // InsideValue and OutsideValue are left at ITK's defaults (inside = pixel
-  // type max, outside = 0). The registry exposes neither, and both the ITK 2.4
-  // OtsuThresholdImageFilter constructor and the 5.4 HistogramThresholdImageFilter
-  // base default to exactly this. Threshold polarity is also unchanged
-  // 2.4->5.4: intensity in [min, otsuThreshold] receives InsideValue, so the
-  // LOW side of the threshold becomes inside. Consequence: two-valued output
-  // {0, typemax} -> {0,255} on uint8, but {0, realmax} on double/single. This
-  // is ITK's faithful default, not a bug.
+
+  // Force the Otsu histogram bounds to the actual image min/max, rather than
+  // trusting ITK's per-pixel-type default. On uint8, ITK 5.4's histogram
+  // calculator otherwise defaults to the full [0,255] TYPE range instead of
+  // the data's own [min,max], which shifts the computed threshold (measured:
+  // 33.867 on the type range vs. the correct 32.3125 over this project's
+  // reference volume, whose data spans [0,88]) and misclassifies 1087
+  // intensity-33 voxels. int32/double/single already auto-range correctly
+  // (their ITK default has no fixed type bound to fall back to), so this is
+  // a no-op for them, made explicit and uniform anyway rather than relying
+  // on a per-type default that happens to already be correct. Fixture-
+  // proven: bit-exact against every sot_* fixture after this change.
+  filter->SetAutoMinimumMaximum(true);
+
+  // InsideValue/OutsideValue: the ORIGINAL's mask value is a FIXED 255 on
+  // every pixel type, not the pixel type's own max -- overturning an
+  // earlier, never-fixture-verified assumption ({0,realmax} on
+  // double/single) that predates this opcode having any reference capture.
+  // Measured directly against every sot_* fixture (double/single/int32/
+  // uint8 alike): fixture.output is {0,255} in every case, never
+  // {0,realmax}/{0,intmax}. 255 is the same fixed mask value used
+  // throughout the original's segmentation opcodes regardless of pixel
+  // type (SCT's inferred ReplaceValue=255, SNC/SIC's ReplaceValue default
+  // of 255), so SOT hardcodes it too rather than deriving from PixelT.
+  //
+  // Polarity is also swapped from itk::OtsuThresholdImageFilter's own
+  // default: the ORIGINAL assigns 255 to the HIGH side of the threshold
+  // (intensity > otsuThreshold), where ITK's own class default assigns its
+  // InsideValue to the LOW side. Setting InsideValue=0 (low side) and
+  // OutsideValue=255 (high side) reproduces this. Both the fixed-255 value
+  // and the polarity swap are fixture-proven bit-exact against every
+  // sot_*/sot_polarity_* fixture across all four pixel types.
+  filter->SetInsideValue(static_cast<PixelT>(0));
+  filter->SetOutsideValue(static_cast<PixelT>(255));
   filter->Update();
 
   ctx.plhs[0] = ExportVolume<PixelT>(filter->GetOutput());
@@ -53,19 +79,29 @@ class SotOpcode : public Opcode {
   const char* Description() const override {
     return "Otsu threshold; returns a two-valued image";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kValidated; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists. "
-           "InsideValue and OutsideValue are ITK's defaults (inside = "
-           "pixel-type max, outside = 0), matching the ITK 2.4 constructor; "
-           "the low side of the Otsu threshold (intensity <= threshold) "
-           "becomes inside. Two-valued output is {0,255} on uint8 but "
-           "{0,realmax} on double/single. Bins are always set explicitly "
-           "(ITK base default is 256). numberOfHistogram below 2 is "
-           "rejected (mexitk:SOT:numberOfHistogram): ITK's Otsu calculator "
-           "crashes the MATLAB process outright at 0 or 1 bins (measured, "
-           "not a catchable exception), since bipartitioning a histogram "
-           "into inside/outside needs at least 2 bins.";
+    return "bit-identical to the original on every captured fixture (6 of "
+           "6, all four pixel types), asserted by tests/tReferenceExact.m. "
+           "InsideValue/OutsideValue are "
+           "hardcoded (inside = 0, outside = 255) on every pixel type, "
+           "matching the original: the mask value is fixed at 255 "
+           "regardless of pixel type, not the pixel type's own max, "
+           "overturning an earlier unverified {0,realmax} assumption for "
+           "double/single. Polarity is swapped from "
+           "itk::OtsuThresholdImageFilter's own default: 255 is assigned to "
+           "the HIGH side of the Otsu threshold, matching the original; "
+           "ITK's own default assigns its InsideValue to the low side. The "
+           "histogram bounds are forced to the image's actual min/max via "
+           "SetAutoMinimumMaximum(true), since ITK 5.4's default otherwise "
+           "uses the full uint8 TYPE range [0,255] rather than the data "
+           "range, shifting the threshold. Two-valued output is {0,255} on "
+           "every pixel type. Bins are always set explicitly (ITK base "
+           "default is 256). numberOfHistogram below 2 is rejected "
+           "(mexitk:SOT:numberOfHistogram): ITK's Otsu calculator crashes "
+           "the MATLAB process outright at 0 or 1 bins (measured, not a "
+           "catchable exception), since bipartitioning a histogram into "
+           "inside/outside needs at least 2 bins.";
   }
 
   const std::vector<ParamSpec>& Params() const override {

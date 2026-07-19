@@ -66,9 +66,22 @@ class FdgOpcode : public Opcode {
   const char* Name() const override { return "FDG"; }
   Category GetCategory() const override { return Category::kFilter; }
   const char* Description() const override { return "Discrete Gaussian smoothing"; }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kBoundedDeviation; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists";
+    return "does not reproduce the original bit-for-bit: "
+           "DiscreteGaussianImageFilter's numerics moved between ITK 2.4 "
+           "and 5.x, the same class of upstream evolution as FCA. Measured "
+           "RMS is small (order 1e-3 to 4e-3 at gaussianVariance 4-10) but "
+           "nonzero on double/single/int32; the original rejects uint8 "
+           "outright (a caught exception after a kernel-width-truncation "
+           "warning), and mexitk accepts it, with no agreement claim for "
+           "that pixel type. See tests/tReferenceBounded.m and "
+           "tests/tReferenceRejections.m for the measured numbers and the "
+           "uint8 accepts-more case, and docs/COMPATIBILITY.md for the "
+           "full writeup, including the confirmed FGA==FDG alias (the "
+           "original's own two opcodes are bit-identical to each other at "
+           "every capturable point, per the s12_fga_fdg_isequal.mat "
+           "cross-check probe, with the same uint8 failure mode).";
   }
 
   const std::vector<ParamSpec>& Params() const override { return DiscreteGaussianParams(); }
@@ -85,13 +98,21 @@ class FgaOpcode : public Opcode {
   const char* Description() const override {
     return "Discrete Gaussian smoothing (registry duplicate of FDG)";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kBoundedDeviation; }
   const char* StatusNote() const override {
     return "registry parameter signature is identical to FDG (gaussianVariance, "
            "maxKernelWidth) and mexitk implements it as the same "
-           "itk::DiscreteGaussianImageFilter. Whether the original shipped two "
-           "distinct filters under these names is unconfirmed against MATITK "
-           "source; it is most likely a Perl-generator duplicate.";
+           "itk::DiscreteGaussianImageFilter. The alias is now fixture-"
+           "confirmed, not just inferred: the original's own FGA and FDG "
+           "outputs are bit-identical to each other at every capturable "
+           "point (double and uint8, per the s12_fga_fdg_isequal.mat "
+           "cross-check probe), and share the same uint8 failure mode. "
+           "Same measured deviation from the original as FDG (see "
+           "FdgOpcode::StatusNote and tests/tReferenceBounded.m); whether "
+           "the original shipped two genuinely distinct filters under "
+           "these names remains unconfirmed against MATITK source, but the "
+           "bit-identical cross-check makes a Perl-generator duplicate the "
+           "far more likely explanation.";
   }
 
   const std::vector<ParamSpec>& Params() const override { return DiscreteGaussianParams(); }

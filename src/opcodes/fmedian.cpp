@@ -29,10 +29,19 @@ void RunFmedian(OpContext& ctx) {
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(input);
 
+  // The 2006 original maps X-named parameters to MATLAB dim 2 (ITK axis 1)
+  // and Y-named parameters to MATLAB dim 1 (ITK axis 0); Z is unchanged.
+  // Proven by fixture evidence: fmedian_r3_1_1 (XRADIUS=3, asymmetric)
+  // deviates under the unswapped mapping, while fmedian_r1_1_3 (XRADIUS=
+  // YRADIUS=1, symmetric so the swap is a no-op) is already exact. See
+  // docs/COMPATIBILITY.md, second capture campaign findings.
   typename FilterType::RadiusType radius;
-  radius[0] = CastParam<itk::SizeValueType>(p[0], "FMEDIAN", "XRADIUS");
-  radius[1] = CastParam<itk::SizeValueType>(p[1], "FMEDIAN", "YRADIUS");
-  radius[2] = CastParam<itk::SizeValueType>(p[2], "FMEDIAN", "ZRADIUS");
+  // Validate in declared parameter order; as call arguments the evaluation
+  // order (and so which name an error cites) would be unspecified.
+  const auto rx = CastParam<itk::SizeValueType>(p[0], "FMEDIAN", "XRADIUS");
+  const auto ry = CastParam<itk::SizeValueType>(p[1], "FMEDIAN", "YRADIUS");
+  const auto rz = CastParam<itk::SizeValueType>(p[2], "FMEDIAN", "ZRADIUS");
+  AssignSwappedXY(radius, rx, ry, rz);
   filter->SetRadius(radius);
   filter->Update();
 
@@ -46,9 +55,12 @@ class FmedianOpcode : public Opcode {
   const char* Description() const override {
     return "Median filter over a rectangular neighbourhood";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kValidated; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists";
+    return "bit-identical to the original on every captured fixture (10 of "
+           "10, all four pixel types), asserted by tests/tReferenceExact.m. "
+           "XRADIUS/YRADIUS are axis-swapped; see the axis-mapping comment "
+           "in this file and docs/COMPATIBILITY.md.";
   }
 
   const std::vector<ParamSpec>& Params() const override {

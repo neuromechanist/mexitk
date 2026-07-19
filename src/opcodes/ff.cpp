@@ -29,10 +29,13 @@ void RunFf(OpContext& ctx) {
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(input);
 
+  // The 2006 original maps X-named parameters to MATLAB dim 2 (ITK axis 1)
+  // and Y-named parameters to MATLAB dim 1 (ITK axis 0); Z is unchanged.
+  // Verified bit-exact against the reference: original XDIRECTION=1 ==
+  // flip(vin,2), original YDIRECTION=1 == flip(vin,1) (see
+  // docs/COMPATIBILITY.md, second capture campaign findings).
   typename FilterType::FlipAxesArrayType axes;
-  axes[0] = (p[0] != 0.0);
-  axes[1] = (p[1] != 0.0);
-  axes[2] = (p[2] != 0.0);
+  AssignSwappedXY(axes, p[0] != 0.0, p[1] != 0.0, p[2] != 0.0);
   filter->SetFlipAxes(axes);
   filter->Update();
 
@@ -44,9 +47,13 @@ class FfOpcode : public Opcode {
   const char* Name() const override { return "FF"; }
   Category GetCategory() const override { return Category::kFilter; }
   const char* Description() const override { return "Flip image along selected axes"; }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kValidated; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists";
+    return "bit-identical to the original on every captured fixture (12 of "
+           "12, all four pixel types), asserted by tests/tReferenceExact.m. "
+           "XDIRECTION/YDIRECTION are axis-swapped relative to their "
+           "registry order; see the axis-mapping comment in this file and "
+           "docs/COMPATIBILITY.md.";
   }
 
   const std::vector<ParamSpec>& Params() const override {

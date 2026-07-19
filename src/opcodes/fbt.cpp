@@ -44,9 +44,14 @@ class FbtOpcode : public Opcode {
   const char* Description() const override {
     return "Binary threshold to inside/outside values";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kValidated; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists";
+    return "bit-identical to the original on every fixture the original "
+           "itself accepted (7 of 9 captured, all four pixel types), "
+           "asserted by tests/tReferenceExact.m; the other two "
+           "(upperThreshold=300 on uint8, upperThreshold=1e39 on single) "
+           "are deliberate mexitk:paramRange rejections, see "
+           "tests/tReferenceRejections.m.";
   }
 
   const std::vector<ParamSpec>& Params() const override {

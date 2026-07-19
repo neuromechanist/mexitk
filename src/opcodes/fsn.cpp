@@ -42,9 +42,14 @@ class FsnOpcode : public Opcode {
   const char* Name() const override { return "FSN"; }
   Category GetCategory() const override { return Category::kFilter; }
   const char* Description() const override { return "Sigmoid intensity remapping"; }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kBoundedDeviation; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists";
+    return "bit-identical to the original on 5 of 6 captured fixtures, "
+           "including every uint8/int32/single point and one double point; "
+           "the sixth (double, beta=44) has a residual at the floating-"
+           "point noise floor (RMS order 1e-15). Not classified as "
+           "validated overall because of that one nonzero residual. See "
+           "tests/tReferenceExact.m and tests/tReferenceBounded.m.";
   }
 
   const std::vector<ParamSpec>& Params() const override {

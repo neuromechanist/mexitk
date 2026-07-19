@@ -49,9 +49,14 @@ class FblOpcode : public Opcode {
   const char* Name() const override { return "FBL"; }
   Category GetCategory() const override { return Category::kFilter; }
   const char* Description() const override { return "Bilateral filter (edge-preserving smoothing)"; }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kBoundedDeviation; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists";
+    return "bit-identical to the original on int32/single/uint8 (see "
+           "tests/tReferenceExact.m); double has a residual at the "
+           "floating-point noise floor (RMS order 1e-13 to 1e-12) across "
+           "all three captured double fixtures, asserted by "
+           "tests/tReferenceBounded.m. Not classified as validated overall "
+           "because of that double-only residual.";
   }
 
   const std::vector<ParamSpec>& Params() const override {

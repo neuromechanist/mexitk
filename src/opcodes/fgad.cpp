@@ -86,12 +86,18 @@ class FgadOpcode : public Opcode {
   const char* Description() const override {
     return "Gradient anisotropic diffusion (edge-preserving smoothing)";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kBoundedDeviation; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists. "
-           "uint8/int32 promote to float internally and have no reference. "
-           "Gradient-conductance sibling of FCA (curvature); the two differ "
-           "on identical parameters by design.";
+    return "does not reproduce the original bit-for-bit: "
+           "GradientAnisotropicDiffusionImageFilter's numerics moved "
+           "between ITK 2.4 and 5.x, the same class of upstream evolution "
+           "as FCA (its curvature-conductance sibling; the two differ on "
+           "identical parameters by design). Measured RMS on double/single "
+           "ranges from about 5e-5 to 0.35 depending on iteration count/"
+           "conductance; uint8/int32 promote to float internally and have "
+           "a larger measured residual (RMS up to about 11.7 on uint8). "
+           "See tests/tReferenceBounded.m for the exact measured numbers "
+           "per fixture.";
   }
 
   const std::vector<ParamSpec>& Params() const override {
