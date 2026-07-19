@@ -45,9 +45,10 @@ void RunSnc(OpContext& ctx) {
   // fixtures ARE bit-exact; see docs/COMPATIBILITY.md for the full
   // per-fixture measurement.
   typename InImage::SizeType radius;
-  radius[0] = CastParam<itk::SizeValueType>(p[1], "SNC", "RadiusY");
-  radius[1] = CastParam<itk::SizeValueType>(p[0], "SNC", "RadiusX");
-  radius[2] = CastParam<itk::SizeValueType>(p[2], "SNC", "RadiusZ");
+  AssignSwappedXY(radius,
+                  CastParam<itk::SizeValueType>(p[0], "SNC", "RadiusX"),
+                  CastParam<itk::SizeValueType>(p[1], "SNC", "RadiusY"),
+                  CastParam<itk::SizeValueType>(p[2], "SNC", "RadiusZ"));
   filter->SetRadius(radius);
   filter->SetLower(CastParam<PixelT>(p[3], "SNC", "LowerThreshold"));
   filter->SetUpper(CastParam<PixelT>(p[4], "SNC", "UpperThreshold"));

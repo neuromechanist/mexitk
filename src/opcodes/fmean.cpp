@@ -37,9 +37,10 @@ void RunFmean(OpContext& ctx) {
   // directly fixture-proven for FMEAN itself, only inferred. See
   // docs/COMPATIBILITY.md, second capture campaign findings.
   typename FilterType::RadiusType radius;
-  radius[0] = CastParam<itk::SizeValueType>(p[1], "FMEAN", "YRADIUS");
-  radius[1] = CastParam<itk::SizeValueType>(p[0], "FMEAN", "XRADIUS");
-  radius[2] = CastParam<itk::SizeValueType>(p[2], "FMEAN", "ZRADIUS");
+  AssignSwappedXY(radius,
+                  CastParam<itk::SizeValueType>(p[0], "FMEAN", "XRADIUS"),
+                  CastParam<itk::SizeValueType>(p[1], "FMEAN", "YRADIUS"),
+                  CastParam<itk::SizeValueType>(p[2], "FMEAN", "ZRADIUS"));
   filter->SetRadius(radius);
   filter->Update();
 

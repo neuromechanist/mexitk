@@ -36,9 +36,10 @@ void RunFvbih(OpContext& ctx) {
   // fvbih_baseline_hole (radiusX=radiusY=1, symmetric) is already exact.
   // See docs/COMPATIBILITY.md, second capture campaign findings.
   typename FilterType::InputSizeType radius;
-  radius[0] = CastParam<itk::SizeValueType>(p[1], "FVBIH", "radiusY");
-  radius[1] = CastParam<itk::SizeValueType>(p[0], "FVBIH", "radiusX");
-  radius[2] = CastParam<itk::SizeValueType>(p[2], "FVBIH", "radiusZ");
+  AssignSwappedXY(radius,
+                  CastParam<itk::SizeValueType>(p[0], "FVBIH", "radiusX"),
+                  CastParam<itk::SizeValueType>(p[1], "FVBIH", "radiusY"),
+                  CastParam<itk::SizeValueType>(p[2], "FVBIH", "radiusZ"));
   filter->SetRadius(radius);
   filter->SetBackgroundValue(
       CastParam<PixelT>(p[3], "FVBIH", "binaryImageBackgroundColor"));

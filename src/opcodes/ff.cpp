@@ -35,9 +35,7 @@ void RunFf(OpContext& ctx) {
   // flip(vin,2), original YDIRECTION=1 == flip(vin,1) (see
   // docs/COMPATIBILITY.md, second capture campaign findings).
   typename FilterType::FlipAxesArrayType axes;
-  axes[0] = (p[1] != 0.0);  // YDIRECTION -> ITK axis 0 (MATLAB dim 1)
-  axes[1] = (p[0] != 0.0);  // XDIRECTION -> ITK axis 1 (MATLAB dim 2)
-  axes[2] = (p[2] != 0.0);  // ZDIRECTION -> ITK axis 2 (unchanged)
+  AssignSwappedXY(axes, p[0] != 0.0, p[1] != 0.0, p[2] != 0.0);
   filter->SetFlipAxes(axes);
   filter->Update();
 

@@ -101,6 +101,25 @@ T CastParam(double v, const char* opcode, const char* param) {
   }
 }
 
+// Assigns X/Y-swapped, Z-unchanged values into a 3-element fixed-size array
+// (itk::Size, itk::FixedArray, or anything else with operator[]), the axis
+// convention shared by FF/FMEDIAN/FMEAN/FVBIH/SNC: the original maps
+// X-named parameters onto ITK axis 1 (MATLAB dim 2) and Y-named parameters
+// onto ITK axis 0 (MATLAB dim 1); Z is unchanged. Callers compute xValue/
+// yValue/zValue however their own parameter needs (a bool cast for FF's
+// flip flags, a CastParam<itk::SizeValueType> call with the opcode's own
+// XRADIUS/YRADIUS/ZRADIUS-style names for the radius opcodes) and this
+// helper only places them; each call site keeps its own comment citing the
+// fixture evidence (or, for FMEAN, the family-inference caveat) for why
+// the swap is correct there. FD's SETDIRECTION remap is a scalar 0<->1
+// swap, not an array assignment, so it does not go through this helper.
+template <typename ArrayT, typename ValueT>
+void AssignSwappedXY(ArrayT& arr, ValueT xValue, ValueT yValue, ValueT zValue) {
+  arr[0] = yValue;
+  arr[1] = xValue;
+  arr[2] = zValue;
+}
+
 // ---------------------------------------------------------------------------
 // Pixel types
 // ---------------------------------------------------------------------------
