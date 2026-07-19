@@ -87,6 +87,22 @@ classdef tPhase1FilterSmoke < matlab.unittest.TestCase
             end
         end
 
+        function flipNonFiniteDirectionBehavesAsNonzero(tc)
+            % Deliberate passthrough, no finiteness guard (param-guard
+            % hardening, Epic 3 issue #26): `p(i) != 0.0` is a plain IEEE
+            % comparison feeding a boolean flag, not a numeric ITK
+            % computation -- NaN != 0.0 and Inf != 0.0 are both well-defined
+            % (true), so a non-finite direction parameter just flips that
+            % axis, the same as any other nonzero value. Verified: bit-
+            % identical to the equivalent flip-on call, not merely
+            % non-crashing.
+            outNan = mexitk('FF', [NaN 0 0], tc.V);
+            outInf = mexitk('FF', [Inf 0 0], tc.V);
+            outOne = mexitk('FF', [1 0 0], tc.V);
+            tc.verifyEqual(outNan, outOne);
+            tc.verifyEqual(outInf, outOne);
+        end
+
         function flipMatchesBuiltinPerAxis(tc)
             % Not just a no-op / round-trip check: pin FF against MATLAB's own
             % flip() on each axis independently. XDIRECTION/YDIRECTION are
@@ -298,12 +314,51 @@ classdef tPhase1FilterSmoke < matlab.unittest.TestCase
             tc.verifyError(@() mexitk('FDG', [-5 5], tc.V), 'mexitk:FDG:gaussianVariance');
         end
 
+        function fdgRejectsNonFiniteVariance(tc)
+            % A plain `<= 0.0` guard does not catch NaN (every ordered
+            % comparison against NaN is false): verified directly before
+            % this guard existed, a NaN gaussianVariance silently produced
+            % an all-NaN output, no exception. +Inf is rejected the same
+            % way (param-guard hardening, Epic 3 issue #26).
+            tc.verifyError(@() mexitk('FDG', [NaN 5], tc.V), 'mexitk:FDG:gaussianVariance');
+            tc.verifyError(@() mexitk('FDG', [Inf 5], tc.V), 'mexitk:FDG:gaussianVariance');
+        end
+
         function fgaRejectsNonPositiveVariance(tc)
             tc.verifyError(@() mexitk('FGA', [-5 5], tc.V), 'mexitk:FGA:gaussianVariance');
         end
 
+        function fgaRejectsNonFiniteVariance(tc)
+            % Shares ExecuteDiscreteGaussian with FDG; same rationale.
+            tc.verifyError(@() mexitk('FGA', [NaN 5], tc.V), 'mexitk:FGA:gaussianVariance');
+            tc.verifyError(@() mexitk('FGA', [Inf 5], tc.V), 'mexitk:FGA:gaussianVariance');
+        end
+
         function sigmoidRejectsZeroAlpha(tc)
             tc.verifyError(@() mexitk('FSN', [10 240 0 170], tc.V), 'mexitk:FSN:alpha');
+        end
+
+        function sigmoidRejectsNonFiniteAlpha(tc)
+            % `== 0.0` does not catch NaN or +-Inf either; verified
+            % directly, a NaN alpha reached SigmoidImageFilter's own
+            % divide-by-zero path on uint8 with no exception (silent
+            % all-zero via an undefined native cast); +Inf and -Inf were
+            % both silently accepted pre-PR too, since neither equals 0.0
+            % (param-guard hardening, Epic 3 issue #26).
+            tc.verifyError(@() mexitk('FSN', [10 240 NaN 170], tc.V), 'mexitk:FSN:alpha');
+            tc.verifyError(@() mexitk('FSN', [10 240 Inf 170], tc.V), 'mexitk:FSN:alpha');
+            tc.verifyError(@() mexitk('FSN', [10 240 -Inf 170], tc.V), 'mexitk:FSN:alpha');
+        end
+
+        function sigmoidRejectsNonFiniteBeta(tc)
+            % beta had no prior constraint at all; verified directly, a
+            % NaN beta silently propagated into the output with no
+            % exception, and +Inf/-Inf were both silently accepted too.
+            % Only the non-finite case is guarded (param-guard hardening,
+            % Epic 3 issue #26).
+            tc.verifyError(@() mexitk('FSN', [10 240 10 NaN], tc.V), 'mexitk:FSN:beta');
+            tc.verifyError(@() mexitk('FSN', [10 240 10 Inf], tc.V), 'mexitk:FSN:beta');
+            tc.verifyError(@() mexitk('FSN', [10 240 10 -Inf], tc.V), 'mexitk:FSN:beta');
         end
     end
 end

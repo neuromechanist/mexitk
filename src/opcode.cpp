@@ -107,15 +107,20 @@ const Opcode* GetFgmrgOpcode();
 const Opcode* GetFlsOpcode();
 const Opcode* GetFmeanOpcode();
 const Opcode* GetFmedianOpcode();
+const Opcode* GetFmmcfOpcode();
 const Opcode* GetFomtOpcode();
 const Opcode* GetFsnOpcode();
 const Opcode* GetFvbihOpcode();
 const Opcode* GetFvmiOpcode();
 const Opcode* GetSccOpcode();
 const Opcode* GetSctOpcode();
+const Opcode* GetSfmOpcode();
+const Opcode* GetSgacOpcode();
 const Opcode* GetSicOpcode();
+const Opcode* GetSllsOpcode();
 const Opcode* GetSncOpcode();
 const Opcode* GetSotOpcode();
+const Opcode* GetSsdlsOpcode();
 const Opcode* GetSwsOpcode();
 
 // Registration is explicit rather than via static initialisers in each opcode
@@ -150,15 +155,20 @@ void RegisterBuiltinOpcodes() {
   RegisterOpcode(GetFlsOpcode());
   RegisterOpcode(GetFmeanOpcode());
   RegisterOpcode(GetFmedianOpcode());
+  RegisterOpcode(GetFmmcfOpcode());
   RegisterOpcode(GetFomtOpcode());
   RegisterOpcode(GetFsnOpcode());
   RegisterOpcode(GetFvbihOpcode());
   RegisterOpcode(GetFvmiOpcode());
   RegisterOpcode(GetSccOpcode());
   RegisterOpcode(GetSctOpcode());
+  RegisterOpcode(GetSfmOpcode());
+  RegisterOpcode(GetSgacOpcode());
   RegisterOpcode(GetSicOpcode());
+  RegisterOpcode(GetSllsOpcode());
   RegisterOpcode(GetSncOpcode());
   RegisterOpcode(GetSotOpcode());
+  RegisterOpcode(GetSsdlsOpcode());
   RegisterOpcode(GetSwsOpcode());
 }
 

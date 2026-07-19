@@ -155,7 +155,46 @@ classdef tReferenceBounded < matlab.unittest.TestCase
             'SNC', 'snc_r0_band_seedS1_double', 73.321,  255.0; ...
             'SNC', 'snc_r2_band_seedS1_double', 1.75694, 255.0; ...
             'SNC', 'snc_rx_wide_seedS1_double', 47.1001, 255.0; ...
-            'SNC', 'snc_rz_wide_seedS1_double', 62.2875, 255.0};
+            'SNC', 'snc_rz_wide_seedS1_double', 62.2875, 255.0; ...
+            ...
+            ... FMMCF: MinMaxCurvatureFlowImageFilter (Epic 3 Phase 1). Real
+            ... upstream numerics drift, not floating-point noise: verified
+            ... directly that numberOfIterations=0 is an exact no-op and
+            ... that the deviation compounds with iteration count, the same
+            ... shape as FCF's own (much smaller) double residual -- see
+            ... src/opcodes/fmmcf.cpp.
+            'FMMCF', 'fmmcf_10_0p0625_1_double', 1.59658, 43.2502; ...
+            ...
+            ... SFM: FastMarchingImageFilter (Epic 3 Phase 1). Floating-point
+            ... noise floor, the same order of magnitude as FCF's own double
+            ... residual: the 270838 sentinel-valued voxels (61.22% of the
+            ... volume, ITK's LargeValue = NumericTraits<double>::max()/2, a
+            ... constant assigned during Initialize rather than computed)
+            ... match EXACTLY; every differing voxel is a genuinely computed
+            ... arrival time differing only at double precision's own limit
+            ... -- see src/opcodes/sfm.cpp.
+            'SFM', 'sfm_stop100_seedS1_double', 6.10523e-15, 9.01501e-14; ...
+            ...
+            ... SLLS: LaplacianSegmentationLevelSetImageFilter (Epic 3
+            ... Phase 2, two-volume opcode). 280/442368 voxels (0.063%)
+            ... land on the wrong side of the binary threshold; every one
+            ... of those voxels' raw, pre-threshold level-set value is
+            ... within 0.077 of the zero crossing (median 0.00087) -- the
+            ... floating-point noise floor of a 50-iteration finite-
+            ... difference solver flipping a boundary voxel's sign, not an
+            ... algorithmic difference. RMS/max-abs are measured on the
+            ... exported {0,255} categorical output, so max-abs is 255 (a
+            ... full category flip) even though the underlying level-set
+            ... values differ by fractions of a percent -- see
+            ... src/opcodes/slls.cpp.
+            'SLLS', 'slls_slls_volB_seedS1_double', 6.41545, 255.0; ...
+            ...
+            ... SSDLS: ShapeDetectionLevelSetImageFilter (Epic 3 Phase 2,
+            ... two-volume opcode). Raw, un-thresholded narrow-band output
+            ... (unlike SGAC/SLLS): floating-point noise floor of a
+            ... 50-iteration finite-difference solver, the same category as
+            ... SFM's own bounded deviation -- see src/opcodes/ssdls.cpp.
+            'SSDLS', 'ssdls_ssdls_volB_seedS1_double', 6.69151e-08, 5.25301e-06};
     end
 
     methods (Static)
@@ -181,11 +220,11 @@ classdef tReferenceBounded < matlab.unittest.TestCase
             rmsMeasured = boundedCase.rmsMeasured;
             maxMeasured = boundedCase.maxMeasured;
 
-            [fx, vin] = mexitkFixture(name);
+            [fx, vin, vinB] = mexitkFixture(name);
             tc.assertTrue(fx.success, sprintf( ...
                 '%s: fixture recorded success=false', name));
 
-            got = mexitkFixtureCall(opcode, fx, vin);
+            got = mexitkFixtureCall(opcode, fx, vin, vinB);
 
             e = abs(double(got(:)) - double(fx.output(:)));
             rms = sqrt(mean(e .^ 2));

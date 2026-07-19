@@ -12,9 +12,9 @@
 #include "mexitk_common.h"
 #include "opcode.h"
 
-#include "itkCastImageFilter.h"
 #include "itkGradientAnisotropicDiffusionImageFilter.h"
 
+#include <cmath>
 #include <type_traits>
 
 namespace mexitk {
@@ -38,17 +38,7 @@ void RunFgad(OpContext& ctx) {
   using RealImage = Image3<RealT>;
 
   typename InImage::Pointer input = ImportVolume<PixelT>(ctx.volumeA);
-
-  typename RealImage::Pointer real;
-  if constexpr (std::is_same<PixelT, RealT>::value) {
-    real = input;
-  } else {
-    using CastIn = itk::CastImageFilter<InImage, RealImage>;
-    typename CastIn::Pointer cast = CastIn::New();
-    cast->SetInput(input);
-    cast->Update();
-    real = cast->GetOutput();
-  }
+  typename RealImage::Pointer real = PromoteToReal<PixelT, RealT>(input);
 
   const std::vector<double>& p = *ctx.params;
 
@@ -63,20 +53,22 @@ void RunFgad(OpContext& ctx) {
   // FCA via the shared AnisotropicDiffusionImageFilter base; see the
   // timeStep comment in fca.cpp. A negative timeStep runs the diffusion
   // backward in time (ill-posed); rejected for the same reason as FCA's
-  // guard. timeStep == 0 stays accepted as a defined no-op.
-  if (p[1] < 0.0) {
-    throw OpcodeError("mexitk:FGAD:timeStep", "timeStep must not be negative.");
+  // guard. timeStep == 0 stays accepted as a defined no-op. Non-finite
+  // (NaN/+Inf) is rejected too, not just negative: measured directly, both
+  // a NaN and a +Inf timeStep silently return an all-NaN output on every
+  // voxel with no exception -- a `< 0.0` comparison alone does not catch
+  // either (NaN compares false against every ordered relational operator;
+  // +Inf does not compare < 0.0).
+  if (!std::isfinite(p[1]) || p[1] < 0.0) {
+    throw OpcodeError("mexitk:FGAD:timeStep",
+                      "timeStep must be finite and not negative.");
   }
   filter->SetTimeStep(p[1]);
   filter->SetConductanceParameter(p[2]);
   filter->Update();
 
-  if constexpr (std::is_same<PixelT, RealT>::value) {
-    ctx.plhs[0] = ExportVolume<RealT>(filter->GetOutput());
-  } else {
-    // See FcaRealType's comment in fca.cpp for the saturation rationale.
-    ctx.plhs[0] = ClampExport<PixelT, RealT>(filter->GetOutput());
-  }
+  // See FcaRealType's comment in fca.cpp for the saturation rationale.
+  ctx.plhs[0] = ExportPromoted<PixelT, RealT>(filter->GetOutput());
 }
 
 class FgadOpcode : public Opcode {

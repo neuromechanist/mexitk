@@ -13,6 +13,7 @@
 
 #include "mex.h"
 
+#include "itkCastImageFilter.h"
 #include "itkImage.h"
 #include "itkImportImageFilter.h"
 
@@ -239,6 +240,68 @@ typename Image3<PixelT>::Pointer ImportVolume(const mxArray* arr) {
   return importer->GetOutput();
 }
 
+// Validates that a second volume (ctx.volumeB, MATITK's arg4) was supplied
+// and has the same MATLAB class and per-axis size as ctx.volumeA, for the
+// two-volume level-set opcodes (SGAC, SLLS, SSDLS; Epic 3 Phase 2 -- the
+// first opcodes that actually consume arg4, rather than accepting-and-
+// ignoring it like every seeded single-volume opcode does). A missing
+// volumeB is rejected outright: unlike arg4 elsewhere in this codebase,
+// these three genuinely need a second image (an initial level set and a
+// feature image; see each opcode's own file for which plays which role)
+// and have no defined single-volume fallback. A class mismatch is rejected
+// too: DispatchOnPixelType instantiates the whole pipeline on volumeA's
+// PixelT alone, so ImportVolume<PixelT>(ctx.volumeB) would silently misread
+// volumeB's own buffer as the wrong element type if its class differed --
+// undefined behaviour, not merely lossy. This is in the same spirit as the
+// original's own documented behaviour of type-checking arg4 against the
+// primary input's class even for single-volume opcodes
+// (docs/COMPATIBILITY.md, "Seeded calls type-check an absent second image
+// against the input class"), but no fixture demonstrates the original's
+// exact wording for a genuine two-volume mismatch on these three opcodes,
+// so this raises mexitk's own identifier and message rather than guessing
+// at the original's.
+//
+// The size check is not cosmetic: measured directly before it existed, a
+// SMALLER volumeB (e.g. 64x64x16 against a 128x128x27 volumeA) did not
+// throw at all. ITK's two-input filters run over the OUTPUT region, which
+// SetFeatureImage/SetInput's own default LargestPossibleRegion resolution
+// takes from whichever image the pipeline treats as primary, so a smaller
+// second image silently produced a smaller, geometrically wrong result
+// computed only over the overlapping subregion -- no exception, no size
+// mismatch surfaced to the caller. A LARGER or non-nested-size volumeB
+// happens to throw already, via ITK's own RequestedRegion-vs-
+// LargestPossibleRegion consistency check inside itk::DataObject (measured:
+// "Requested region is (at least partially) outside the largest possible
+// region"), but relying on that as the only guard would leave the smaller
+// case -- the more dangerous one, since it produces a plausible-looking,
+// silently wrong answer instead of an error -- unguarded. Both directions
+// are now rejected uniformly and explicitly, before either filter ever
+// runs, both from mexitk_common.h. mxGetDimensions is safe to compare
+// per-axis directly by index here: by the time RequireVolumeB runs,
+// mexFunction (src/mexitk.cpp) has already validated that BOTH volumeA and
+// volumeB are exactly kDimension-D, so both arrays are exactly 3 elements
+// long.
+inline void RequireVolumeB(const mxArray* volumeA, const mxArray* volumeB, const char* opcode) {
+  if (volumeB == nullptr) {
+    throw OpcodeError(FormatMessage("mexitk:%s:volumeB", opcode),
+                      FormatMessage("%s requires a second image volume (argument 4).", opcode));
+  }
+  if (mxGetClassID(volumeB) != mxGetClassID(volumeA)) {
+    throw OpcodeError(
+        FormatMessage("mexitk:%s:volumeBClass", opcode),
+        FormatMessage("%s: input volume B must be the same class as volume A.", opcode));
+  }
+  const mwSize* sizeA = mxGetDimensions(volumeA);
+  const mwSize* sizeB = mxGetDimensions(volumeB);
+  for (unsigned int axis = 0; axis < kDimension; ++axis) {
+    if (sizeA[axis] != sizeB[axis]) {
+      throw OpcodeError(
+          FormatMessage("mexitk:%s:volumeBSize", opcode),
+          FormatMessage("%s: input volume B must be the same size as volume A.", opcode));
+    }
+  }
+}
+
 // Copies an itk::Image back into a freshly allocated MATLAB array of the
 // corresponding class.
 template <typename PixelT>
@@ -313,6 +376,42 @@ mxArray* ClampExport(const Image3<RealT>* img) {
     }
   }
   return out;
+}
+
+// Promotes an already-imported itk::Image<PixelT> to itk::Image<RealT>, the
+// shared entry half of every promote-to-real opcode (FCA, FCF, FMMCF, SFM):
+// a real-pixel-only ITK filter (a finite-difference solver or
+// FastMarching's speed image) needs a floating-point input, so integral
+// PixelT is cast up to RealT via itk::CastImageFilter, while a PixelT that
+// is already floating-point (RealT == PixelT by each opcode's own
+// RealType alias, e.g. FcaRealType) passes through with no cast at all --
+// the `if constexpr` branch is resolved at compile time, so the native
+// path never instantiates itk::CastImageFilter.
+template <typename PixelT, typename RealT>
+typename Image3<RealT>::Pointer PromoteToReal(typename Image3<PixelT>::Pointer input) {
+  if constexpr (std::is_same<PixelT, RealT>::value) {
+    return input;
+  } else {
+    using CastIn = itk::CastImageFilter<Image3<PixelT>, Image3<RealT>>;
+    typename CastIn::Pointer cast = CastIn::New();
+    cast->SetInput(input);
+    cast->Update();
+    return cast->GetOutput();
+  }
+}
+
+// The matching export half: PixelT == RealT (native floating-point input)
+// exports directly with ExportVolume; a promoted integral PixelT exports
+// through ClampExport instead, saturating out-of-range/non-finite RealT
+// values into PixelT's own range rather than an undefined-behaviour cast
+// (see ClampExport's own comment).
+template <typename PixelT, typename RealT>
+mxArray* ExportPromoted(const Image3<RealT>* img) {
+  if constexpr (std::is_same<PixelT, RealT>::value) {
+    return ExportVolume<RealT>(img);
+  } else {
+    return ClampExport<PixelT, RealT>(img);
+  }
 }
 
 // Converts the flat, 1-based seed vector ([d1 d2 d3 d1 d2 d3 ...], already

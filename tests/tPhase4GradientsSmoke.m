@@ -302,6 +302,35 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             tc.verifyGreaterThan(max(out50(:)), 20);
         end
 
+        function faabNanMaximumRMSErrorMatchesNeverTriggeringThreshold(tc)
+            % Deliberate passthrough, no finiteness guard (param-guard
+            % hardening, Epic 3 issue #26): maximumRMSError is a
+            % convergence threshold checked as "has the RMS change dropped
+            % below this?" each iteration; NaN makes that comparison
+            % always false (every ordered comparison against NaN is
+            % false), so early stopping never fires and the solver falls
+            % back to running the full numberOfIterations. Verified: this
+            % is not merely "didn't crash" -- the NaN-threshold output is
+            % bit-identical to a call with an extremely small but finite
+            % threshold (1e-300) that also can never trigger early
+            % stopping within 50 iterations, confirming the two really do
+            % take the same code path rather than coincidentally matching.
+            % Negative control, so the equality above cannot pass
+            % vacuously by maximumRMSError having no effect at all on this
+            % config: the registry's own default (0.01) DOES trigger early
+            % stopping within 50 iterations and produces a measurably
+            % different result (measured: 73157/442368 voxels differ, max
+            % abs diff 1), so a broken guard that let NaN silently fall
+            % back to some OTHER default, rather than genuinely disabling
+            % early stopping, would be caught here.
+            B = 255 * double(tc.Vu > 33);
+            outNan = mexitk('FAAB', [NaN 50 2], B);
+            outNeverTriggers = mexitk('FAAB', [1e-300 50 2], B);
+            outNormalThreshold = mexitk('FAAB', [0.01 50 2], B);
+            tc.verifyEqual(outNan, outNeverTriggers);
+            tc.verifyNotEqual(outNan, outNormalThreshold);
+        end
+
         function faabUint8ClampsOutsideToZero(tc)
             % Same binarization in uint8. Measured: class uint8, min=0,
             % and a substantial fraction (72.8%) of voxels are exactly 0
@@ -379,10 +408,39 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             tc.verifyError(@() mexitk('FGMRG', 0, tc.V), 'mexitk:itkException');
         end
 
+        function fgmrgRejectsNonFiniteSigma(tc)
+            % ITK's own `<= 0.0` exception guard does not catch NaN or
+            % +Inf; verified directly before this mexitk-level guard
+            % existed, a NaN or +Inf sigma silently returned an all-NaN
+            % output, no exception -- that was the actual pre-PR gap. The
+            % sign constraint above is unchanged for -Inf's own rejection,
+            % but its IDENTIFIER changes: `-Inf <= 0.0` is true, so ITK's
+            % own exception already rejected -Inf pre-PR too (as
+            % mexitk:itkException, see fgmrgRejectsNonPositiveSigma
+            % above); this guard now intercepts it first, so it surfaces
+            % as mexitk:FGMRG:sigma instead -- pinned here deliberately so
+            % that identifier change cannot silently move back.
+            tc.verifyError(@() mexitk('FGMRG', NaN, tc.V), 'mexitk:FGMRG:sigma');
+            tc.verifyError(@() mexitk('FGMRG', Inf, tc.V), 'mexitk:FGMRG:sigma');
+            tc.verifyError(@() mexitk('FGMRG', -Inf, tc.V), 'mexitk:FGMRG:sigma');
+        end
+
         function flsRejectsNonPositiveSigma(tc)
             % Same ITK exception as FGMRG above (shared RecursiveGaussian
             % base). Verified directly.
             tc.verifyError(@() mexitk('FLS', 0, tc.V), 'mexitk:itkException');
+        end
+
+        function flsRejectsNonFiniteSigma(tc)
+            % Same rationale as FGMRG's own non-finite guard, including
+            % the -Inf identifier change: ITK's own exception already
+            % rejected -Inf pre-PR (mexitk:itkException), but this guard
+            % now intercepts it first, surfacing mexitk:FLS:sigma instead
+            % -- pinned here deliberately so that cannot silently move
+            % back.
+            tc.verifyError(@() mexitk('FLS', NaN, tc.V), 'mexitk:FLS:sigma');
+            tc.verifyError(@() mexitk('FLS', Inf, tc.V), 'mexitk:FLS:sigma');
+            tc.verifyError(@() mexitk('FLS', -Inf, tc.V), 'mexitk:FLS:sigma');
         end
 
         function fvmiRejectsNonPositiveSigma(tc)
@@ -391,12 +449,42 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             tc.verifyError(@() mexitk('FVMI', [0 0.5 2], tc.V), 'mexitk:itkException');
         end
 
+        function fvmiRejectsNonFiniteParams(tc)
+            % None of SetSigma/SetAlpha1/SetAlpha2 had a prior mexitk-level
+            % constraint (unlike FLS/FGMRG's sigma, ITK itself does not
+            % reject a NaN or non-positive alpha1/alpha2), so all three
+            % non-finite values (NaN, +Inf, -Inf) were silently accepted
+            % pre-PR for all three parameters -- verified directly: a NaN
+            % or Inf SetSigma silently returned an all-zero output; NaN or
+            % Inf SetAlpha1/SetAlpha2 each silently propagated into the
+            % output. Only non-finite is guarded, no new sign/range
+            % constraint (param-guard hardening, Epic 3 issue #26).
+            tc.verifyError(@() mexitk('FVMI', [NaN 0.5 2], tc.V), 'mexitk:FVMI:SetSigma');
+            tc.verifyError(@() mexitk('FVMI', [Inf 0.5 2], tc.V), 'mexitk:FVMI:SetSigma');
+            tc.verifyError(@() mexitk('FVMI', [-Inf 0.5 2], tc.V), 'mexitk:FVMI:SetSigma');
+            tc.verifyError(@() mexitk('FVMI', [1 NaN 2], tc.V), 'mexitk:FVMI:SetAlpha1');
+            tc.verifyError(@() mexitk('FVMI', [1 Inf 2], tc.V), 'mexitk:FVMI:SetAlpha1');
+            tc.verifyError(@() mexitk('FVMI', [1 -Inf 2], tc.V), 'mexitk:FVMI:SetAlpha1');
+            tc.verifyError(@() mexitk('FVMI', [1 0.5 NaN], tc.V), 'mexitk:FVMI:SetAlpha2');
+            tc.verifyError(@() mexitk('FVMI', [1 0.5 Inf], tc.V), 'mexitk:FVMI:SetAlpha2');
+            tc.verifyError(@() mexitk('FVMI', [1 0.5 -Inf], tc.V), 'mexitk:FVMI:SetAlpha2');
+        end
+
         function fblRejectsNegativeDomainSigma(tc)
             % negative domainSigma reaches a raw (SizeValueType)ceil(...)
             % cast of a negative double inside ITK's own
             % GenerateInputRequestedRegion -- undefined behaviour, not
             % reproducible; rejected before it can happen.
             tc.verifyError(@() mexitk('FBL', [-5 5], tc.V), 'mexitk:FBL:domainSigma');
+        end
+
+        function fblRejectsNonFiniteDomainSigma(tc)
+            % `<= 0.0` does not catch NaN either; verified directly, a NaN
+            % domainSigma reached the same silent all-NaN path as
+            % domainSigma == 0 above, no exception (param-guard hardening,
+            % Epic 3 issue #26).
+            tc.verifyError(@() mexitk('FBL', [NaN 5], tc.V), 'mexitk:FBL:domainSigma');
+            tc.verifyError(@() mexitk('FBL', [Inf 5], tc.V), 'mexitk:FBL:domainSigma');
         end
 
         function fblRejectsZeroDomainSigma(tc)
@@ -419,6 +507,13 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             tc.verifyError(@() mexitk('FBL', [2 0], tc.V), 'mexitk:FBL:rangeSigma');
         end
 
+        function fblRejectsNonFiniteRangeSigma(tc)
+            % Same non-finite gap as domainSigma above, on rangeSigma
+            % instead (param-guard hardening, Epic 3 issue #26).
+            tc.verifyError(@() mexitk('FBL', [2 NaN], tc.V), 'mexitk:FBL:rangeSigma');
+            tc.verifyError(@() mexitk('FBL', [2 Inf], tc.V), 'mexitk:FBL:rangeSigma');
+        end
+
         function fcaRejectsNegativeTimeStep(tc)
             % A negative timeStep runs the diffusion backward in time
             % (ill-posed); the original's behaviour on this input is
@@ -428,12 +523,46 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             tc.verifyError(@() mexitk('FCA', [5 -1 3], tc.V), 'mexitk:FCA:timeStep');
         end
 
+        function fcaRejectsNonFiniteTimeStep(tc)
+            % A plain `< 0.0` guard does not catch NaN or +Inf (NaN compares
+            % false against every ordered relational operator; +Inf does
+            % not compare < 0.0): verified directly before this guard
+            % existed, a NaN timeStep silently produced an all-NaN output
+            % on every voxel, and +Inf silently produced a mix of NaN and
+            % Inf values, both with no exception. -Inf was already caught
+            % by the old `< 0.0` guard.
+            tc.verifyError(@() mexitk('FCA', [5 NaN 3], tc.V), 'mexitk:FCA:timeStep');
+            tc.verifyError(@() mexitk('FCA', [5 Inf 3], tc.V), 'mexitk:FCA:timeStep');
+            tc.verifyError(@() mexitk('FCA', [5 -Inf 3], tc.V), 'mexitk:FCA:timeStep');
+        end
+
         function fcfRejectsNegativeTimeStep(tc)
             tc.verifyError(@() mexitk('FCF', [10 -1], tc.V), 'mexitk:FCF:timeStep');
         end
 
+        function fcfRejectsNonFiniteTimeStep(tc)
+            % A plain `< 0.0` guard does not catch NaN (every ordered
+            % comparison against NaN is false): verified directly before
+            % this guard existed, a NaN or +Inf timeStep silently produced
+            % an all-NaN output on every voxel, no exception. -Inf is
+            % rejected the same way as any other non-finite value.
+            tc.verifyError(@() mexitk('FCF', [10 NaN], tc.V), 'mexitk:FCF:timeStep');
+            tc.verifyError(@() mexitk('FCF', [10 Inf], tc.V), 'mexitk:FCF:timeStep');
+            tc.verifyError(@() mexitk('FCF', [10 -Inf], tc.V), 'mexitk:FCF:timeStep');
+        end
+
         function fgadRejectsNegativeTimeStep(tc)
             tc.verifyError(@() mexitk('FGAD', [5 -1 3], tc.V), 'mexitk:FGAD:timeStep');
+        end
+
+        function fgadRejectsNonFiniteTimeStep(tc)
+            % Same rationale as FCA's own non-finite guard (shared
+            % AnisotropicDiffusionImageFilter base): verified directly, a
+            % NaN or +Inf timeStep silently produced an all-NaN output on
+            % every voxel, no exception.
+            tc.verifyError(@() mexitk('FGAD', [5 NaN 3], tc.V), 'mexitk:FGAD:timeStep');
+            tc.verifyError(@() mexitk('FGAD', [5 Inf 3], tc.V), 'mexitk:FGAD:timeStep');
+            tc.verifyError(@() mexitk('FGAD', [5 -Inf 3], tc.V), 'mexitk:FGAD:timeStep');
         end
     end
 end

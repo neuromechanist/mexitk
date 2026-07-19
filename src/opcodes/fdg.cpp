@@ -18,6 +18,8 @@
 
 #include "itkDiscreteGaussianImageFilter.h"
 
+#include <cmath>
+
 namespace mexitk {
 namespace {
 
@@ -50,11 +52,15 @@ void RunDiscreteGaussian(OpContext& ctx, const char* opcodeName) {
 // Shared by FdgOpcode and FgaOpcode. A non-positive variance silently yields
 // a degenerate, non-Gaussian kernel rather than an error, so it is rejected
 // here under the caller's own opcode name (for the error id and CastParam
-// diagnostics) before dispatching.
+// diagnostics) before dispatching. A NaN variance reaches the same silent
+// path (confirmed empirically: SetVariance(NaN) produces an all-NaN output
+// with no exception) since `<= 0.0` alone does not catch NaN -- guarded
+// here too, param-guard hardening pass.
 void ExecuteDiscreteGaussian(OpContext& ctx, const char* opcodeName,
                              const char* varianceErrorId) {
-  if ((*ctx.params)[0] <= 0.0) {
-    throw OpcodeError(varianceErrorId, "gaussianVariance must be positive.");
+  const double variance = (*ctx.params)[0];
+  if (!std::isfinite(variance) || variance <= 0.0) {
+    throw OpcodeError(varianceErrorId, "gaussianVariance must be finite and positive.");
   }
   DispatchOnPixelType(mxGetClassID(ctx.volumeA), [&](auto tag) {
     RunDiscreteGaussian<typename decltype(tag)::type>(ctx, opcodeName);

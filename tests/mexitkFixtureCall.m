@@ -1,4 +1,4 @@
-function got = mexitkFixtureCall(opcode, fx, vin)
+function got = mexitkFixtureCall(opcode, fx, vin, vinB)
 %MEXITKFIXTURECALL Invoke mexitk for a loaded fixture, applying the seedArg convention.
 %
 %   GOT = MEXITKFIXTURECALL(OPCODE, FX, VIN) calls mexitk(OPCODE, FX.PARAMS,
@@ -9,6 +9,13 @@ function got = mexitkFixtureCall(opcode, fx, vin)
 %   but expected-equal opcode (tReferenceBounded's own Cases table) can
 %   share this helper too.
 %
+%   GOT = MEXITKFIXTURECALL(OPCODE, FX, VIN, VINB) additionally accepts the
+%   second (arg4/volumeB) input for the two-volume level-set opcodes (SGAC,
+%   SLLS, SSDLS; Epic 3 Phase 2), from mexitkFixture.m's own third output,
+%   and passes it as the 4th argument in place of the class-matched-empty
+%   placeholder. VINB may be omitted or [] for single-volume opcodes, which
+%   keeps the original empty-placeholder behaviour unchanged.
+%
 %   Shared by tReferenceExact.m, tReferenceBounded.m, and
 %   tReferenceRejections.m so the calling convention has one definition.
 %
@@ -17,9 +24,22 @@ function got = mexitkFixtureCall(opcode, fx, vin)
 % Swartz Center for Computational Neuroscience (SCCN),
 % Institute for Neural Computation (INC), UC San Diego.
 
-if isfield(fx, 'seedArg')
-    got = mexitk(opcode, fx.params, vin, cast([], class(vin)), fx.seedArg);
+if nargin < 4 || isempty(vinB)
+    arg4 = cast([], class(vin));
 else
-    got = mexitk(opcode, fx.params, vin);
+    arg4 = vinB;
+end
+
+% arg4 is threaded into BOTH branches, not only the seedArg one: a
+% single-volume, no-seed fixture is unaffected (arg4 is the class-matched
+% empty placeholder from above, and mexitk.cpp's OptionalVolume treats an
+% explicit empty 4th argument identically to an omitted one), but a
+% hypothetical future two-volume fixture with no seedArg would otherwise
+% have volumeB silently dropped here -- RequireVolumeB would still catch
+% that loudly downstream, but the plumbing should not rely on it.
+if isfield(fx, 'seedArg')
+    got = mexitk(opcode, fx.params, vin, arg4, fx.seedArg);
+else
+    got = mexitk(opcode, fx.params, vin, arg4);
 end
 end

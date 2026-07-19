@@ -109,16 +109,33 @@ end
 
 function [verdict, detail] = classifyOne(f, tag)
 try
-    vin = reconstructFixtureInput(f, tag);
+    [vin, vinB] = reconstructFixtureInput(f, tag);
 catch err
     verdict = 'RECONSTRUCT-ERROR';
     detail = err.message;
     return;
 end
 
-args = {f.opcode, f.params, vin};
+% arg4 (volumeB) is the reconstructed second volume for the two-volume
+% level-set opcodes (SGAC, SLLS, SSDLS; Epic 3 Phase 2, via arg4Recipe),
+% falling back to the class-matched-empty placeholder every other opcode
+% still uses -- see mexitkFixtureCall.m for the same convention.
+if isempty(vinB)
+    arg4 = cast([], class(vin));
+else
+    arg4 = vinB;
+end
+
+% arg4 is threaded in unconditionally, not only alongside seedArg: a
+% single-volume, no-seed fixture is unaffected (arg4 is the class-matched
+% empty placeholder above, and mexitk.cpp's OptionalVolume treats an
+% explicit empty 4th argument identically to an omitted one), but a
+% hypothetical future two-volume fixture with no seedArg would otherwise
+% have volumeB silently dropped here -- see mexitkFixtureCall.m's own
+% identical fix.
+args = {f.opcode, f.params, vin, arg4};
 if isfield(f, 'seedArg')
-    args = [args, {cast([], class(vin))}, {f.seedArg}];
+    args = [args, {f.seedArg}];
 end
 
 isMultiOutput = isfield(f, 'outputs') && f.success;
