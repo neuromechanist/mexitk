@@ -117,6 +117,7 @@ const Opcode* GetSctOpcode();
 const Opcode* GetSfmOpcode();
 const Opcode* GetSgacOpcode();
 const Opcode* GetSicOpcode();
+const Opcode* GetSllsOpcode();
 const Opcode* GetSncOpcode();
 const Opcode* GetSotOpcode();
 const Opcode* GetSwsOpcode();
@@ -163,6 +164,7 @@ void RegisterBuiltinOpcodes() {
   RegisterOpcode(GetSfmOpcode());
   RegisterOpcode(GetSgacOpcode());
   RegisterOpcode(GetSicOpcode());
+  RegisterOpcode(GetSllsOpcode());
   RegisterOpcode(GetSncOpcode());
   RegisterOpcode(GetSotOpcode());
   RegisterOpcode(GetSwsOpcode());
