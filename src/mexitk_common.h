@@ -240,6 +240,38 @@ typename Image3<PixelT>::Pointer ImportVolume(const mxArray* arr) {
   return importer->GetOutput();
 }
 
+// Validates that a second volume (ctx.volumeB, MATITK's arg4) was supplied
+// and has the same MATLAB class as ctx.volumeA, for the two-volume
+// level-set opcodes (SGAC, SLLS, SSDLS; Epic 3 Phase 2 -- the first opcodes
+// that actually consume arg4, rather than accepting-and-ignoring it like
+// every seeded single-volume opcode does). A missing volumeB is rejected
+// outright: unlike arg4 elsewhere in this codebase, these three genuinely
+// need a second image (an initial level set and a feature image; see each
+// opcode's own file for which plays which role) and have no defined
+// single-volume fallback. A class mismatch is rejected too:
+// DispatchOnPixelType instantiates the whole pipeline on volumeA's PixelT
+// alone, so ImportVolume<PixelT>(ctx.volumeB) would silently misread
+// volumeB's own buffer as the wrong element type if its class differed --
+// undefined behaviour, not merely lossy. This is in the same spirit as the
+// original's own documented behaviour of type-checking arg4 against the
+// primary input's class even for single-volume opcodes
+// (docs/COMPATIBILITY.md, "Seeded calls type-check an absent second image
+// against the input class"), but no fixture demonstrates the original's
+// exact wording for a genuine two-volume mismatch on these three opcodes,
+// so this raises mexitk's own identifier and message rather than guessing
+// at the original's.
+inline void RequireVolumeB(const mxArray* volumeA, const mxArray* volumeB, const char* opcode) {
+  if (volumeB == nullptr) {
+    throw OpcodeError(FormatMessage("mexitk:%s:volumeB", opcode),
+                      FormatMessage("%s requires a second image volume (argument 4).", opcode));
+  }
+  if (mxGetClassID(volumeB) != mxGetClassID(volumeA)) {
+    throw OpcodeError(
+        FormatMessage("mexitk:%s:volumeBClass", opcode),
+        FormatMessage("%s: input volume B must be the same class as volume A.", opcode));
+  }
+}
+
 // Copies an itk::Image back into a freshly allocated MATLAB array of the
 // corresponding class.
 template <typename PixelT>
