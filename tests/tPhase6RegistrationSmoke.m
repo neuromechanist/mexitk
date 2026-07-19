@@ -144,6 +144,9 @@ classdef tPhase6RegistrationSmoke < matlab.unittest.TestCase
         end
 
         function rtpsMinimalValidCaseRunsAndIsFinite(tc)
+            % One landmark PAIR (source, target) under the fixture-proven
+            % interleaved convention (see tests/tReferenceBounded.m's
+            % rtps_pair1_minimal_double case and src/opcodes/rtps.cpp).
             landmarks = [70 50 14, 75 55 14];
             out = mexitk('RTPS', [], tc.V, tc.V, landmarks);
             tc.verifyClass(out, 'double');
@@ -152,8 +155,10 @@ classdef tPhase6RegistrationSmoke < matlab.unittest.TestCase
         end
 
         function rtpsRunsAndPreservesShapeAndClass(tc)
-            landmarks = [70 50 14, 30 30 10, 90 90 20, 20 100 5, ...
-                70 50 14, 30 30 10, 90 90 20, 20 100 5];
+            % Four interleaved (source,target) pairs -- source1,target1,
+            % source2,target2,... -- per the fixture-proven convention.
+            landmarks = [70 50 14, 76 46 16, 30 30 10, 36 26 12, ...
+                90 90 20, 96 86 22, 20 100 5, 26 96 7];
             for f = {@double, @single, @uint8, @int32}
                 vin = f{1}(tc.Vu);
                 out = mexitk('RTPS', [], vin, vin, landmarks);
@@ -165,19 +170,27 @@ classdef tPhase6RegistrationSmoke < matlab.unittest.TestCase
         end
 
         function rtpsIdentityLandmarksReproduceInputExactly(tc)
-            % A real structural check, not a reference comparison (RTPS
-            % has no successful reference fixture -- see its StatusNote):
-            % source==target at 4+ well-spread points is a true no-op
-            % thin-plate-spline warp, so calling with volumeA==volumeB
-            % must reproduce the input exactly. Confirms the landmark
-            % indexing, the source=fixed-space/target=moving-space
-            % convention, and the Resample wiring are all internally
-            % consistent. Verified exactly (0/442368 voxels differ)
-            % before writing this assertion.
+            % A real structural check, not merely a reference comparison:
+            % under the fixture-proven INTERLEAVED convention
+            % (source1,target1,source2,target2,...; see
+            % src/opcodes/rtps.cpp and tests/tReferenceBounded.m's
+            % rtps_nc5_identity_double case), a landmark list built from
+            % (p_i, p_i) pairs -- source_i == target_i for every i -- is a
+            % true no-op thin-plate-spline warp, so calling with
+            % volumeA==volumeB must reproduce the input exactly. This is
+            % NOT the same landmark list Phase 1's disproven split-half
+            % assumption would have called "identity"
+            % ([p1 p2 ... pN p1 p2 ... pN]): under the interleaved
+            % convention that list pairs p1 with p2, p3 with p4, etc, which
+            % is not an identity map at all. Verified exactly (0/442368
+            % voxels differ) before writing this assertion.
             pts = [10 10 3; 10 10 20; 10 120 3; 10 120 20; ...
                 120 10 3; 120 10 20; 120 120 3; 120 120 20];
-            flat = reshape(pts', 1, []);
-            landmarks = [flat flat];
+            landmarks = zeros(1, size(pts, 1) * 2 * 3);
+            for i = 1:size(pts, 1)
+                landmarks((i - 1) * 6 + (1:3)) = pts(i, :);
+                landmarks((i - 1) * 6 + (4:6)) = pts(i, :);
+            end
             out = mexitk('RTPS', [], tc.V, tc.V, landmarks);
             tc.verifyEqual(out, tc.V);
         end

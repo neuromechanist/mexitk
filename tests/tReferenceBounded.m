@@ -206,7 +206,26 @@ classdef tReferenceBounded < matlab.unittest.TestCase
             ... fixed, volumeB moving) was confirmed by a swap test
             ... against this fixture (the swapped wiring measures RMS
             ... 21.7/ndiff 189263) -- see src/opcodes/rd.cpp.
-            'RD', 'rd_demons_volB_double', 4.63626, 88.0};
+            'RD', 'rd_demons_volB_double', 4.63626, 88.0; ...
+            ...
+            ... RTPS: ThinPlateSplineKernelTransform + Resample (Epic 4
+            ... Phase 1, s14 reference-host capture round). Three of five
+            ... successful captures are at the floating-point noise floor
+            ... (well-posed, non-degenerate landmark configurations); the
+            ... other two are structurally degenerate landmark systems
+            ... (rank-deficient duplicate pairs; a single, severely
+            ... underdetermined pair) with a real, modest, measured
+            ... residual, the same upstream-numerics-evolution category as
+            ... FCA/SNC/SWS -- see src/opcodes/rtps.cpp's StatusNote for
+            ... the full evidence, including how this convention was
+            ... determined (interleaved landmarks, volumeB fixed/volumeA
+            ... moving) and why Phase 1's original split-half/volumeA-fixed
+            ... inference was wrong.
+            'RTPS', 'rtps_nc5_identity_double',     2.12194811e-10, 7.809859426e-09; ...
+            'RTPS', 'rtps_nc5_translate_double',    1.998278382e-10, 7.471129493e-09; ...
+            'RTPS', 'rtps_pairs4_translate_double', 2.634815908e-12, 7.443602765e-11; ...
+            'RTPS', 'rtps_pairs4_identity_double',  2.226571164, 88.0; ...
+            'RTPS', 'rtps_pair1_minimal_double',    3.647131445, 88.0};
     end
 
     methods (Static)

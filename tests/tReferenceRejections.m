@@ -36,7 +36,7 @@ classdef tReferenceRejections < matlab.unittest.TestCase
             'sic_dimmax_double', 'snc_dimmax_double'};
 
         mutualRejectionFixture = {'sct_base0_double', 'sic_split_s1only', ...
-            'rtps_tps_volB_seedS1_double'};
+            'rtps_tps_volB_seedS1_double', 'rtps_odd3_reject_double'};
     end
 
     methods (Test)  % mexitk refuses an input the original accepted
@@ -150,6 +150,8 @@ switch name
     case 'sic_split_s1only'
         suffix = 'SIC:seeds';
     case 'rtps_tps_volB_seedS1_double'
+        suffix = 'RTPS:landmarks';
+    case 'rtps_odd3_reject_double'
         suffix = 'RTPS:landmarks';
     otherwise
         error('tReferenceRejections:unknownFixture', ...
