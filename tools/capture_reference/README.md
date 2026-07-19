@@ -202,20 +202,27 @@ end
 
 `s14_rtps_landmarks.m` is a targeted, single-opcode follow-up run after
 `RD`/`RTPS` were implemented (Epic 4 Phase 1) from an inference with no
-successful reference capture to check it against. It captures six
-fixtures and answers two open questions `s13`'s own single-seed probe
-left open: whether the flat landmark list splits in half (a full source
-block then a full target block) or interleaves
-(`source1,target1,source2,target2,...`), and which volume the transform
-resamples, in which direction. Both questions are answered by the
-captures themselves, not guessed: see `docs/COMPATIBILITY.md`'s "RD and
-RTPS: the first registration opcodes" section and `src/opcodes/rtps.cpp`'s
-`StatusNote` for the full evidence trail. One structural finding worth
-noting here rather than only in the opcode's own docs: the original
-rejects a landmark argument passed as a **matrix** with `Seed array must
-be a vector.` — landmarks, like every other seed array in this codebase,
-must be a flat row vector of concatenated 3-tuples. Run it exactly like
-`s07`–`s13` (its own `matlab -batch` invocation).
+successful reference capture to check it against. It grew across two
+rounds, nine fixtures total. Round 1 (six fixtures) answers two open
+questions `s13`'s own single-seed probe left open: whether the flat
+landmark list splits in half (a full source block then a full target
+block) or interleaves (`source1,target1,source2,target2,...`), and which
+volume the transform resamples, in which direction. Round 1 also left
+two of its five successful captures with a real, unexplained residual;
+round 2 (three more fixtures: a coplanar-but-distinct 3-pair set, a
+2-distinct-pair set, and a 3-distinct-pair non-coplanar set) was added
+specifically to isolate the cause, and did: the threshold is the number
+of DISTINCT landmark pairs (3 or more reproduces exactly, regardless of
+coplanarity), not coplanarity as round 1's evidence alone suggested.
+Every question is answered by the captures themselves, not guessed: see
+`docs/COMPATIBILITY.md`'s "RD and RTPS: the first registration opcodes"
+section and `src/opcodes/rtps.cpp`'s `StatusNote` for the full evidence
+trail. One structural finding worth noting here rather than only in the
+opcode's own docs: the original rejects a landmark argument passed as a
+**matrix** with `Seed array must be a vector.` — landmarks, like every
+other seed array in this codebase, must be a flat row vector of
+concatenated 3-tuples. Run it exactly like `s07`–`s13` (its own
+`matlab -batch` invocation).
 
 ## Completion sentinels: telling exit-time corruption from a mid-script crash
 

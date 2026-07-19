@@ -72,4 +72,30 @@ capture_case(cfg, 'RTPS', 'nc5_translate_double', [], Vd, ...
     struct('arg4', Vd, 'arg4Recipe', 'double(V)', ...
            'seedArg', [src5 tgt5]));
 
+% Landmarks are INTERLEAVED (s1,t1,s2,t2,...), established from the
+% captures above. These two cases test the two competing explanations for
+% why pairs4_identity and pair1_minimal carry a residual while the
+% well-posed captures match at the floating-point noise floor:
+%   coplanar3_distinct: 3 DISTINCT pairs whose sources are coplanar. If
+%     coplanarity alone were the cause, this deviates; if duplicate
+%     landmark rows were the cause, this matches closely.
+%   pairs2_distinct / pairs3_distinct: 2 and 3 distinct pairs, spanning
+%     the gap between 1 pair (severely underdetermined) and 4+ (well
+%     posed). A monotone shrink toward zero confirms underdetermination.
+cop3 = [30 40 8, 90 40 8, 30 100 8];
+cop3t = cop3 + repmat([6 -4 2], 1, 3);
+capture_case(cfg, 'RTPS', 'coplanar3_distinct_double', [], Vd, ...
+    struct('arg4', Vd, 'arg4Recipe', 'double(V)', ...
+           'seedArg', reshape([reshape(cop3, 3, []); reshape(cop3t, 3, [])], 1, [])));
+
+nc2 = src5(1:6); nc2t = tgt5(1:6);
+capture_case(cfg, 'RTPS', 'pairs2_distinct_double', [], Vd, ...
+    struct('arg4', Vd, 'arg4Recipe', 'double(V)', ...
+           'seedArg', reshape([reshape(nc2, 3, []); reshape(nc2t, 3, [])], 1, [])));
+
+nc3 = src5(1:9); nc3t = tgt5(1:9);
+capture_case(cfg, 'RTPS', 'pairs3_distinct_double', [], Vd, ...
+    struct('arg4', Vd, 'arg4Recipe', 'double(V)', ...
+           'seedArg', reshape([reshape(nc3, 3, []); reshape(nc3t, 3, [])], 1, [])));
+
 local_mark_complete(cfg, 's14');
