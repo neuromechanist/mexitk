@@ -65,7 +65,10 @@
 #include "itkPermuteAxesImageFilter.h"
 #include "itkRescaleIntensityImageFilter.h"
 
+#include <array>
+#include <cassert>
 #include <cstdint>
+#include <limits>
 #include <type_traits>
 
 namespace mexitk {
@@ -85,8 +88,28 @@ constexpr double RescaleCeiling() {
   return std::is_same<PixelT, std::uint8_t>::value ? 255.0 : 65535.0;
 }
 
-// Applies the X/Y-swap permutation (order [1,0,2]); self-inverse, so the
-// same helper both permutes into the original's import orientation and
+// The X/Y-swap permutation order, factored out so its self-inverse property
+// -- required for one order to correctly both permute into the original's
+// import orientation AND permute the result back out of it -- is checked at
+// compile time rather than only asserted in a comment.
+constexpr std::array<unsigned int, kDimension> kPermuteXYOrder = {1, 0, 2};
+
+constexpr bool IsSelfInversePermutation(const std::array<unsigned int, kDimension>& order) {
+  for (unsigned int i = 0; i < kDimension; ++i) {
+    if (order[order[i]] != i) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static_assert(IsSelfInversePermutation(kPermuteXYOrder),
+             "kPermuteXYOrder must be self-inverse: PermuteXY uses the same "
+             "order to permute in and to permute the result back out, so a "
+             "non-self-inverse order would silently corrupt every caller.");
+
+// Applies the X/Y-swap permutation; self-inverse (see kPermuteXYOrder), so
+// the same helper both permutes into the original's import orientation and
 // permutes the final result back out of it.
 template <typename PixelT>
 typename Image3<PixelT>::Pointer PermuteXY(const Image3<PixelT>* img) {
@@ -95,9 +118,9 @@ typename Image3<PixelT>::Pointer PermuteXY(const Image3<PixelT>* img) {
   typename PermuteFilter::Pointer permute = PermuteFilter::New();
   permute->SetInput(img);
   typename PermuteFilter::PermuteOrderArrayType order;
-  order[0] = 1;
-  order[1] = 0;
-  order[2] = 2;
+  order[0] = kPermuteXYOrder[0];
+  order[1] = kPermuteXYOrder[1];
+  order[2] = kPermuteXYOrder[2];
   permute->SetOrder(order);
   permute->Update();
   return permute->GetOutput();
@@ -141,6 +164,13 @@ typename Image3<PixelT>::Pointer WrapNarrow(const Image3<SrcPixelT>* src) {
   PixelT* dstBuf = out->GetBufferPointer();
   const itk::SizeValueType n = src->GetLargestPossibleRegion().GetNumberOfPixels();
   for (itk::SizeValueType i = 0; i < n; ++i) {
+    // The non-negativity invariant this function's own comment documents,
+    // checked rather than only asserted in prose: a violation would
+    // silently wrap instead of failing loudly. Debug-only (assert is a
+    // no-op under NDEBUG) since this is a hot per-voxel loop and the
+    // invariant is a property of RunFdmv's own Voronoi map, not of
+    // caller-controlled input.
+    assert(srcBuf[i] >= SrcPixelT{1});
     dstBuf[i] = static_cast<PixelT>(srcBuf[i] - SrcPixelT{1});
   }
   return out;
@@ -206,14 +236,28 @@ void RunFdmv(OpContext& ctx) {
   // Sequential IDs assigned in the permuted image's own scan order --
   // which is dim2-fastest relative to the original, matching the
   // original's own import orientation for this opcode pair.
+  const itk::SizeValueType numPixels =
+      permuted->GetLargestPossibleRegion().GetNumberOfPixels();
+  // nextId is LabelT (int32_t) and increments once per foreground voxel,
+  // so the worst case (every voxel foreground) must fit before LabelT
+  // overflows -- signed overflow is undefined behaviour in C++, and
+  // nothing upstream of this caps the volume's voxel count. Guarding
+  // rather than widening LabelT: widening would double the label image's
+  // memory for a volume size nothing in this project can reach today
+  // (ImportVolume takes whatever mxArray dimensions MATLAB handed it).
+  if (numPixels > static_cast<itk::SizeValueType>(std::numeric_limits<LabelT>::max())) {
+    throw OpcodeError(
+        "mexitk:fdm:tooLarge",
+        "FDMV's sequential Voronoi labeling requires the volume's voxel "
+        "count to fit in a 32-bit signed integer.");
+  }
+
   typename LabelImage::Pointer labelImg = LabelImage::New();
   labelImg->SetRegions(permuted->GetLargestPossibleRegion());
   labelImg->Allocate();
 
   const PixelT* srcBuf = permuted->GetBufferPointer();
   LabelT* dstBuf = labelImg->GetBufferPointer();
-  const itk::SizeValueType numPixels =
-      permuted->GetLargestPossibleRegion().GetNumberOfPixels();
   LabelT nextId = 1;
   for (itk::SizeValueType i = 0; i < numPixels; ++i) {
     if (srcBuf[i] != PixelT{}) {

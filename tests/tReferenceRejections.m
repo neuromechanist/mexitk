@@ -55,9 +55,12 @@ classdef tReferenceRejections < matlab.unittest.TestCase
                 tc.verifyError(@() mexitk('FDM', fx.params, vin), 'mexitk:fdm:noObject');
             end
             % No fdmv_zero_* fixture was captured (FDM and FDMV share the
-            % same all-zero-input guard in src/opcodes/fdm.cpp), so this
-            % leg is a direct call rather than a fixture comparison.
+            % same all-zero-input guard in src/opcodes/fdm.cpp), so these
+            % legs are direct calls rather than a fixture comparison.
+            % Both double and uint8 are exercised, completing the guard's
+            % test matrix to match FDM's own double+uint8 coverage above.
             tc.verifyError(@() mexitk('FDMV', [], zeros(4, 4, 4)), 'mexitk:fdm:noObject');
+            tc.verifyError(@() mexitk('FDMV', [], zeros(4, 4, 4, 'uint8')), 'mexitk:fdm:noObject');
         end
     end
 
