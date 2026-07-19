@@ -121,6 +121,34 @@ classdef tPhase6RegistrationSmoke < matlab.unittest.TestCase
                 @() mexitk('RD', tPhase6RegistrationSmoke.RdParams, tc.V, tc.V)), ...
                 'mexitk:nargout');
         end
+
+        function rdRejectsZeroHistogramLevels(tc)
+            % NumberOfHistogramLevels=0 segfaults the whole MATLAB process
+            % (not a catchable exception) inside ITK's own
+            % HistogramMatchingImageFilter::ConstructHistogramFromIntensity
+            % Range, which underflows an unsigned m_NumberOfHistogramLevels-1
+            % to SIZE_MAX and writes out of the histogram's bin range --
+            % measured directly, reproduced via a crash dump showing exactly
+            % that frame chain, before this guard existed. The threshold is
+            % 1, verified empirically: 1 itself is confirmed NOT to crash
+            % (see rdRunsAndPreservesShapeAndClass and the case below), so
+            % the guard refuses only the measured defect.
+            tc.verifyError(@() mexitk('RD', [0 7 5 1], tc.V, tc.V), ...
+                'mexitk:RD:NumberOfHistogramLevels');
+            % A fractional value that truncates to 0 hits the same guard.
+            tc.verifyError(@() mexitk('RD', [0.9 7 5 1], tc.V, tc.V), ...
+                'mexitk:RD:NumberOfHistogramLevels');
+        end
+
+        function rdAcceptsOneHistogramLevel(tc)
+            % The empirically-verified safe boundary immediately above the
+            % guard in rdRejectsZeroHistogramLevels: must run and return a
+            % finite result, not merely "not crash".
+            out = mexitk('RD', [1 7 5 1], tc.V, tc.V);
+            tc.verifyClass(out, 'double');
+            tc.verifySize(out, size(tc.V));
+            tc.verifyTrue(all(isfinite(out(:))));
+        end
     end
 
     methods (Test)  % RTPS

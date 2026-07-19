@@ -56,9 +56,14 @@ void RunRd(OpContext& ctx) {
   // DemonStandardDeviations is a raw double with no prior sign/range
   // constraint (unlike e.g. FLS/FGMRG's sigma, which already throw via
   // ITK's own exception for <= 0), so only the non-finite case is rejected
-  // here. NumberOfHistogramLevels/NumberOfMatchPoints/DemonNumberofIterations
-  // need no separate guard: CastParam's integral path below already rejects
-  // non-finite (and negative) values as part of its own cast-safety check.
+  // here. NumberOfMatchPoints/DemonNumberofIterations need no separate
+  // guard beyond CastParam's own cast-safety check (non-finite/negative
+  // values), which runs where each is cast below.
+  // NumberOfHistogramLevels is the one exception: it needs a semantic
+  // guard beyond CastParam too, added below at its own cast site, because
+  // 0 -- perfectly in-range for CastParam's target type -- segfaults the
+  // whole process inside ITK. See that guard's own comment for the
+  // measured crash mechanism and the empirically-verified threshold.
   if (!std::isfinite(p[3])) {
     throw OpcodeError("mexitk:RD:DemonStandardDeviations",
                       "DemonStandardDeviations must be finite.");
@@ -78,8 +83,31 @@ void RunRd(OpContext& ctx) {
   typename MatchFilter::Pointer matcher = MatchFilter::New();
   matcher->SetInput(moving);
   matcher->SetReferenceImage(fixed);
-  matcher->SetNumberOfHistogramLevels(
-      CastParam<itk::SizeValueType>(p[0], "RD", "NumberOfHistogramLevels"));
+  // NumberOfHistogramLevels=0 segfaults the whole MATLAB process, not a
+  // catchable itk::ExceptionObject: measured directly (crash dump frame
+  // chain ConstructHistogramFromIntensityRange -> BeforeThreadedGenerateData
+  // -> RdOpcode::Execute), traced to
+  // itkHistogramMatchingImageFilter.hxx's ConstructHistogramFromIntensityRange,
+  // which computes `histogram->SetBinMax(0, m_NumberOfHistogramLevels - 1,
+  // ...)` on an unsigned SizeValueType: at 0, `0 - 1` underflows to
+  // SIZE_MAX, and SetBinMax writes out of the histogram's actual bin range
+  // -- an out-of-bounds write, the same severity class as SWS
+  // overthresholding and SOT's histogram-bin crash. CastParam above already
+  // rejects non-finite/negative values (mexitk:paramRange); this catches
+  // the one in-range-for-SizeValueType value (0) that CastParam cannot,
+  // since 0 is a perfectly valid SizeValueType. The threshold is exactly
+  // 1, not a larger "safer-looking" round number: NumberOfHistogramLevels=1
+  // was verified directly, in isolation, to NOT crash (finite output,
+  // 128x128x27, matching every other pixel-type/parameter run) before this
+  // bound was chosen, so the guard refuses only the measured defect, not a
+  // wider margin around it.
+  const itk::SizeValueType numberOfHistogramLevels =
+      CastParam<itk::SizeValueType>(p[0], "RD", "NumberOfHistogramLevels");
+  if (numberOfHistogramLevels < 1) {
+    throw OpcodeError("mexitk:RD:NumberOfHistogramLevels",
+                      "NumberOfHistogramLevels must be at least 1.");
+  }
+  matcher->SetNumberOfHistogramLevels(numberOfHistogramLevels);
   matcher->SetNumberOfMatchPoints(
       CastParam<itk::SizeValueType>(p[1], "RD", "NumberOfMatchPoints"));
   // Explicit despite matching the class's own default (true): the classic
@@ -172,7 +200,32 @@ class RdOpcode : public Opcode {
            "(volumeB shares volumeA's exact histogram via circshift, so "
            "histogram matching is near-identity here) -- warping "
            "matcher->GetOutput() instead measures bit-identical to warping "
-           "the original on this fixture.";
+           "the original on this fixture. "
+           "NumberOfHistogramLevels=0 rejects with mexitk:RD:"
+           "NumberOfHistogramLevels rather than reaching ITK: measured "
+           "directly, it segfaults the whole MATLAB process (not a "
+           "catchable itk::ExceptionObject) inside "
+           "HistogramMatchingImageFilter's own ConstructHistogramFromIntensity"
+           "Range, which underflows m_NumberOfHistogramLevels-1 (an unsigned "
+           "SizeValueType) to SIZE_MAX and writes out of the histogram's "
+           "actual bin range. The threshold is exactly 1, verified "
+           "empirically, not assumed: NumberOfHistogramLevels=1 was run in "
+           "isolation and confirmed to NOT crash (finite output, same shape "
+           "as every other run) before this bound was chosen, so the guard "
+           "refuses only the measured defect. Same severity class as the "
+           "SWS overthresholding and SOT histogram-bin-count deviations; "
+           "see docs/COMPATIBILITY.md's deliberate-deviations table. No cap "
+           "is placed on DemonNumberofIterations: DemonsRegistrationFilter "
+           "has no convergence early-exit, so cost scales linearly with the "
+           "requested iteration count and is effectively unbounded for a "
+           "caller who asks for a very large one -- a real cost curve to "
+           "expect, not a hang or a memory-safety issue (neither runs "
+           "unboundedly on their own; a large NumberOfIterations just does "
+           "the work requested). An arbitrary cap was considered and "
+           "rejected for the same accept-strictly-more reason as RTPS's "
+           "landmark count: the original's own behaviour at a very large "
+           "iteration count is unknown, and refusing an input it might "
+           "have accepted would be the wrong direction.";
   }
 
   const std::vector<ParamSpec>& Params() const override {
