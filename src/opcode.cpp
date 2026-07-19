@@ -100,6 +100,7 @@ const Opcode* GetFdgOpcode();
 const Opcode* GetFdmOpcode();
 const Opcode* GetFdmvOpcode();
 const Opcode* GetFfOpcode();
+const Opcode* GetFfftOpcode();
 const Opcode* GetFgaOpcode();
 const Opcode* GetFgadOpcode();
 const Opcode* GetFgmOpcode();
@@ -151,6 +152,7 @@ void RegisterBuiltinOpcodes() {
   RegisterOpcode(GetFdmOpcode());
   RegisterOpcode(GetFdmvOpcode());
   RegisterOpcode(GetFfOpcode());
+  RegisterOpcode(GetFfftOpcode());
   RegisterOpcode(GetFgaOpcode());
   RegisterOpcode(GetFgadOpcode());
   RegisterOpcode(GetFgmOpcode());

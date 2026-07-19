@@ -52,6 +52,7 @@ ITK_MODULES=(
   Module_ITKLevelSets=ON             # SGAC, SLLS, SSDLS
   Module_ITKPDEDeformableRegistration=ON  # RD
   Module_ITKTransform=ON             # RTPS
+  Module_ITKFFT=ON                   # FFFT
 )
 
 WORK="${ITK_BUILD_WORKDIR:-$(mktemp -d)}"
