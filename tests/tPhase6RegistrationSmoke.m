@@ -231,6 +231,16 @@ classdef tPhase6RegistrationSmoke < matlab.unittest.TestCase
             tc.verifyEqual(out, tc.V);
         end
 
+        function rtpsRejectsMismatchedVolumeBClass(tc)
+            % Mirrors rdRejectsMismatchedVolumeBClass: RequireVolumeB
+            % (src/mexitk_common.h) is the shared code path both RD and
+            % RTPS call, so the class check is opcode-agnostic; only RD's
+            % own suite exercised it before.
+            landmarks = [70 50 14, 75 55 14];
+            tc.verifyError(@() mexitk('RTPS', [], tc.V, single(tc.V), landmarks), ...
+                'mexitk:RTPS:volumeBClass');
+        end
+
         function rtpsRejectsMismatchedVolumeBSize(tc)
             landmarks = [70 50 14, 75 55 14];
             small = tc.V(1:64, 1:64, 1:16);
