@@ -82,6 +82,7 @@ set(MEXITK_SOURCES
   src/opcodes/fls.cpp
   src/opcodes/fmean.cpp
   src/opcodes/fmedian.cpp
+  src/opcodes/fmmcf.cpp
   src/opcodes/fomt.cpp
   src/opcodes/fsn.cpp
   src/opcodes/fvbih.cpp
