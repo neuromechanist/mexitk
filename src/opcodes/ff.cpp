@@ -29,10 +29,15 @@ void RunFf(OpContext& ctx) {
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(input);
 
+  // The 2006 original maps X-named parameters to MATLAB dim 2 (ITK axis 1)
+  // and Y-named parameters to MATLAB dim 1 (ITK axis 0); Z is unchanged.
+  // Verified bit-exact against the reference: original XDIRECTION=1 ==
+  // flip(vin,2), original YDIRECTION=1 == flip(vin,1) (see
+  // docs/COMPATIBILITY.md, second capture campaign findings).
   typename FilterType::FlipAxesArrayType axes;
-  axes[0] = (p[0] != 0.0);
-  axes[1] = (p[1] != 0.0);
-  axes[2] = (p[2] != 0.0);
+  axes[0] = (p[1] != 0.0);  // YDIRECTION -> ITK axis 0 (MATLAB dim 1)
+  axes[1] = (p[0] != 0.0);  // XDIRECTION -> ITK axis 1 (MATLAB dim 2)
+  axes[2] = (p[2] != 0.0);  // ZDIRECTION -> ITK axis 2 (unchanged)
   filter->SetFlipAxes(axes);
   filter->Update();
 

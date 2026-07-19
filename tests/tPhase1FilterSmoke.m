@@ -78,12 +78,17 @@ classdef tPhase1FilterSmoke < matlab.unittest.TestCase
 
         function flipMatchesBuiltinPerAxis(tc)
             % Not just a no-op / round-trip check: pin FF against MATLAB's own
-            % flip() on each axis independently.
+            % flip() on each axis independently. XDIRECTION/YDIRECTION are
+            % swapped relative to their param position: the original's
+            % XDIRECTION flips MATLAB dim 2, YDIRECTION flips MATLAB dim 1
+            % (ZDIRECTION flips dim 3 unchanged). Fixture-proven bit-exact
+            % against ff_* reference captures; see docs/COMPATIBILITY.md.
             params = {[1 0 0], [0 1 0], [0 0 1]};
+            flipAxis = [2 1 3];
             for a = 1:3
                 for f = {@double, @uint8}
                     vin = f{1}(tc.Vu);
-                    tc.verifyEqual(mexitk('FF', params{a}, vin), flip(vin, a));
+                    tc.verifyEqual(mexitk('FF', params{a}, vin), flip(vin, flipAxis(a)));
                 end
             end
         end

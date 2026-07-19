@@ -29,9 +29,16 @@ void RunFmean(OpContext& ctx) {
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(input);
 
+  // The 2006 original maps X-named parameters to MATLAB dim 2 (ITK axis 1)
+  // and Y-named parameters to MATLAB dim 1 (ITK axis 0); Z is unchanged.
+  // Applied here for family consistency with FMEDIAN/SNC/FVBIH, which all
+  // share the same XRADIUS/YRADIUS/ZRADIUS registry naming: FMEAN's own
+  // captured fixtures are all symmetric-radius, so this swap is NOT
+  // directly fixture-proven for FMEAN itself, only inferred. See
+  // docs/COMPATIBILITY.md, second capture campaign findings.
   typename FilterType::RadiusType radius;
-  radius[0] = CastParam<itk::SizeValueType>(p[0], "FMEAN", "XRADIUS");
-  radius[1] = CastParam<itk::SizeValueType>(p[1], "FMEAN", "YRADIUS");
+  radius[0] = CastParam<itk::SizeValueType>(p[1], "FMEAN", "YRADIUS");
+  radius[1] = CastParam<itk::SizeValueType>(p[0], "FMEAN", "XRADIUS");
   radius[2] = CastParam<itk::SizeValueType>(p[2], "FMEAN", "ZRADIUS");
   filter->SetRadius(radius);
   filter->Update();

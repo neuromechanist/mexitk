@@ -29,9 +29,15 @@ void RunFvbih(OpContext& ctx) {
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(input);
 
+  // The 2006 original maps X-named parameters to MATLAB dim 2 (ITK axis 1)
+  // and Y-named parameters to MATLAB dim 1 (ITK axis 0); Z is unchanged.
+  // Proven by fixture evidence: fvbih_distinct_hole (radiusX=2, radiusY=1,
+  // asymmetric) deviates under the unswapped mapping, while
+  // fvbih_baseline_hole (radiusX=radiusY=1, symmetric) is already exact.
+  // See docs/COMPATIBILITY.md, second capture campaign findings.
   typename FilterType::InputSizeType radius;
-  radius[0] = CastParam<itk::SizeValueType>(p[0], "FVBIH", "radiusX");
-  radius[1] = CastParam<itk::SizeValueType>(p[1], "FVBIH", "radiusY");
+  radius[0] = CastParam<itk::SizeValueType>(p[1], "FVBIH", "radiusY");
+  radius[1] = CastParam<itk::SizeValueType>(p[0], "FVBIH", "radiusX");
   radius[2] = CastParam<itk::SizeValueType>(p[2], "FVBIH", "radiusZ");
   filter->SetRadius(radius);
   filter->SetBackgroundValue(

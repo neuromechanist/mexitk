@@ -318,7 +318,7 @@ identically to FGAD.
 | Params → setters | `SETORDER → SetOrder(unsigned int)`; `SETDIRECTION → SetDirection(unsigned int)` (axis index) |
 | Pixel constraints | none explicit |
 | Arity | 1 input, 1 output, no seeds |
-| Drift/risk | ITK's module system did not exist pre-4.0, so "did this filter move" is not meaningfully answerable for 2.4→5.x beyond "modularization happened"; no setter renames found |
+| Drift/risk | ITK's module system did not exist pre-4.0, so "did this filter move" is not meaningfully answerable for 2.4→5.x beyond "modularization happened"; no setter renames found. **`SETDIRECTION` is axis-swapped before `SetDirection`**: the original maps `SETDIRECTION=0` to ITK axis 1 and `SETDIRECTION=1` to ITK axis 0 (`2` is unchanged), the same X-named-to-MATLAB-dim-2 / Y-named-to-MATLAB-dim-1 convention found across FF/FMEDIAN/FMEAN/SNC/FVBIH. Verified bit-exact against captured fixtures; see docs/COMPATIBILITY.md. |
 | Confidence | High |
 
 ### `FDG` — DiscreteGaussianImageFilter
@@ -365,7 +365,7 @@ identically to FGAD.
 | Params → setters | `XDIRECTION, YDIRECTION, ZDIRECTION` are marshaled into **one** `FixedArray<bool,ImageDimension>` and passed via a single `SetFlipAxes(FlipAxesArrayType)` call — not three separate setters |
 | Pixel constraints | any pixel type (pure index permutation) |
 | Arity | 1 input, 1 output, no seeds |
-| Drift/risk | `SetFlipAboutOrigin(bool)` added later, default `false` preserves legacy behavior — additive only |
+| Drift/risk | `SetFlipAboutOrigin(bool)` added later, default `false` preserves legacy behavior — additive only. **`XDIRECTION`/`YDIRECTION` are axis-swapped**: the original's `XDIRECTION` flips ITK axis 1 (MATLAB dim 2) and `YDIRECTION` flips ITK axis 0 (MATLAB dim 1); `ZDIRECTION` is unchanged. Verified bit-exact against captured fixtures; see docs/COMPATIBILITY.md. |
 | Confidence | High |
 
 ### `FFFT` — Forward FFT (highest API drift of any filter opcode)
@@ -461,7 +461,7 @@ identically to FGAD.
 | Params → setters | `XRADIUS/YRADIUS/ZRADIUS` assembled into one `RadiusType` (`=SizeType`), passed via `SetRadius(const RadiusType&)` |
 | Pixel constraints | requires `HasNumericTraits<InputPixelType>` (scalar numeric) |
 | Arity | 1 input, 1 output, no seeds |
-| Drift/risk | none |
+| Drift/risk | **`XRADIUS`/`YRADIUS` are axis-swapped** before assembling `RadiusType`: `XRADIUS` -> ITK axis 1 (MATLAB dim 2), `YRADIUS` -> ITK axis 0 (MATLAB dim 1); `ZRADIUS` unchanged. Applied for family consistency with FMEDIAN/SNC/FVBIH's fixture-proven swap; FMEAN's own captured fixtures are all symmetric-radius, so this is inferred, not directly fixture-proven for FMEAN itself. See docs/COMPATIBILITY.md. |
 | Confidence | High |
 
 ### `FMEDIAN` — MedianImageFilter
@@ -473,7 +473,7 @@ identically to FGAD.
 | Params → setters | same `SetRadius` mechanism as FMEAN (`BoxImageFilter` base) |
 | Pixel constraints | requires `LessThanComparable` pixel type (`operator<`) |
 | Arity | 1 input, 1 output, no seeds |
-| Drift/risk | none |
+| Drift/risk | **`XRADIUS`/`YRADIUS` are axis-swapped** before assembling `RadiusType`: `XRADIUS` -> ITK axis 1 (MATLAB dim 2), `YRADIUS` -> ITK axis 0 (MATLAB dim 1); `ZRADIUS` unchanged. Proven by fixture evidence: `fmedian_r3_1_1` (asymmetric radius) deviates under the unswapped mapping, `fmedian_r1_1_3` (symmetric, swap is a no-op) is already exact. See docs/COMPATIBILITY.md. |
 | Confidence | High |
 
 ### `FMMCF` — MinMaxCurvatureFlowImageFilter
@@ -520,7 +520,7 @@ output** (single labeled image; N binary masks are derived post-hoc via
 | Params → setters | `radiusX/Y/Z` assembled into `itk::Size<3>`, `SetRadius(InputSizeType)`; `binaryImageBackgroundColor → SetBackgroundValue(InputPixelType)`; `binaryImageForegroundColor → SetForegroundValue(InputPixelType)`; `SetMajorityThreshold → SetMajorityThreshold(unsigned int)` (literal setter name confirmed present in the header, exactly as the opcode's param name suggests); `numberOfIterations → SetMaximumNumberOfIterations(unsigned int)` |
 | Pixel constraints | requires `EqualityComparable` + `OStreamWritable`; typically binary `unsigned char` |
 | Arity | 1 input, 1 output, no seeds |
-| Drift/risk | **module moved** to `ITKLabelVoting` — a naive `find_package(ITK COMPONENTS ITKBinaryMathematicalMorphology)` guess fails to link this filter. `SetMajorityThreshold` is an OFFSET above 50% of the neighborhood, not an absolute vote count: internally (`itkVotingBinaryHoleFillingImageFilter.hxx`, the class this filter delegates each iteration to) `birthThreshold = floor((N-1)/2) + MajorityThreshold`, where `N` is the full neighborhood size including the center pixel (`prod(2*radius[i]+1)`), and an OFF pixel flips ON only once its ON-neighbor count reaches `birthThreshold`. A large `MajorityThreshold` silently makes the filter a no-op rather than erroring; this is the class's own documented semantics, reproduced on purpose. |
+| Drift/risk | **module moved** to `ITKLabelVoting` — a naive `find_package(ITK COMPONENTS ITKBinaryMathematicalMorphology)` guess fails to link this filter. `SetMajorityThreshold` is an OFFSET above 50% of the neighborhood, not an absolute vote count: internally (`itkVotingBinaryHoleFillingImageFilter.hxx`, the class this filter delegates each iteration to) `birthThreshold = floor((N-1)/2) + MajorityThreshold`, where `N` is the full neighborhood size including the center pixel (`prod(2*radius[i]+1)`), and an OFF pixel flips ON only once its ON-neighbor count reaches `birthThreshold`. A large `MajorityThreshold` silently makes the filter a no-op rather than erroring; this is the class's own documented semantics, reproduced on purpose. **`radiusX`/`radiusY` are axis-swapped** before assembling `InputSizeType`: `radiusX` -> ITK axis 1 (MATLAB dim 2), `radiusY` -> ITK axis 0 (MATLAB dim 1); `radiusZ` unchanged. Proven by fixture evidence: `fvbih_distinct_hole` (radiusX=2, radiusY=1, asymmetric) deviates under the unswapped mapping, `fvbih_baseline_hole` (symmetric, swap is a no-op) is already exact. See docs/COMPATIBILITY.md. |
 | Confidence | High |
 
 ### `FVMI` — Vesselness (two-filter pipeline)
@@ -660,7 +660,7 @@ Resolved: **not** `ConnectedThresholdImageFilter`.
 | Header | `itkNeighborhoodConnectedImageFilter.h` |
 | Params → setters | `RadiusX/Y/Z` assembled into one `itk::Size<3>`, `SetRadius(InputImageSizeType)`; `LowerThreshold → SetLower(InputImagePixelType)`; `UpperThreshold → SetUpper(InputImagePixelType)`; `ReplaceValue → SetReplaceValue(OutputImagePixelType)` |
 | Arity | 1 input image, seed indices via separate `SetSeed`/`AddSeed` calls (not in the numeric param list — supplied via the seeds array), 1 output label image |
-| Drift/risk | none |
+| Drift/risk | **`RadiusX`/`RadiusY` are axis-swapped** before assembling `itk::Size<3>`: `RadiusX` -> ITK axis 1 (MATLAB dim 2), `RadiusY` -> ITK axis 0 (MATLAB dim 1); `RadiusZ` unchanged. Proven by fixture evidence: `snc_rx_wide`/`snc_rz_wide` (asymmetric radius) deviate under the unswapped mapping, symmetric-radius fixtures are already exact. Seed indices are NOT affected by this convention -- they stay matrix-order via `SeedPointsToIndices`. See docs/COMPATIBILITY.md. |
 | Confidence | High |
 
 ### `SOT` — OtsuThresholdImageFilter (single threshold, unchanged name)

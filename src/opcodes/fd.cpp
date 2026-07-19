@@ -53,7 +53,21 @@ void RunFd(OpContext& ctx) {
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(real);
   filter->SetOrder(CastParam<unsigned int>(p[0], "FD", "SETORDER"));
-  filter->SetDirection(CastParam<unsigned int>(p[1], "FD", "SETDIRECTION"));
+
+  // The 2006 original maps X-named parameters to MATLAB dim 2 (ITK axis 1)
+  // and Y-named parameters to MATLAB dim 1 (ITK axis 0); Z is unchanged.
+  // SETDIRECTION follows the same swap: original [order=1, direction=0] is
+  // BIT-EXACT equal to mexitk's [order=1, direction=1], and original
+  // [1,1] == mexitk's [1,0] (order 0 is exact regardless, a derivative of
+  // order 0 does not depend on direction). See docs/COMPATIBILITY.md,
+  // second capture campaign findings.
+  unsigned int direction = CastParam<unsigned int>(p[1], "FD", "SETDIRECTION");
+  if (direction == 0) {
+    direction = 1;
+  } else if (direction == 1) {
+    direction = 0;
+  }
+  filter->SetDirection(direction);
   filter->Update();
 
   if constexpr (std::is_same<PixelT, RealT>::value) {

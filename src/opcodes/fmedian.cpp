@@ -29,9 +29,15 @@ void RunFmedian(OpContext& ctx) {
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(input);
 
+  // The 2006 original maps X-named parameters to MATLAB dim 2 (ITK axis 1)
+  // and Y-named parameters to MATLAB dim 1 (ITK axis 0); Z is unchanged.
+  // Proven by fixture evidence: fmedian_r3_1_1 (XRADIUS=3, asymmetric)
+  // deviates under the unswapped mapping, while fmedian_r1_1_3 (XRADIUS=
+  // YRADIUS=1, symmetric so the swap is a no-op) is already exact. See
+  // docs/COMPATIBILITY.md, second capture campaign findings.
   typename FilterType::RadiusType radius;
-  radius[0] = CastParam<itk::SizeValueType>(p[0], "FMEDIAN", "XRADIUS");
-  radius[1] = CastParam<itk::SizeValueType>(p[1], "FMEDIAN", "YRADIUS");
+  radius[0] = CastParam<itk::SizeValueType>(p[1], "FMEDIAN", "YRADIUS");
+  radius[1] = CastParam<itk::SizeValueType>(p[0], "FMEDIAN", "XRADIUS");
   radius[2] = CastParam<itk::SizeValueType>(p[2], "FMEDIAN", "ZRADIUS");
   filter->SetRadius(radius);
   filter->Update();

@@ -27,9 +27,26 @@ void RunSnc(OpContext& ctx) {
   filter->SetInput(input);
 
   const std::vector<double>& p = *ctx.params;
+  // The 2006 original maps X-named parameters to MATLAB dim 2 (ITK axis 1)
+  // and Y-named parameters to MATLAB dim 1 (ITK axis 0); Z is unchanged.
+  // Applied here for family consistency with FMEDIAN/FMEAN/FVBIH, which
+  // share the same XRADIUS/YRADIUS-style registry naming and are all
+  // fixture-proven bit-exact under this exact swap. Seeds are NOT affected
+  // by this convention -- they stay matrix-order via SeedPointsToIndices,
+  // unchanged below.
+  //
+  // Unlike its box-filter siblings, SNC does NOT reach bit-exactness even
+  // with the swap applied: a symmetric-radius fixture where the swap is a
+  // total no-op (snc_r0_band_seedS1_double, radius [0,0,0]) still deviates
+  // on 36573/442368 voxels, so a separate, axis-order-independent
+  // divergence exists in NeighborhoodConnectedImageFilter itself between
+  // ITK 2.4 and 5.4 -- the same class of upstream-algorithm evolution
+  // already documented for FCA/SWS. Radius [1,1,1] and the base threshold
+  // fixtures ARE bit-exact; see docs/COMPATIBILITY.md for the full
+  // per-fixture measurement.
   typename InImage::SizeType radius;
-  radius[0] = CastParam<itk::SizeValueType>(p[0], "SNC", "RadiusX");
-  radius[1] = CastParam<itk::SizeValueType>(p[1], "SNC", "RadiusY");
+  radius[0] = CastParam<itk::SizeValueType>(p[1], "SNC", "RadiusY");
+  radius[1] = CastParam<itk::SizeValueType>(p[0], "SNC", "RadiusX");
   radius[2] = CastParam<itk::SizeValueType>(p[2], "SNC", "RadiusZ");
   filter->SetRadius(radius);
   filter->SetLower(CastParam<PixelT>(p[3], "SNC", "LowerThreshold"));
@@ -54,9 +71,15 @@ class SncOpcode : public Opcode {
   }
   Status GetStatus() const override { return Status::kSmokeTested; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists. "
-           "Radius axes (X,Y,Z) map onto image dimensions 1,2,3. An empty "
-           "seed list yields an all-zero output.";
+    return "reference fixtures exist (snc_*). RadiusX maps onto ITK axis 1 "
+           "(MATLAB dim 2), RadiusY onto ITK axis 0 (MATLAB dim 1), matching "
+           "the original; radius [1,1,1] and the base threshold fixtures "
+           "are bit-exact, but NeighborhoodConnectedImageFilter itself "
+           "diverges from the original for other radii independent of "
+           "axis order (measured on a swap-invariant symmetric-radius "
+           "fixture), so this opcode is not bit-exact overall. See "
+           "docs/COMPATIBILITY.md for the measured bound. An empty seed "
+           "list yields an all-zero output.";
   }
 
   const std::vector<ParamSpec>& Params() const override {
