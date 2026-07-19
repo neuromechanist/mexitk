@@ -3,7 +3,7 @@ classdef tReferenceRejections < matlab.unittest.TestCase
     % on whether to run at all, plus two fixtures whose "disagreement" is
     % not a real one (see emptySeed* below).
     %
-    % Three genuinely different situations live here, all deliberate, all
+    % Four genuinely different situations live here, all deliberate, all
     % documented in docs/COMPATIBILITY.md:
     %   - mexitk refuses an input the original accepted, because the
     %     original's own behaviour on that input is undefined behaviour in
@@ -16,6 +16,17 @@ classdef tReferenceRejections < matlab.unittest.TestCase
     %     runs and produces a result of the right shape/class.
     %   - Both reject the same input, for possibly different specific
     %     reasons (both still land outside the valid domain).
+    %   - mexitk refuses an ENTIRE OPCODE the original ran successfully,
+    %     because the original's own output for that opcode is not an
+    %     image (SCSS: the original returned without error, but its own
+    %     output is a [10 1] vector of ones, not anything mexitk's
+    %     image-in/image-out calling convention could return under this
+    %     name without misleading a caller -- see src/opcodes/scss.cpp).
+    %     This is not a per-input param-range rejection like the first
+    %     category above (the fixture's own params are unremarkable;
+    %     every SCSS call rejects, not just this one), so it gets its own
+    %     assertion against mexitk:SCSS:unsupported rather than
+    %     mexitk:paramRange.
     %
     % SPDX-License-Identifier: BSD-3-Clause
     % Copyright (c) 2026, Seyed Yahya Shirazi <shirazi@ieee.org>
@@ -79,6 +90,26 @@ classdef tReferenceRejections < matlab.unittest.TestCase
             % structural well-formedness is asserted.
             tc.verifyClass(out, class(vin));
             tc.verifySize(out, size(vin));
+        end
+    end
+
+    methods (Test)  % mexitk refuses the whole opcode, not just this input
+        function scssRefusesDespiteOriginalSuccess(tc)
+            [fx, vin] = mexitkFixture('scss_scss_20_60_10_seedS1_double');
+            tc.assertTrue(fx.success, sprintf( ...
+                ['%s: original itself rejected this input (fixture bookkeeping ' ...
+                 'error -- SCSS''s refusal belongs in this test regardless, but ' ...
+                 'the assertTrue above would then be documenting the wrong fact)'], ...
+                'scss_scss_20_60_10_seedS1_double'));
+            % The original's own output confirms it is not an image: a
+            % [10 1] column, one entry per AdvanceTimeStep() iteration
+            % (numberOfIterations=10 in fx.params), not a volume shaped
+            % like the input. mexitk never attempts to reproduce this
+            % value; it always throws mexitk:SCSS:unsupported instead.
+            tc.verifyEqual(size(fx.output), [10 1]);
+            tc.verifyEqual(fx.output, ones(10, 1));
+            tc.verifyError(@() mexitk('SCSS', fx.params, vin, [], fx.seedArg), ...
+                'mexitk:SCSS:unsupported');
         end
     end
 

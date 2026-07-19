@@ -44,6 +44,17 @@ enum class Status {
   kSmokeTested,
   // Implemented from the ITK mapping only; never executed against a reference.
   kUntested,
+  // Registers and appears in the listing, but Execute() always throws: a
+  // deliberate, documented refusal, not a missing implementation. Reserved
+  // for opcodes whose original behaviour cannot be faithfully reproduced
+  // even in principle (SCSS: a stateful, process-wide-static-state
+  // biological simulation whose output is a mesh/vector, not an image,
+  // via a remote ITK module not built into mexitk) -- shipping a
+  // plausible-looking substitute under the same name would be worse than
+  // refusing, per this project's core honesty principle. Distinct from
+  // kUntested (which describes an opcode nobody has run against a
+  // reference yet, but which DOES attempt the original's computation).
+  kUnsupported,
 };
 
 struct ParamSpec {

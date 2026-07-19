@@ -145,7 +145,21 @@ classdef tReferenceExact < matlab.unittest.TestCase
             ... captured fixture; SLLS and SSDLS, the other two level-set
             ... opcodes from the same phase, both have a small measured
             ... residual instead (see tReferenceBounded.m).
-            'sgac_sgac_volB_seedS1_double'};
+            'sgac_sgac_volB_seedS1_double', ...
+            ... FFFT: packing confirmed (Epic 4 Phase 2, s15 controlled
+            ... captures on 8x8x8 volumes with analytically known spectra
+            ... -- real->rescaled real part, complex->raw imaginary part,
+            ... with a real-not-imaginary sign correction the small
+            ... captures themselves revealed; see src/opcodes/ffft.cpp's
+            ... StatusNote). 4 of 6 are bit-exact; the other 2
+            ... (imporig_real, impoff_real) have a residual at absolute
+            ... double-precision noise floor (~1e-14/1e-15), asserted in
+            ... tReferenceBounded.m instead. The two original mri-sized
+            ... fixtures (real0, complex1) have a real, larger measured
+            ... residual -- also tReferenceBounded.m; see
+            ... docs/COMPATIBILITY.md for the full evidence trail.
+            'ffft_const_real_double', 'ffft_const_complex_double', ...
+            'ffft_imporig_complex_double', 'ffft_impoff_complex_double'};
     end
 
     methods (Test)

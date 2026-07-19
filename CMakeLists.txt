@@ -49,6 +49,7 @@ set(MEXITK_ITK_COMPONENTS
                            # /LaplacianSegmentationLevelSetImageFilter
   ITKPDEDeformableRegistration  # RD: DemonsRegistrationFilter
   ITKTransform             # RTPS: ThinPlateSplineKernelTransform
+  ITKFFT                   # FFFT: ForwardFFTImageFilter
 )
 find_package(ITK 5.4 REQUIRED COMPONENTS ${MEXITK_ITK_COMPONENTS})
 
@@ -80,9 +81,10 @@ set(MEXITK_SOURCES
   src/opcodes/fdg.cpp        # FDG and FGA
   src/opcodes/fdm.cpp        # FDM and FDMV
   src/opcodes/ff.cpp
+  src/opcodes/ffft.cpp
   src/opcodes/fgad.cpp
   src/opcodes/fgm.cpp
-  src/opcodes/fgmrg.cpp
+  src/opcodes/fgmrg.cpp        # FGMRG and FGMS
   src/opcodes/fls.cpp
   src/opcodes/fmean.cpp
   src/opcodes/fmedian.cpp
@@ -94,6 +96,7 @@ set(MEXITK_SOURCES
   src/opcodes/rd.cpp
   src/opcodes/rtps.cpp
   src/opcodes/scc.cpp
+  src/opcodes/scss.cpp
   src/opcodes/sct.cpp
   src/opcodes/sfm.cpp
   src/opcodes/sgac.cpp
