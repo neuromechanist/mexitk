@@ -703,19 +703,26 @@ numbers above are the honest record, not a target.
 
 ## Bound margins for noise-floor entries
 
-`tests/tReferenceBounded.m`'s ceiling formula gates its RMS headroom by
+`tests/tReferenceBounded.m`'s ceiling formula gates its headroom by
 magnitude, a policy ruling from Epic 4 Phase 1's PR #30 review, applied
-project-wide, not a per-fixture exception. Below RMS 1e-5 (relative
-~1e-7 on this project's 0-88 reference volume), the ceiling is
-`max(measured * 1.5, measured + 1e-12)`; at or above 1e-5, it stays
-`max(measured * 1.1, measured + 1e-12)`, exactly the original flat 10%
-rule. Only the ASSERTION MARGIN changed. No measured value in
+project-wide, not a per-fixture exception, and applied identically and
+independently to BOTH metrics it asserts. Below 1e-5 (relative ~1e-7 on
+this project's 0-88 reference volume), the RMS ceiling is
+`max(measured * 1.5, measured + 1e-12)` and the max-abs ceiling is
+`max(measured * 1.5, measured + 1e-9)`; at or above 1e-5, each stays
+`max(measured * 1.1, measured + <its own floor>)`, exactly the original
+flat 10% rule. The gate is evaluated separately per metric, so a single
+fixture can have its RMS gated while its max-abs is not (or vice versa)
+if the two measured values straddle the 1e-5 threshold -- this is
+correct, not an inconsistency: RMS and max-abs are different
+measurements of the same output and are not guaranteed to sit in the
+same regime. Only the ASSERTION MARGIN changed. No measured value in
 `tests/tReferenceBounded.m`'s `Cases` table changed because of this
 policy, and it is not a relaxation of "never loosen a tolerance to make
 a test pass": the entries it widens are not being reproduced any
 differently than before, and the entries it does not touch (any real
-algorithmic disagreement, however small) keep exactly the tight margin
-they always had.
+algorithmic disagreement, however small, in either metric) keep exactly
+the tight margin they always had.
 
 **Why the gate exists.** A measured RMS below 1e-5 on this project's
 data is presumptively floating-point/library noise, not a real
@@ -750,14 +757,30 @@ becomes negligible): `FCF`'s `fcf_10_0p0625_single`; `FGMRG`'s
 `rtps_pairs3_distinct_double` itself even after its own bound was
 corrected -- all with 10-15% headroom, less than the ~29% spread already
 measured on one of them. Under the 1.5x gate, all 13 now carry 50%
-headroom, comfortably above the observed spread with room to spare.
-Every entry at or above 1e-5 -- every genuine algorithmic disagreement
+headroom, comfortably above the observed spread with room to spare. The
+identical survey run against max-abs found the same pattern (12 of the
+13 RMS-affected fixtures also have a sub-1e-5 max-abs, gaining the same
+50% headroom there too; the one exception, `FCF`'s
+`fcf_10_0p0625_single`, has max-abs 5.34e-05 -- just above the
+threshold -- so its max-abs bound stays at 10% even though its RMS bound
+is gated to 1.5x, the straddling case described above). Every entry at
+or above 1e-5 in EITHER metric -- every genuine algorithmic disagreement
 this project has measured, from `FGAD`'s uint8 residual through `RD`'s
 Demons-solver drift to the three real-residual `RTPS` captures
 (`rtps_pairs4_identity_double`, `rtps_pair1_minimal_double`,
 `rtps_pairs2_distinct_double`) -- keeps exactly the 10% margin it had
 before this policy, unchanged, because a real disagreement is exactly
 where a tight margin is meaningful regression detection.
+
+`rtps_pairs3_distinct_double`'s own stored RMS (6.78818e-12, the
+cross-platform maximum) is kept even though the 1.5x gate alone would
+now absorb the Linux measurement starting from the macOS-only value:
+the cross-platform maximum is the more accurate number, and recording it
+is belt-and-suspenders on top of the wider margin, not a substitute for
+measuring it. A third platform's own noise-floor measurement, whatever
+it turns out to be, is best compared against the most accurate value
+already on file, not a smaller one kept only because a wider margin
+happens to cover the two platforms measured so far.
 
 ## Opcode-to-ITK-class reference
 

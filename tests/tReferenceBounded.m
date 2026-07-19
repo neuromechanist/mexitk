@@ -258,8 +258,20 @@ classdef tReferenceBounded < matlab.unittest.TestCase
             ... disagreement (forbidden by project policy): the quantity
             ... being bounded is which-platform's-LAPACK noise, not
             ... agreement with the original, and only ONE platform's noise
-            ... had been measured before. max-abs is unaffected (Linux's
-            ... own max-abs was not reported to exceed the existing bound).
+            ... had been measured before. The magnitude-gated bound margin
+            ... below (see deviationMatchesDocumentedBound's own rmsFactor
+            ... comment, and docs/COMPATIBILITY.md's "Bound margins for
+            ... noise-floor entries") now ALSO gives 1.5x headroom here on
+            ... its own, since this RMS is well under the 1e-5 gate
+            ... threshold -- from the macOS-only value alone that policy
+            ... would already have absorbed the Linux measurement. The
+            ... cross-platform maximum is kept as the stored value anyway,
+            ... deliberately: it is the more accurate number, belt and
+            ... suspenders on top of the wider margin, not a substitute
+            ... for it. max-abs gets the identical magnitude gate now too
+            ... (it was previously unaffected only because that gate did
+            ... not exist yet), and Linux's own max-abs was never reported
+            ... to exceed even the prior bound.
             'RTPS', 'rtps_pairs3_distinct_double',     6.78818e-12, 1.091677859e-10; ...
             'RTPS', 'rtps_pairs4_identity_double',     2.226571164, 88.0; ...
             'RTPS', 'rtps_pair1_minimal_double',       3.647131445, 88.0; ...
@@ -332,12 +344,23 @@ classdef tReferenceBounded < matlab.unittest.TestCase
                 rmsFactor = 1.1;
             end
             rmsCeiling = max(rmsMeasured * rmsFactor, rmsMeasured + 1e-12);
-            % max-abs headroom is unchanged by this policy: its own +1e-9
-            % additive floor already gives ample margin at every magnitude
-            % this suite has measured (no max-abs entry was found at risk
-            % in the PR #30 platform-spread survey), and no CI failure
-            % involved max-abs.
-            maxCeiling = max(maxMeasured * 1.1, maxMeasured + 1e-9);
+            % max-abs gets the SAME magnitude gate as RMS above, for the
+            % same reason: a max-abs measurement below 1e-5 comes from the
+            % identical platform-dependent vnl_svd/LAPACK noise floor as
+            % its own fixture's RMS, so a flat 10% margin there is exposed
+            % to the same class of latent cross-platform brittleness, even
+            % though no max-abs entry has actually failed CI yet -- gating
+            % it now, on the same measured-magnitude signal, is closing
+            % the gap before it produces its own surprise red run rather
+            % than waiting for one. The +1e-9 additive floor (already
+            % larger than RMS's own +1e-12, since max-abs values run
+            % larger for the same fixture) stays in every case.
+            if maxMeasured < 1e-5
+                maxFactor = 1.5;
+            else
+                maxFactor = 1.1;
+            end
+            maxCeiling = max(maxMeasured * maxFactor, maxMeasured + 1e-9);
             tc.verifyLessThan(rms, rmsCeiling, sprintf( ...
                 '%s (%s): RMS deviation %.6g exceeds documented %.6g', ...
                 name, opcode, rms, rmsMeasured));
