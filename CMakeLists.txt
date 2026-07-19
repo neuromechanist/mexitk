@@ -47,6 +47,8 @@ set(MEXITK_ITK_COMPONENTS
   ITKFastMarching          # SFM: FastMarchingImageFilter
   ITKLevelSets             # SGAC, SLLS, SSDLS: (Geodesic|ShapeDetection)-
                            # /LaplacianSegmentationLevelSetImageFilter
+  ITKPDEDeformableRegistration  # RD: DemonsRegistrationFilter
+  ITKTransform             # RTPS: ThinPlateSplineKernelTransform
 )
 find_package(ITK 5.4 REQUIRED COMPONENTS ${MEXITK_ITK_COMPONENTS})
 
