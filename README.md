@@ -60,7 +60,7 @@ run green in CI on Linux x86_64 and macOS arm64 before `FMMCF`/`SFM` landed).
 | `SCT` | `ConnectedThresholdImageFilter` | **validated** | Bit-identical to the original on every fixture it itself accepted (14 of 17 captured); the rest are rejection/accepts-more cases. ReplaceValue hardcoded to 255 (inferred from ITK's example; registry exposes none). |
 | `SIC` | `IsolatedConnectedImageFilter` | **validated** | Bit-identical to the original on every fixture with two valid seed groups (7 of 10 captured). Needs at least 2 seed points. |
 | `SOT` | `OtsuThresholdImageFilter` | **validated** | Bit-identical to the original on every captured fixture (6 of 6, all four pixel types). Inside/outside are a fixed `{0,255}` on every pixel type, matching the original (not the pixel type's own max, an earlier unverified assumption). |
-| `SGAC` | `GeodesicActiveContourLevelSetImageFilter` | **validated** | Bit-identical to the original on the one captured fixture (double). The first two-volume opcode: volume A is the feature (edge-potential) image, volume B is the initial level set -- both determined empirically, not documented anywhere in the original's own registry. Threshold polarity (negative level-set values -> 255) matches ITK's own documented convention for this filter. |
+| `SGAC` | `GeodesicActiveContourLevelSetImageFilter` | **validated** | Bit-identical to the original on the one captured fixture (double). The first two-volume opcode: volume A is the feature (edge-potential) image, volume B is the initial level set. The original's own console output corroborates volume A's role ("Input A will be used as feature image."); which ITK setter volume B is wired to was confirmed by a swap test against the fixture. Threshold polarity (negative level-set values -> 255) matches ITK's own documented convention for this filter. See docs/COMPATIBILITY.md for the full sourcing. |
 | `FCA` | `CurvatureAnisotropicDiffusionImageFilter` | **bounded deviation** | Not bit-identical. RMS 2.6e-3, max 4.7e-2 at 1 iteration over a 0-88 range; compounds with iterations. |
 | `SWS` | `WatershedImageFilter` | **bounded deviation** | Region count matches exactly at every tested setting; label images are not bit-identical at fine levels. |
 | `FBL` | `BilateralImageFilter` | **bounded deviation** | Bit-identical on int32/single/uint8; double has a floating-point-noise-floor residual (RMS order 1e-13 to 1e-12). |
@@ -179,8 +179,9 @@ This mirrors the original, and it is why `FOMT` on `uint8` differs from `FOMT` o
   Callers pass one anyway and index the label image afterwards.
 - **`SGAC`/`SLLS`/`SSDLS` require `inputArray2` and use it as the initial level set**,
   with `inputArray1` as the feature image -- the reverse of what either name suggests.
-  Both roles were determined empirically against captured fixtures, not documented
-  anywhere in the original's own registry. All three also accept and ignore a seed argument.
+  The original's own console output corroborates `inputArray1`'s role; which ITK setter
+  `inputArray2` is wired to was confirmed by a swap test against each fixture, not assumed.
+  See docs/COMPATIBILITY.md for the full sourcing. All three also accept and ignore a seed argument.
 
 ## Testing
 

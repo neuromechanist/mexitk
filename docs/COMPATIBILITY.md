@@ -790,11 +790,23 @@ accepted-and-ignored. All three wrap a classic-framework ITK level-set
 segmentation filter (`itk::SegmentationLevelSetImageFilter` subclasses,
 module `ITKLevelSets`), which take two image inputs with distinct roles: an
 initial level set (the seed isosurface) and a feature image (the speed
-function's source). Neither `docs/matitk_opcode_registry.txt` nor any other
-surviving MATITK documentation says which of `inputArray1`/`inputArray2`
-plays which role — this was determined empirically against each opcode's
-own captured fixture, not assumed to be uniform across the three, and not
-guessed from ITK's own naming.
+function's source). `docs/matitk_opcode_registry.txt`'s own dump for these
+three opcodes was captured from a zero-volume call (it only reaches the
+"not enough parameters" error path), so it says nothing about role
+assignment — but the original binary's own console output on a genuine
+two-volume call, preserved verbatim in each opcode's captured fixture
+(`consoleText`), does: **"This method requires two image volumes. Input A
+will be used as feature image. Input B will be used as input A's
+gradient."**, identical across all three fixtures. This corroborates that
+`inputArray1` is the feature image — the same conclusion the swap-test
+below reaches independently — but it does not by itself prove which ITK
+setter each argument is wired to: the original's own wording, "input A's
+gradient", is not the same concept as ITK's own "initial level set" role
+for `SetInput()` (a gradient image and a seed isosurface are different
+things), and no assumption is made here that they must mean the same
+argument. The swap-test is what actually confirms the `SetInput()`/
+`SetFeatureImage()` wiring below; the console text is corroborating
+context for `inputArray1`'s role, not a substitute for it.
 
 **Role assignment, the same for all three:** `inputArray1` (volume A) is the
 **feature image**; `inputArray2` (volume B) is the **initial level set**.
@@ -805,10 +817,12 @@ opcodes the correct assignment reproduces the fixture (bit-exact for SGAC,
 within the measured bounded deviation for SLLS/SSDLS); the swapped
 assignment produces a substantially different result every time — for
 SGAC, a close-but-wrong match (1492-voxel difference on a ~235000-voxel
-region, not exact); for SSDLS, a massive difference (max-abs 8 vs. 5.25e-6,
-RMS 1.57 vs. 6.7e-8). The swapped-role numbers are recorded here, not
-tuned away, specifically so a future reader can see this was verified, not
-assumed uniform after the first opcode confirmed it.
+region, not exact); for SLLS, a massive difference (422527/442368 voxels
+differ, a completely different segmentation, against the correct
+assignment's 280/442368); for SSDLS, a massive difference (max-abs 8 vs.
+5.25e-6, RMS 1.57 vs. 6.7e-8). The swapped-role numbers are recorded here,
+not tuned away, specifically so a future reader can see this was verified,
+not assumed uniform after the first opcode confirmed it.
 
 **Threshold polarity is opcode-specific, not filter-generic.** `SGAC` and
 `SLLS` binary-threshold their raw level-set output to `{0, 255}`; `SSDLS`

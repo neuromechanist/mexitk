@@ -63,10 +63,16 @@ void RunSlls(OpContext& ctx) {
   // Role assignment, fixture-verified (Epic 3 Phase 2,
   // slls_slls_volB_seedS1_double): same convention as SGAC -- volumeA is
   // the FEATURE image and volumeB is the INITIAL level set (the seed
-  // isosurface). Determined the same way: swapping which MATLAB volume is
-  // passed as arg3 vs arg4 at the call site and comparing against the
-  // fixture's own natural (volumeA, volumeB) order; only feature=volumeA /
-  // initial-level-set=volumeB reproduces it, bit-exact.
+  // isosurface). This fixture's own console output corroborates volumeA's
+  // role with the same text as SGAC's and SSDLS's fixtures (see sgac.cpp's
+  // own comment for the exact wording and the "input A's gradient" vs
+  // ITK's "initial level set" terminology note); the CONFIRMING evidence
+  // for the actual SetInput()/SetFeatureImage() wiring is the swap test:
+  // rebuilding with the two volumes swapped and comparing against the
+  // fixture's own natural (volumeA, volumeB) order. feature=volumeA /
+  // initial-level-set=volumeB reproduces it within the measured bounded
+  // deviation (see StatusNote); the swapped assignment does not
+  // (422527/442368 voxels differ, a completely different segmentation).
   filter->SetFeatureImage(realA);
   filter->SetInput(realB);
   filter->SetIsoSurfaceValue(CastParam<RealT>(p[0], "SLLS", "IsoSurfaceValue"));

@@ -60,10 +60,17 @@ void RunSsdls(OpContext& ctx) {
   // Role assignment, fixture-verified (Epic 3 Phase 2,
   // ssdls_ssdls_volB_seedS1_double): same convention as SGAC/SLLS --
   // volumeA is the FEATURE image (edge-potential map) and volumeB is the
-  // INITIAL level set. Determined the same way: swapping which MATLAB
-  // volume is passed as arg3 vs arg4 at the call site and comparing
-  // against the fixture's own natural (volumeA, volumeB) order; only
-  // feature=volumeA / initial-level-set=volumeB reproduces it, bit-exact.
+  // INITIAL level set. This fixture's own console output corroborates
+  // volumeA's role with the same text as SGAC's and SLLS's fixtures (see
+  // sgac.cpp's own comment for the exact wording and the "input A's
+  // gradient" vs ITK's "initial level set" terminology note); the
+  // CONFIRMING evidence for the actual SetInput()/SetFeatureImage() wiring
+  // is the swap test: rebuilding with the two volumes swapped and
+  // comparing against the fixture's own natural (volumeA, volumeB) order.
+  // feature=volumeA / initial-level-set=volumeB reproduces it within the
+  // measured bounded deviation (see StatusNote); the swapped assignment
+  // does not (max-abs 8 vs. 5.25e-6, RMS 1.57 vs. 6.7e-8 -- three orders
+  // of magnitude worse, a completely different segmentation).
   filter->SetFeatureImage(realA);
   filter->SetInput(realB);
   filter->SetPropagationScaling(CastParam<RealT>(p[0], "SSDLS", "propagationScaling"));

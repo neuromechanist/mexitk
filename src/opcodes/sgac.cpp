@@ -74,16 +74,26 @@ void RunSgac(OpContext& ctx) {
   typename FilterType::Pointer filter = FilterType::New();
   // Role assignment, fixture-verified (Epic 3 Phase 2,
   // sgac_sgac_volB_seedS1_double): volumeA is the FEATURE image
-  // (edge-potential map) and volumeB is the INITIAL level set. This is not
-  // documented anywhere in the registry or the ITK mapping doc -- it was
-  // determined empirically, the same kind of evidence-based reverse
-  // engineering of the calling convention as the axis-swap findings for
-  // FF/FMEDIAN/SNC elsewhere in this codebase, not a tuned choice: calling
-  // the built opcode with the two volumes swapped at the MATLAB call site
-  // was tried both ways, and only feature=volumeA / initial-level-set=
-  // volumeB reproduces the fixture when called in ITS OWN natural
-  // (volumeA, volumeB) argument order -- bit-exact, 0/442368 voxels differ
-  // after the threshold step below.
+  // (edge-potential map) and volumeB is the INITIAL level set. The
+  // original's own console output on this fixture corroborates volumeA's
+  // role verbatim: "This method requires two image volumes. Input A will
+  // be used as feature image. Input B will be used as input A's
+  // gradient." -- but that text alone does not prove which ITK setter
+  // volumeB is wired to: "input A's gradient" is not the same concept as
+  // ITK's own "initial level set" role for SetInput(), so no assumption is
+  // made that they name the same argument. The CONFIRMING evidence for the
+  // actual SetInput()/SetFeatureImage() wiring below is the swap test, the
+  // same kind of evidence-based reverse engineering of the calling
+  // convention as the axis-swap findings for FF/FMEDIAN/SNC elsewhere in
+  // this codebase, not a tuned choice: calling the built opcode with the
+  // two volumes swapped at the MATLAB call site was tried both ways.
+  // feature=volumeA / initial-level-set=volumeB reproduces the fixture
+  // when called in ITS OWN natural (volumeA, volumeB) argument order --
+  // bit-exact, 0/442368 voxels differ after the threshold step below. The
+  // swapped assignment (feature=volumeB / initial-level-set=volumeA) does
+  // not: close but wrong, nnz(negative-valued voxels)=236090 against the
+  // fixture's own 234598 (a 1492-voxel difference on a ~235000-voxel
+  // region), not exact.
   filter->SetFeatureImage(realA);
   filter->SetInput(realB);
   filter->SetPropagationScaling(CastParam<RealT>(p[0], "SGAC", "propagationScaling"));
@@ -132,9 +142,13 @@ class SgacOpcode : public Opcode {
            "MaxIteration=50, seed [70 50 14], double), asserted by "
            "tests/tReferenceExact.m. Role assignment (volumeA=feature "
            "image, volumeB=initial level set) and threshold polarity "
-           "(negative level-set values -> 255) were both determined "
-           "empirically against this fixture, not documented anywhere in "
-           "the original's own registry -- see the comments in this file. "
+           "(negative level-set values -> 255): the original's own console "
+           "output corroborates volumeA's role ('Input A will be used as "
+           "feature image. Input B will be used as input A's gradient.'), "
+           "but the SetInput()/SetFeatureImage() wiring itself was "
+           "confirmed by a swap test against this fixture (swapped "
+           "assignment: 1492/234598 voxels differ, not exact), not assumed "
+           "from that text alone -- see the comments in this file. "
            "Seeds are accepted and ignored (verified: bit-identical output "
            "with and without the seed argument), the same convention as "
            "SWS. No fixture exists for single/uint8/int32 or other "
