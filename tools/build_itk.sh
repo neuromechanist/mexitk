@@ -49,6 +49,7 @@ ITK_MODULES=(
   Module_ITKCurvatureFlow=ON         # FCF, FMMCF
   Module_ITKAntiAlias=ON             # FAAB
   Module_ITKFastMarching=ON          # SFM
+  Module_ITKLevelSets=ON             # SGAC, SLLS, SSDLS
 )
 
 WORK="${ITK_BUILD_WORKDIR:-$(mktemp -d)}"
