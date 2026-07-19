@@ -1,11 +1,14 @@
 classdef tPhase6RegistrationSmoke < matlab.unittest.TestCase
     % Smoke tests for the Phase 6 (Epic 4 Phase 1) registration opcodes, RD
-    % and RTPS -- the first two opcodes in Category::kRegistration. RD has
-    % a SUCCESSFUL reference fixture (see tests/tReferenceBounded.m for its
-    % measured deviation); RTPS has only a REJECTION fixture (see
-    % tests/tReferenceRejections.m) and is capped at smoke-tested (see its
-    % own StatusNote in src/opcodes/rtps.cpp for exactly what that means).
-    % This suite instead asserts structural invariants (shape, class,
+    % and RTPS -- the first two opcodes in Category::kRegistration. Both are
+    % kBoundedDeviation: RD has one successful reference fixture (see
+    % tests/tReferenceBounded.m for its measured deviation); RTPS's own
+    % first fixture was a rejection only, but a follow-up reference-host
+    % capture round (s14, tools/capture_reference/s14_rtps_landmarks.m) then
+    % supplied eight successful captures plus a second rejection (see
+    % tests/tReferenceBounded.m / tests/tReferenceRejections.m, and RTPS's
+    % own StatusNote in src/opcodes/rtps.cpp for the full evidence). This
+    % suite instead asserts structural invariants (shape, class,
     % finiteness, and parameter/volume-B/landmark validation paths) across
     % all four pixel types, the same style as tPhase5LevelSetSmoke.m for
     % the previous epic's two-volume opcodes. Every non-guaranteed
@@ -122,7 +125,12 @@ classdef tPhase6RegistrationSmoke < matlab.unittest.TestCase
 
     methods (Test)  % RTPS
         function rtpsRequiresVolumeB(tc)
+            % Both the omitted-arg4 and explicit-[] shapes, mirroring
+            % rdRequiresVolumeB: RequireVolumeB (src/mexitk_common.h) runs
+            % before any landmark validation, so this fires regardless of
+            % whether landmarks were ever supplied.
             landmarks = [70 50 14, 75 55 14];
+            tc.verifyError(@() mexitk('RTPS', [], tc.V), 'mexitk:RTPS:volumeB');
             tc.verifyError(@() mexitk('RTPS', [], tc.V, [], landmarks), 'mexitk:RTPS:volumeB');
         end
 
