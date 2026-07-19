@@ -109,16 +109,26 @@ end
 
 function [verdict, detail] = classifyOne(f, tag)
 try
-    vin = reconstructFixtureInput(f, tag);
+    [vin, vinB] = reconstructFixtureInput(f, tag);
 catch err
     verdict = 'RECONSTRUCT-ERROR';
     detail = err.message;
     return;
 end
 
+% arg4 (volumeB) is the reconstructed second volume for the two-volume
+% level-set opcodes (SGAC, SLLS, SSDLS; Epic 3 Phase 2, via arg4Recipe),
+% falling back to the class-matched-empty placeholder every other opcode
+% still uses -- see mexitkFixtureCall.m for the same convention.
+if isempty(vinB)
+    arg4 = cast([], class(vin));
+else
+    arg4 = vinB;
+end
+
 args = {f.opcode, f.params, vin};
 if isfield(f, 'seedArg')
-    args = [args, {cast([], class(vin))}, {f.seedArg}];
+    args = [args, {arg4}, {f.seedArg}];
 end
 
 isMultiOutput = isfield(f, 'outputs') && f.success;

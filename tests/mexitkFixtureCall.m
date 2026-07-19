@@ -1,4 +1,4 @@
-function got = mexitkFixtureCall(opcode, fx, vin)
+function got = mexitkFixtureCall(opcode, fx, vin, vinB)
 %MEXITKFIXTURECALL Invoke mexitk for a loaded fixture, applying the seedArg convention.
 %
 %   GOT = MEXITKFIXTURECALL(OPCODE, FX, VIN) calls mexitk(OPCODE, FX.PARAMS,
@@ -9,6 +9,13 @@ function got = mexitkFixtureCall(opcode, fx, vin)
 %   but expected-equal opcode (tReferenceBounded's own Cases table) can
 %   share this helper too.
 %
+%   GOT = MEXITKFIXTURECALL(OPCODE, FX, VIN, VINB) additionally accepts the
+%   second (arg4/volumeB) input for the two-volume level-set opcodes (SGAC,
+%   SLLS, SSDLS; Epic 3 Phase 2), from mexitkFixture.m's own third output,
+%   and passes it as the 4th argument in place of the class-matched-empty
+%   placeholder. VINB may be omitted or [] for single-volume opcodes, which
+%   keeps the original empty-placeholder behaviour unchanged.
+%
 %   Shared by tReferenceExact.m, tReferenceBounded.m, and
 %   tReferenceRejections.m so the calling convention has one definition.
 %
@@ -17,8 +24,14 @@ function got = mexitkFixtureCall(opcode, fx, vin)
 % Swartz Center for Computational Neuroscience (SCCN),
 % Institute for Neural Computation (INC), UC San Diego.
 
+if nargin < 4 || isempty(vinB)
+    arg4 = cast([], class(vin));
+else
+    arg4 = vinB;
+end
+
 if isfield(fx, 'seedArg')
-    got = mexitk(opcode, fx.params, vin, cast([], class(vin)), fx.seedArg);
+    got = mexitk(opcode, fx.params, vin, arg4, fx.seedArg);
 else
     got = mexitk(opcode, fx.params, vin);
 end
