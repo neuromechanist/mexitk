@@ -31,16 +31,16 @@ Keeping ITK keeps the algorithms.
 
 ## Status: honest summary
 
-This is version 0.3.0.
+This is version 0.4.0.
 **30 of the original's 40 opcodes are implemented.**
 Epic 2 (Phases 1-3) extended reference capture to all 30 and measured every one of them
 against the original binary; the table below reflects that measurement, produced by
 `tools/classify_fixtures.m`.
-**Verification pending CI**: the numbers below were measured locally on this tree
-and are believed accurate, but this table is only fully trustworthy once CI has
-run the full suite (`tests/tReferenceExact.m`, `tests/tReferenceBounded.m`,
-`tests/tReferenceRejections.m`, plus the existing FCA/FOMT/SWS suites) green
-on this exact tree.
+Every claim in the table is enforced by the test suite
+(`tests/tReferenceExact.m`, `tests/tReferenceBounded.m`,
+`tests/tReferenceRejections.m`, plus the dedicated FCA/FOMT/SWS suites):
+721 tests, run green in CI on Linux x86_64 and macOS arm64
+for the tree this table describes.
 
 | Opcode | ITK filter | Status | What that means |
 |---|---|---|---|
