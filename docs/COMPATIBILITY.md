@@ -548,7 +548,7 @@ or refuses to reproduce a defect.
 | 9 | **`SOT` rejects `numberOfHistogram < 2`** with `mexitk:SOT:numberOfHistogram`, instead of running ITK's Otsu calculator. Measured directly, not assumed: 0 or 1 histogram bins crash the whole MATLAB process (a bus error / SIGSEGV inside `itk::Statistics::Histogram::GetIndex`), not a catchable `itk::ExceptionObject`. `numberOfHistogram >= 2` is unaffected. | Same severity class as deviation 1 (`SWS` overthresholding): taking down the user's MATLAB session is not behaviour worth preserving, and there is no reference capture for a crashing call to match against in the first place. |
 | 10 | **Non-finite or wildly out-of-range seed coordinates raise `mexitk:seeds` instead of casting with undefined behaviour.** `SeedPointsToIndices` (`SCT`/`SCC`/`SNC`/`SIC`) validates every coordinate as a finite `double` truncating into `[1, size(axis)]` before casting to an ITK index. `NaN`/`Inf` previously passed central validation's `s < 1.0` check unrejected (an IEEE unordered comparison, false for both) and then hit a raw cast; a huge finite coordinate overflowed `itk::IndexValueType` on that same cast. Both are undefined behaviour in C++, and the overflow case was platform-dependent in a way that stayed hidden on one architecture: ARM64's saturating convert masked it (the garbage result still failed the old bounds check), but x86 wrapped to `INT64_MIN`, where the following `-1` base shift was a second, independent signed-overflow UB. In-range values, including fractional truncation (`70.9` behaves as `70`), are unaffected. | Same rationale as deviation 5: the original's behaviour on these exact inputs is unknown and unreproducible, and reproducing undefined behaviour on purpose is not a defect worth keeping. One identifier (`mexitk:seeds`) covers both the non-finite and out-of-range cases deliberately, rather than splitting non-finite seeds off under `mexitk:paramRange`. |
 | 11 | **`FBL` rejects `domainSigma <= 0` and `rangeSigma <= 0`** with `mexitk:FBL:domainSigma` / `mexitk:FBL:rangeSigma`, instead of running `BilateralImageFilter`. Traced directly in ITK's headers, and `domainSigma`'s non-positive case fails through two distinct mechanisms depending on sign: a negative `domainSigma` reaches a raw `(SizeValueType)std::ceil(...)` cast of a negative `double` into an unsigned type in `GenerateInputRequestedRegion` (`itkBilateralImageFilter.hxx:79,145`, undefined behaviour); `domainSigma == 0` instead reaches `GaussianSpatialFunction::Evaluate`, which divides by `2 * m_Sigma[i] * m_Sigma[i]` while building the kernel (`itkGaussianSpatialFunction.hxx:44-55`) — a zero denominator, producing `NaN` that silently propagated through the filter's weighted-average normalization with **no exception**: confirmed live before this guard existed, `mexitk('FBL', [0 5], V)` returned all-`NaN` on `double` and uniformly zero on `uint8`; the call now correctly errors instead. Separately, a non-positive `rangeSigma` collapses the filter's per-voxel accumulation threshold so nothing ever accumulates, making `val /= normFactor` compute `0.0/0.0` (`NaN`), which is then written by a raw `static_cast` straight into the native (non-promoted) integer output buffer *inside* `BilateralImageFilter`'s own `DynamicThreadedGenerateData` — before `mexitk`'s export step runs, so `ClampExport` cannot intervene the way it can for the promoted opcodes. In-range sigma is unaffected. | Same family as deviations 6/7 (`FDG`/`FGA`/`FSN`'s semantic guards): every failure here is inside ITK's own computation (undefined behaviour, or a silent `NaN` written natively before export), not at a narrowing-cast boundary `ClampExport` could catch; refusing the input is the only option that avoids undefined behaviour or a wrong-looking-defined result. |
-| 12 | **`FCA`, `FCF` and `FGAD` reject a negative `timeStep`** with `mexitk:FCA:timeStep` / `mexitk:FCF:timeStep` / `mexitk:FGAD:timeStep`. A negative `timeStep` runs the diffusion/curvature-flow solver backward in time, which is ill-posed; the original's behaviour on this input is unknown and unreproducible. `timeStep == 0` stays accepted as a defined no-op, and the existing large-`timeStep` case (which merely triggers ITK's own `itkWarningMacro` and proceeds, per the `timeStep` comment in `fca.cpp`) is unchanged — still loud, still proceeds, now with a defined `ClampExport`-based result on integral output instead of an undefined one. | Same rationale as deviation 5: refuse an input whose original behaviour cannot be reproduced or verified, while leaving every previously-defined value (including `timeStep == 0` and large-but-positive `timeStep`) unaffected. |
+| 12 | **`FCA`, `FCF`, `FGAD` and `FMMCF` reject a negative `timeStep`** with `mexitk:FCA:timeStep` / `mexitk:FCF:timeStep` / `mexitk:FGAD:timeStep` / `mexitk:FMMCF:timeStep`. A negative `timeStep` runs the diffusion/curvature-flow solver backward in time, which is ill-posed; the original's behaviour on this input is unknown and unreproducible. `timeStep == 0` stays accepted as a defined no-op, and the existing large-`timeStep` case (which merely triggers ITK's own `itkWarningMacro` and proceeds, per the `timeStep` comment in `fca.cpp`) is unchanged — still loud, still proceeds, now with a defined `ClampExport`-based result on integral output instead of an undefined one. **All four additionally reject a non-finite (`NaN`/`+-Inf`) `timeStep`**, discovered and closed during Epic 3 Phase 1 review: a plain `timeStep < 0.0` guard does not catch `NaN` (every ordered comparison against `NaN` is false) or `+Inf` (which does not compare `< 0.0`), so both previously reached each filter's own solver silently. Measured directly per opcode, not assumed uniform, since the failure modes are NOT all the same severity: `FCF` (`CurvatureFlowImageFilter`) and `FCA` (`CurvatureAnisotropicDiffusionImageFilter`) silently return an all-`NaN` (`FCF`, `FCA`'s own `NaN` case) or a mixed `NaN`/`Inf` (`FCA`'s `+Inf` case) output on every voxel with no exception, the same class as deviation 11 (`FBL`'s silent-`NaN` guard); `FGAD` (`GradientAnisotropicDiffusionImageFilter`) silently returns an all-`NaN` output for both `NaN` and `+Inf`, same class; `FMMCF` (`MinMaxCurvatureFlowImageFilter`) is the outlier and the most severe: it crashes the whole MATLAB process with a `SIGBUS` inside `MinMaxCurvatureFlowFunction::ComputeThreshold`'s `Dispatch<3>` path for a `NaN` `timeStep` (and, verified separately, an identical `SIGBUS` for `+Inf`) — the same severity class as deviation 1 (`SWS` overthresholding) and deviation 9 (`SOT` histogram bins), not the milder silent-corruption class the other three share. `-Inf` was already caught by the pre-existing `< 0.0` guard on all four before this fix; only `NaN` and `+Inf` were the actual gap. A broader survey of every other opcode's own unguarded numeric parameters, run in the same review pass, found the identical defect class in roughly ten more opcodes (`FBL`, `FDG`/`FGA`, `FSN`, `FLS`, `FGMRG`, `FVMI`, `SCC`, `SWS`, `FOMT`) — reported, not yet fixed; see issue #26 for the full per-parameter table before treating any of those as safe. | Same rationale as deviation 5: refuse an input whose original behaviour cannot be reproduced or verified, while leaving every previously-defined value (including `timeStep == 0` and large-but-positive `timeStep`) unaffected. The non-finite half is closer to deviation 1/9's rationale for `FMMCF` specifically: taking down the user's MATLAB session is not behaviour worth preserving regardless of what the original would have done; for `FCA`/`FCF`/`FGAD` it is the same rationale as deviation 5/11: an input whose result was previously undefined-looking garbage, not a value worth preserving. |
 | 13 | **`FDM`/`FDMV` reject an all-background input** (no nonzero voxel anywhere) with `mexitk:fdm:noObject`. Measured directly against the `fdm_zero_double`/`fdm_zero_uint8` fixtures, where the original itself succeeded: an all-zero `uint8` input yields distances of roughly 294 to 443 across this project's reference geometry, every one of them past `uint8`'s 255 max and, on every pixel type, not a meaningful answer to "distance to the nearest object" when there is no object — an artifact of the distance filter's internal initialization, not a defined computation. | Same severity/rationale class as deviation 5: the original's own output for this input is not a value worth reproducing, since "distance to the nearest of zero objects" has no defined answer. Refusing it is a strict subset of accepted inputs; every volume with at least one nonzero voxel is unaffected. |
 | 14 | **`FD` accepts `uint8` and `int32` input; the original rejects both outright** with "This method is not supported with this data type! Try converting to double first.", regardless of parameters (measured directly against `fd_0_0_uint8`/`fd_1_0_uint8`/`fd_1_0_int32`, where the original itself failed). `mexitk` promotes `uint8` to `float` for the derivative (`itk::DerivativeImageFilter` requires a signed output pixel type, which `uint8` fails) and runs `int32` natively, returning a defined result for both. No agreement claim is made about the VALUE `mexitk` returns for these two pixel types — the original never produced one to compare against — only that the call succeeds; see `tests/tReferenceRejections.m`. | Accept strictly more, the same direction as deviation 2 (string objects): every call that worked against the original still works and still matches; `uint8`/`int32` input, which the original refused unconditionally, now succeeds instead of erroring. Nothing about the original's own defined behaviour (double/single) changes. |
 
@@ -569,12 +569,14 @@ or refuses to reproduce a defect.
 
 ## Coverage
 
-`mexitk` currently implements **30 of the original's 40 opcodes**. Epic 2
-Phases 1-3 extended the capture harness to all 30, captured reference
-fixtures for every one of them, and measured `mexitk`'s own agreement
-against every fixture (`tools/classify_fixtures.m`; see "Second capture
-campaign: Phase 3 findings" above for how). The status ladder now splits
-the 30 into three tiers by that measurement, not by guesswork:
+`mexitk` currently implements **32 of the original's 40 opcodes**. Epic 2
+Phases 1-3 extended the capture harness to 30 of them, captured reference
+fixtures for every one, and measured `mexitk`'s own agreement against every
+fixture (`tools/classify_fixtures.m`; see "Second capture campaign: Phase 3
+findings" above for how). Epic 3 Phase 1 added the remaining two,
+`FMMCF` and `SFM`, each with its own captured fixture, measured the same
+way. The status ladder now splits the 32 into three tiers by that
+measurement, not by guesswork:
 
 - **Validated (14):** FBB, FBD, FBE, FBT, FD, FF, FGM, FMEAN, FMEDIAN,
   FVBIH, SCC, SCT, SIC, SOT.
@@ -585,9 +587,9 @@ the 30 into three tiers by that measurement, not by guesswork:
   than a defined reference (SCC's empty-seed fixture; see above) — those
   are asserted separately in `tests/tReferenceRejections.m` with no
   agreement claim.
-- **Bounded deviation (15):** FCA, SWS (their own dedicated sections
-  above), FBL, FCF, FDG, FDM, FDMV, FGA, FGAD, FGMRG, FLS, FOMT, FSN,
-  FVMI, SNC.
+- **Bounded deviation (17):** FCA, SWS (their own dedicated sections
+  above), FBL, FCF, FDG, FDM, FDMV, FGA, FGAD, FGMRG, FLS, FMMCF, FOMT,
+  FSN, FVMI, SFM, SNC.
   Runs the same ITK filter with the same parameters, but does not
   reproduce the original bit-for-bit; the difference is measured and
   bounded (`tests/tReferenceBounded.m`, plus FCA/SWS/FOMT's own dedicated
@@ -596,13 +598,24 @@ the 30 into three tiers by that measurement, not by guesswork:
   floating-point output and uint8 N=1 are still asserted bit-identical
   by `tests/tFomtReference.m` (see its own section above). A validated
   badge would overstate the uint8 multi-threshold agreement, and the
-  status ladder never conflates tiers.
+  status ladder never conflates tiers. FMMCF and SFM (Epic 3 Phase 1)
+  each have exactly one captured fixture (double only): FMMCF's residual
+  (RMS 1.60, max 43.3, 33% of voxels) is a real numerics drift, the same
+  class as FCA/SWS; SFM's residual (RMS 6.1e-15, max 9.0e-14) is at the
+  floating-point noise floor, with its 270838 sentinel-valued voxels
+  matching the original exactly — see their own `StatusNote`s in
+  `src/opcodes/fmmcf.cpp` / `src/opcodes/sfm.cpp`.
 - **Smoke-tested (1):** FAAB. Its disagreement with the
   original is large enough (RMS in the hundreds) that pinning a bound
   would not be a useful signal — see "SWS and FAAB: not bounded" below.
 
-**Worst measured deviation per bounded-deviation opcode** (excluding FCA
-and SWS, which have their own dedicated measurement tables above). This is
+**Worst measured deviation per bounded-deviation opcode** (excluding FCA,
+SWS, and FOMT, each of which has its own dedicated measurement table or
+section above, in FOMT's case using a different metric entirely --
+per-output voxel-disagreement percentage, not RMS/max-abs, since its
+deviation is a discrete multi-class labeling difference rather than a
+continuous-valued one; see "FOMT: bit-identical for floating-point input,
+and for uint8 at N=1" above). This is
 a summary, not a substitute for the per-fixture numbers: every literal
 bound actually asserted by a test lives in `tests/tReferenceBounded.m`
 (re-measure with `tools/classify_fixtures.m`, never hand-edit either).
@@ -625,9 +638,11 @@ status reflects its OTHER captured points, not that class.
 | FLS | 98.7 (uint8) | 255.0 (uint8) | double/single at noise floor; int32 exact at sigma=2 |
 | FDM | 0.218 (uint8) | 6.0 (uint8) | double/single/int32 exact |
 | FDMV | 11.4 (uint8) | 255.0 (uint8) | double at noise floor (~3e-12); single/int32 exact |
+| FMMCF | 1.60 (double) | 43.3 (double) | only one fixture (double); uint8/int32 unmeasured |
+| SFM | 6.1e-15 (double) | 9.0e-14 (double) | floating-point noise floor; only one fixture (double); uint8/int32 unmeasured |
 | SNC | 73.3 (double) | 255.0 (double) | radius [1,1,1] and base-threshold fixtures exact |
 
-The remaining 10 opcodes are catalogued in `docs/matitk_opcode_registry.txt`
+The remaining 8 opcodes are catalogued in `docs/matitk_opcode_registry.txt`
 (the original binary's own parameter dump)
 and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`,
 but they are **not implemented**.
@@ -651,7 +666,7 @@ numbers above are the honest record, not a target.
 
 ## Opcode-to-ITK-class reference
 
-This table covers all 30 implemented opcodes regardless of tier (it
+This table covers all 32 implemented opcodes regardless of tier (it
 predates the validated/bounded-deviation/smoke-tested split above, and is
 kept as a single reference rather than split three ways).
 
@@ -663,6 +678,7 @@ kept as a single reference rather than split three ways).
 | FBE | `BinaryErodeImageFilter` |
 | FBL | `BilateralImageFilter` |
 | FBT | `BinaryThresholdImageFilter` |
+| FCA | `CurvatureAnisotropicDiffusionImageFilter` |
 | FCF | `CurvatureFlowImageFilter` |
 | FD | `DerivativeImageFilter` |
 | FDG | `DiscreteGaussianImageFilter` |
@@ -676,14 +692,18 @@ kept as a single reference rather than split three ways).
 | FLS | `LaplacianRecursiveGaussianImageFilter` |
 | FMEAN | `MeanImageFilter` |
 | FMEDIAN | `MedianImageFilter` |
+| FMMCF | `MinMaxCurvatureFlowImageFilter` |
+| FOMT | `OtsuMultipleThresholdsImageFilter` (see "FOMT" above) |
 | FSN | `SigmoidImageFilter` |
 | FVBIH | `VotingBinaryIterativeHoleFillingImageFilter` |
 | FVMI | `HessianRecursiveGaussianImageFilter` + `Hessian3DToVesselnessMeasureImageFilter` |
 | SCC | `ConfidenceConnectedImageFilter` |
 | SCT | `ConnectedThresholdImageFilter` |
+| SFM | `FastMarchingImageFilter` |
 | SIC | `IsolatedConnectedImageFilter` |
 | SNC | `NeighborhoodConnectedImageFilter` |
 | SOT | `OtsuThresholdImageFilter` |
+| SWS | `WatershedImageFilter` (see "SWS: bounded deviation" above) |
 
 **FGA is implemented as a deliberate duplicate of FDG.** Both opcodes have the
 identical registry parameter signature (`gaussianVariance`, `maxKernelWidth`;

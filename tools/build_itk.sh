@@ -46,8 +46,9 @@ ITK_MODULES=(
   Module_ITKLabelVoting=ON                   # FVBIH
   Module_ITKRegionGrowing=ON                 # SCT, SCC, SIC, SNC
   Module_ITKImageGradient=ON         # FGM, FGMRG
-  Module_ITKCurvatureFlow=ON         # FCF
+  Module_ITKCurvatureFlow=ON         # FCF, FMMCF
   Module_ITKAntiAlias=ON             # FAAB
+  Module_ITKFastMarching=ON          # SFM
 )
 
 WORK="${ITK_BUILD_WORKDIR:-$(mktemp -d)}"

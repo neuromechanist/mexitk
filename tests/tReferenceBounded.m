@@ -155,7 +155,25 @@ classdef tReferenceBounded < matlab.unittest.TestCase
             'SNC', 'snc_r0_band_seedS1_double', 73.321,  255.0; ...
             'SNC', 'snc_r2_band_seedS1_double', 1.75694, 255.0; ...
             'SNC', 'snc_rx_wide_seedS1_double', 47.1001, 255.0; ...
-            'SNC', 'snc_rz_wide_seedS1_double', 62.2875, 255.0};
+            'SNC', 'snc_rz_wide_seedS1_double', 62.2875, 255.0; ...
+            ...
+            ... FMMCF: MinMaxCurvatureFlowImageFilter (Epic 3 Phase 1). Real
+            ... upstream numerics drift, not floating-point noise: verified
+            ... directly that numberOfIterations=0 is an exact no-op and
+            ... that the deviation compounds with iteration count, the same
+            ... shape as FCF's own (much smaller) double residual -- see
+            ... src/opcodes/fmmcf.cpp.
+            'FMMCF', 'fmmcf_10_0p0625_1_double', 1.59658, 43.2502; ...
+            ...
+            ... SFM: FastMarchingImageFilter (Epic 3 Phase 1). Floating-point
+            ... noise floor, the same order of magnitude as FCF's own double
+            ... residual: the 270838 sentinel-valued voxels (61.22% of the
+            ... volume, ITK's LargeValue = NumericTraits<double>::max()/2, a
+            ... constant assigned during Initialize rather than computed)
+            ... match EXACTLY; every differing voxel is a genuinely computed
+            ... arrival time differing only at double precision's own limit
+            ... -- see src/opcodes/sfm.cpp.
+            'SFM', 'sfm_stop100_seedS1_double', 6.10523e-15, 9.01501e-14};
     end
 
     methods (Static)

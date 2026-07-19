@@ -428,12 +428,46 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             tc.verifyError(@() mexitk('FCA', [5 -1 3], tc.V), 'mexitk:FCA:timeStep');
         end
 
+        function fcaRejectsNonFiniteTimeStep(tc)
+            % A plain `< 0.0` guard does not catch NaN or +Inf (NaN compares
+            % false against every ordered relational operator; +Inf does
+            % not compare < 0.0): verified directly before this guard
+            % existed, a NaN timeStep silently produced an all-NaN output
+            % on every voxel, and +Inf silently produced a mix of NaN and
+            % Inf values, both with no exception. -Inf was already caught
+            % by the old `< 0.0` guard.
+            tc.verifyError(@() mexitk('FCA', [5 NaN 3], tc.V), 'mexitk:FCA:timeStep');
+            tc.verifyError(@() mexitk('FCA', [5 Inf 3], tc.V), 'mexitk:FCA:timeStep');
+            tc.verifyError(@() mexitk('FCA', [5 -Inf 3], tc.V), 'mexitk:FCA:timeStep');
+        end
+
         function fcfRejectsNegativeTimeStep(tc)
             tc.verifyError(@() mexitk('FCF', [10 -1], tc.V), 'mexitk:FCF:timeStep');
         end
 
+        function fcfRejectsNonFiniteTimeStep(tc)
+            % A plain `< 0.0` guard does not catch NaN (every ordered
+            % comparison against NaN is false): verified directly before
+            % this guard existed, a NaN or +Inf timeStep silently produced
+            % an all-NaN output on every voxel, no exception. -Inf is
+            % rejected the same way as any other non-finite value.
+            tc.verifyError(@() mexitk('FCF', [10 NaN], tc.V), 'mexitk:FCF:timeStep');
+            tc.verifyError(@() mexitk('FCF', [10 Inf], tc.V), 'mexitk:FCF:timeStep');
+            tc.verifyError(@() mexitk('FCF', [10 -Inf], tc.V), 'mexitk:FCF:timeStep');
+        end
+
         function fgadRejectsNegativeTimeStep(tc)
             tc.verifyError(@() mexitk('FGAD', [5 -1 3], tc.V), 'mexitk:FGAD:timeStep');
+        end
+
+        function fgadRejectsNonFiniteTimeStep(tc)
+            % Same rationale as FCA's own non-finite guard (shared
+            % AnisotropicDiffusionImageFilter base): verified directly, a
+            % NaN or +Inf timeStep silently produced an all-NaN output on
+            % every voxel, no exception.
+            tc.verifyError(@() mexitk('FGAD', [5 NaN 3], tc.V), 'mexitk:FGAD:timeStep');
+            tc.verifyError(@() mexitk('FGAD', [5 Inf 3], tc.V), 'mexitk:FGAD:timeStep');
+            tc.verifyError(@() mexitk('FGAD', [5 -Inf 3], tc.V), 'mexitk:FGAD:timeStep');
         end
     end
 end

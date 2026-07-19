@@ -12,9 +12,9 @@
 #include "mexitk_common.h"
 #include "opcode.h"
 
-#include "itkCastImageFilter.h"
 #include "itkCurvatureAnisotropicDiffusionImageFilter.h"
 
+#include <cmath>
 #include <type_traits>
 
 namespace mexitk {
@@ -36,17 +36,7 @@ void RunFca(OpContext& ctx) {
   using RealImage = Image3<RealT>;
 
   typename InImage::Pointer input = ImportVolume<PixelT>(ctx.volumeA);
-
-  typename RealImage::Pointer real;
-  if constexpr (std::is_same<PixelT, RealT>::value) {
-    real = input;
-  } else {
-    using CastIn = itk::CastImageFilter<InImage, RealImage>;
-    typename CastIn::Pointer cast = CastIn::New();
-    cast->SetInput(input);
-    cast->Update();
-    real = cast->GetOutput();
-  }
+  typename RealImage::Pointer real = PromoteToReal<PixelT, RealT>(input);
 
   const std::vector<double>& p = *ctx.params;
 
@@ -66,24 +56,28 @@ void RunFca(OpContext& ctx) {
   // backward in time, which is ill-posed (the original's behaviour on a
   // negative timeStep is unknown and unreproducible), so it is rejected
   // rather than reproduced; timeStep == 0 stays accepted as a defined no-op.
-  if (p[1] < 0.0) {
-    throw OpcodeError("mexitk:FCA:timeStep", "timeStep must not be negative.");
+  // Non-finite (NaN/+Inf) is rejected too, not just negative: measured
+  // directly, a NaN timeStep silently returns an all-NaN output on every
+  // voxel, and +Inf silently returns a mix of NaN and Inf values -- both
+  // with no exception. -Inf was already caught by `< 0.0` before this
+  // guard existed; NaN and +Inf were not, since NaN compares false against
+  // every ordered relational operator and +Inf does not compare < 0.0.
+  if (!std::isfinite(p[1]) || p[1] < 0.0) {
+    throw OpcodeError("mexitk:FCA:timeStep",
+                      "timeStep must be finite and not negative.");
   }
   filter->SetTimeStep(p[1]);
   filter->SetConductanceParameter(p[2]);
   filter->Update();
 
-  if constexpr (std::is_same<PixelT, RealT>::value) {
-    ctx.plhs[0] = ExportVolume<RealT>(filter->GetOutput());
-  } else {
-    // ClampExport saturates into [lowest, max] of the target pixel type and
-    // maps non-finite values to 0, instead of itk::ClampImageFilter's plain
-    // static_cast fallthrough for NaN (undefined behaviour; reachable via
-    // an unstable timeStep). In-range values are unaffected: this is the
-    // same bounds check and the same in-range cast ITK's own Clamp functor
-    // performs. Only uint8/int32 take this path (see FcaRealType).
-    ctx.plhs[0] = ClampExport<PixelT, RealT>(filter->GetOutput());
-  }
+  // ExportPromoted's promoted-path branch (ClampExport) saturates into
+  // [lowest, max] of the target pixel type and maps non-finite values to 0,
+  // instead of itk::ClampImageFilter's plain static_cast fallthrough for
+  // NaN (undefined behaviour; reachable via an unstable timeStep). In-range
+  // values are unaffected: this is the same bounds check and the same
+  // in-range cast ITK's own Clamp functor performs. Only uint8/int32 take
+  // that path (see FcaRealType).
+  ctx.plhs[0] = ExportPromoted<PixelT, RealT>(filter->GetOutput());
 }
 
 class FcaOpcode : public Opcode {
