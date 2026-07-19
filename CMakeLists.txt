@@ -96,6 +96,7 @@ set(MEXITK_SOURCES
   src/opcodes/rd.cpp
   src/opcodes/rtps.cpp
   src/opcodes/scc.cpp
+  src/opcodes/scss.cpp
   src/opcodes/sct.cpp
   src/opcodes/sfm.cpp
   src/opcodes/sgac.cpp

@@ -55,6 +55,8 @@ const char* StatusName(Status s) {
       return "smoke-tested";
     case Status::kUntested:
       return "untested";
+    case Status::kUnsupported:
+      return "unsupported";
   }
   return "unknown";
 }
@@ -117,6 +119,7 @@ const Opcode* GetFvmiOpcode();
 const Opcode* GetRdOpcode();
 const Opcode* GetRtpsOpcode();
 const Opcode* GetSccOpcode();
+const Opcode* GetScssOpcode();
 const Opcode* GetSctOpcode();
 const Opcode* GetSfmOpcode();
 const Opcode* GetSgacOpcode();
@@ -169,6 +172,7 @@ void RegisterBuiltinOpcodes() {
   RegisterOpcode(GetRdOpcode());
   RegisterOpcode(GetRtpsOpcode());
   RegisterOpcode(GetSccOpcode());
+  RegisterOpcode(GetScssOpcode());
   RegisterOpcode(GetSctOpcode());
   RegisterOpcode(GetSfmOpcode());
   RegisterOpcode(GetSgacOpcode());
