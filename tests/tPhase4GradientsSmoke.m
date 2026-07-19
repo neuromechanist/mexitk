@@ -379,10 +379,26 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             tc.verifyError(@() mexitk('FGMRG', 0, tc.V), 'mexitk:itkException');
         end
 
+        function fgmrgRejectsNonFiniteSigma(tc)
+            % ITK's own `<= 0.0` exception guard does not catch NaN;
+            % verified directly before this mexitk-level guard existed, a
+            % NaN sigma silently returned an all-NaN output, no exception.
+            % The sign constraint above is unchanged; only the non-finite
+            % gap is new (param-guard hardening, Epic 3 issue #26).
+            tc.verifyError(@() mexitk('FGMRG', NaN, tc.V), 'mexitk:FGMRG:sigma');
+            tc.verifyError(@() mexitk('FGMRG', Inf, tc.V), 'mexitk:FGMRG:sigma');
+        end
+
         function flsRejectsNonPositiveSigma(tc)
             % Same ITK exception as FGMRG above (shared RecursiveGaussian
             % base). Verified directly.
             tc.verifyError(@() mexitk('FLS', 0, tc.V), 'mexitk:itkException');
+        end
+
+        function flsRejectsNonFiniteSigma(tc)
+            % Same rationale as FGMRG's own non-finite guard.
+            tc.verifyError(@() mexitk('FLS', NaN, tc.V), 'mexitk:FLS:sigma');
+            tc.verifyError(@() mexitk('FLS', Inf, tc.V), 'mexitk:FLS:sigma');
         end
 
         function fvmiRejectsNonPositiveSigma(tc)

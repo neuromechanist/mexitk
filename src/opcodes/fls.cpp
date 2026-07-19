@@ -15,6 +15,7 @@
 #include "itkCastImageFilter.h"
 #include "itkLaplacianRecursiveGaussianImageFilter.h"
 
+#include <cmath>
 #include <type_traits>
 
 namespace mexitk {
@@ -98,6 +99,17 @@ class FlsOpcode : public Opcode {
   }
 
   void Execute(OpContext& ctx) const override {
+    // sigma <= 0 is already caught by RecursiveGaussianImageFilter's own
+    // itkExceptionMacro ("Sigma must be greater than zero.",
+    // itkRecursiveGaussianImageFilter.hxx:330-333, surfaced here as
+    // mexitk:itkException) -- that constraint is unchanged. But that
+    // exception's own guard is `m_Sigma <= 0.0`, which does not catch NaN
+    // (confirmed empirically: a NaN sigma instead silently returned an
+    // all-NaN output, no exception), so only the non-finite gap is closed
+    // here, param-guard hardening pass.
+    if (!std::isfinite((*ctx.params)[0])) {
+      throw OpcodeError("mexitk:FLS:sigma", "sigma must be finite.");
+    }
     DispatchOnPixelType(mxGetClassID(ctx.volumeA),
                         [&](auto tag) { RunFls<typename decltype(tag)::type>(ctx); });
   }

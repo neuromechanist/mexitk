@@ -15,6 +15,7 @@
 #include "itkCastImageFilter.h"
 #include "itkGradientMagnitudeRecursiveGaussianImageFilter.h"
 
+#include <cmath>
 #include <type_traits>
 
 namespace mexitk {
@@ -95,6 +96,14 @@ class FgmrgOpcode : public Opcode {
   }
 
   void Execute(OpContext& ctx) const override {
+    // Same rationale as FLS's own sigma guard (shared RecursiveGaussian
+    // base): sigma <= 0 is already caught by ITK's own exception
+    // (mexitk:itkException), unchanged here; that guard's `<= 0.0` does
+    // not catch NaN (confirmed empirically: silent all-NaN output, no
+    // exception), so only the non-finite gap is closed here.
+    if (!std::isfinite((*ctx.params)[0])) {
+      throw OpcodeError("mexitk:FGMRG:sigma", "sigma must be finite.");
+    }
     DispatchOnPixelType(mxGetClassID(ctx.volumeA),
                         [&](auto tag) { RunFgmrg<typename decltype(tag)::type>(ctx); });
   }
