@@ -118,6 +118,41 @@ classdef tFomtReference < matlab.unittest.TestCase
                 'mexitk:nargout');
         end
 
+        function rejectsNonFiniteThresholdsAndBins(tc)
+            % numberOfThresholds/numberOfBins previously reached a raw
+            % static_cast<int> of a double with no validation at all
+            % (OutputCount() runs before Execute(), so this was the FIRST
+            % path a NaN/Inf value hit) -- genuine undefined behaviour for
+            % a non-finite or wildly out-of-int-range value, not merely a
+            % silent-NaN propagation like the other opcodes in this
+            % hardening pass. Confirmed the specific failure mode was
+            % platform-dependent, not just theoretical: ARM64's saturating
+            % float-to-int conversion happened to produce 0 for NaN, caught
+            % downstream only by luck via the ordinary nargout-mismatch
+            % path, with no such guarantee on other platforms (x86 has its
+            % own, differently-undefined conversion behaviour; see the
+            % SeedPointsToIndices precedent in mexitk_common.h for the same
+            % class of platform divergence). Both parameters now route
+            % through CastParam<int> before any use, in both OutputCount()
+            % and Execute(), eliminating the UB outright rather than just
+            % happening to survive it (param-guard hardening, Epic 3 issue
+            % #26). mexFunction calls OutputCount() before Execute(), so a
+            % bad numberOfThresholds surfaces via CastParam's own
+            % mexitk:paramRange (from OutputCount(), before Execute()'s own
+            % mexitk:FOMT:numberOfThresholds range check even runs); a bad
+            % numberOfBins with an otherwise-valid numberOfThresholds
+            % surfaces the same way from Execute()'s own CastParam call.
+            [~, vin] = mexitkFixture('fomt_N3_bins128_double');
+            tc.verifyError(@() mexitk('FOMT', [NaN 128], vin), 'mexitk:paramRange');
+            tc.verifyError(@() mexitk('FOMT', [Inf 128], vin), 'mexitk:paramRange');
+            tc.verifyError(@() mexitk('FOMT', [-Inf 128], vin), 'mexitk:paramRange');
+            tc.verifyError(@() mexitk('FOMT', [1e20 128], vin), 'mexitk:paramRange');
+            tc.verifyError(@() withOutputs(3, @() mexitk('FOMT', [3 NaN], vin)), ...
+                'mexitk:paramRange');
+            tc.verifyError(@() withOutputs(3, @() mexitk('FOMT', [3 Inf], vin)), ...
+                'mexitk:paramRange');
+        end
+
         function uint8DeviationStaysWithinMeasuredBound(tc, uint8DeviationCase)
             % uint8 does NOT match the original: ITK changed how integral pixel
             % types are binned into the Otsu histogram since 2.4. This asserts
