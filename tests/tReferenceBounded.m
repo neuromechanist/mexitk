@@ -184,11 +184,8 @@ classdef tReferenceBounded < matlab.unittest.TestCase
             [fx, vin] = mexitkFixture(name);
             tc.assertTrue(fx.success, sprintf( ...
                 '%s: fixture recorded success=false', name));
-            if isfield(fx, 'seedArg')
-                got = mexitk(opcode, fx.params, vin, cast([], class(vin)), fx.seedArg);
-            else
-                got = mexitk(opcode, fx.params, vin);
-            end
+
+            got = mexitkFixtureCall(opcode, fx, vin);
 
             e = abs(double(got(:)) - double(fx.output(:)));
             rms = sqrt(mean(e .^ 2));

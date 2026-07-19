@@ -149,11 +149,7 @@ classdef tReferenceExact < matlab.unittest.TestCase
                 '%s: fixture recorded success=false, does not belong in tReferenceExact', ...
                 exactFixture));
 
-            if isfield(fx, 'seedArg')
-                got = mexitk(fx.opcode, fx.params, vin, cast([], class(vin)), fx.seedArg);
-            else
-                got = mexitk(fx.opcode, fx.params, vin);
-            end
+            got = mexitkFixtureCall(fx.opcode, fx, vin);
 
             tc.verifyClass(got, fx.outputClass, sprintf( ...
                 '%s: output class does not match matitk', exactFixture));

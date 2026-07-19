@@ -72,11 +72,7 @@ classdef tReferenceRejections < matlab.unittest.TestCase
                  'error, this belongs in tReferenceExact/tReferenceBounded instead)'], ...
                 acceptsMoreFixture));
 
-            if isfield(fx, 'seedArg')
-                out = mexitk(fx.opcode, fx.params, vin, cast([], class(vin)), fx.seedArg);
-            else
-                out = mexitk(fx.opcode, fx.params, vin);
-            end
+            out = mexitkFixtureCall(fx.opcode, fx, vin);
             % No agreement claim: the original never produced a value for
             % this input, so there is nothing to compare against. Only
             % structural well-formedness is asserted.
@@ -91,11 +87,7 @@ classdef tReferenceRejections < matlab.unittest.TestCase
             tc.assertFalse(fx.success, sprintf( ...
                 '%s: original itself succeeded on this input', mutualRejectionFixture));
 
-            if isfield(fx, 'seedArg')
-                fn = @() mexitk(fx.opcode, fx.params, vin, cast([], class(vin)), fx.seedArg);
-            else
-                fn = @() mexitk(fx.opcode, fx.params, vin);
-            end
+            fn = @() mexitkFixtureCall(fx.opcode, fx, vin);
             tc.verifyError(fn, sprintf('mexitk:%s', ...
                 localExpectedIdSuffix(mutualRejectionFixture)));
         end
