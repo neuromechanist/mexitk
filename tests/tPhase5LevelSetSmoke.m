@@ -347,6 +347,35 @@ classdef tPhase5LevelSetSmoke < matlab.unittest.TestCase
                 'mexitk:SSDLS:volumeBClass');
         end
 
+        function twoVolumeOpcodesRejectMismatchedVolumeBSize(tc)
+            % RequireVolumeB also checks volumeB's per-axis size matches
+            % volumeA's. This closes a real silent-failure gap, not a
+            % hypothetical one: measured directly before this guard
+            % existed, a SMALLER volumeB did not throw at all -- it
+            % silently succeeded with output sized to volumeB, computed
+            % only over the overlapping subregion (a wrong, misleadingly
+            % plausible-looking answer, not a crash). A LARGER or
+            % non-nested-size volumeB happened to already throw via ITK's
+            % own RequestedRegion/LargestPossibleRegion consistency check,
+            % but under a generic mexitk:itkException, not this opcode's
+            % own identifier -- both directions are asserted here so
+            % neither can silently regress back to the smaller-volume gap.
+            small = tc.V(1:64, 1:64, 1:16);
+            big = cat(3, tc.V, tc.V);
+            tc.verifyError(@() mexitk('SGAC', [1 1 1 0.02 5], tc.V, small), ...
+                'mexitk:SGAC:volumeBSize');
+            tc.verifyError(@() mexitk('SGAC', [1 1 1 0.02 5], tc.V, big), ...
+                'mexitk:SGAC:volumeBSize');
+            tc.verifyError(@() mexitk('SLLS', [0.5 1 1 0.02 5], tc.V, small), ...
+                'mexitk:SLLS:volumeBSize');
+            tc.verifyError(@() mexitk('SLLS', [0.5 1 1 0.02 5], tc.V, big), ...
+                'mexitk:SLLS:volumeBSize');
+            tc.verifyError(@() mexitk('SSDLS', [1 1 0.02 5], tc.V, small), ...
+                'mexitk:SSDLS:volumeBSize');
+            tc.verifyError(@() mexitk('SSDLS', [1 1 0.02 5], tc.V, big), ...
+                'mexitk:SSDLS:volumeBSize');
+        end
+
         function twoVolumeOpcodesRejectShortParamCount(tc)
             tc.verifyError(@() mexitk('SGAC', [1 1 1 0.02], tc.V, tc.V), 'mexitk:params');
             tc.verifyError(@() mexitk('SLLS', [0.5 1 1 0.02], tc.V, tc.V), 'mexitk:params');

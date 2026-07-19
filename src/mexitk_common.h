@@ -241,16 +241,16 @@ typename Image3<PixelT>::Pointer ImportVolume(const mxArray* arr) {
 }
 
 // Validates that a second volume (ctx.volumeB, MATITK's arg4) was supplied
-// and has the same MATLAB class as ctx.volumeA, for the two-volume
-// level-set opcodes (SGAC, SLLS, SSDLS; Epic 3 Phase 2 -- the first opcodes
-// that actually consume arg4, rather than accepting-and-ignoring it like
-// every seeded single-volume opcode does). A missing volumeB is rejected
-// outright: unlike arg4 elsewhere in this codebase, these three genuinely
-// need a second image (an initial level set and a feature image; see each
-// opcode's own file for which plays which role) and have no defined
-// single-volume fallback. A class mismatch is rejected too:
-// DispatchOnPixelType instantiates the whole pipeline on volumeA's PixelT
-// alone, so ImportVolume<PixelT>(ctx.volumeB) would silently misread
+// and has the same MATLAB class and per-axis size as ctx.volumeA, for the
+// two-volume level-set opcodes (SGAC, SLLS, SSDLS; Epic 3 Phase 2 -- the
+// first opcodes that actually consume arg4, rather than accepting-and-
+// ignoring it like every seeded single-volume opcode does). A missing
+// volumeB is rejected outright: unlike arg4 elsewhere in this codebase,
+// these three genuinely need a second image (an initial level set and a
+// feature image; see each opcode's own file for which plays which role)
+// and have no defined single-volume fallback. A class mismatch is rejected
+// too: DispatchOnPixelType instantiates the whole pipeline on volumeA's
+// PixelT alone, so ImportVolume<PixelT>(ctx.volumeB) would silently misread
 // volumeB's own buffer as the wrong element type if its class differed --
 // undefined behaviour, not merely lossy. This is in the same spirit as the
 // original's own documented behaviour of type-checking arg4 against the
@@ -260,6 +260,27 @@ typename Image3<PixelT>::Pointer ImportVolume(const mxArray* arr) {
 // exact wording for a genuine two-volume mismatch on these three opcodes,
 // so this raises mexitk's own identifier and message rather than guessing
 // at the original's.
+//
+// The size check is not cosmetic: measured directly before it existed, a
+// SMALLER volumeB (e.g. 64x64x16 against a 128x128x27 volumeA) did not
+// throw at all. ITK's two-input filters run over the OUTPUT region, which
+// SetFeatureImage/SetInput's own default LargestPossibleRegion resolution
+// takes from whichever image the pipeline treats as primary, so a smaller
+// second image silently produced a smaller, geometrically wrong result
+// computed only over the overlapping subregion -- no exception, no size
+// mismatch surfaced to the caller. A LARGER or non-nested-size volumeB
+// happens to throw already, via ITK's own RequestedRegion-vs-
+// LargestPossibleRegion consistency check inside itk::DataObject (measured:
+// "Requested region is (at least partially) outside the largest possible
+// region"), but relying on that as the only guard would leave the smaller
+// case -- the more dangerous one, since it produces a plausible-looking,
+// silently wrong answer instead of an error -- unguarded. Both directions
+// are now rejected uniformly and explicitly, before either filter ever
+// runs, both from mexitk_common.h. mxGetDimensions is safe to compare
+// per-axis directly by index here: by the time RequireVolumeB runs,
+// mexFunction (src/mexitk.cpp) has already validated that BOTH volumeA and
+// volumeB are exactly kDimension-D, so both arrays are exactly 3 elements
+// long.
 inline void RequireVolumeB(const mxArray* volumeA, const mxArray* volumeB, const char* opcode) {
   if (volumeB == nullptr) {
     throw OpcodeError(FormatMessage("mexitk:%s:volumeB", opcode),
@@ -269,6 +290,15 @@ inline void RequireVolumeB(const mxArray* volumeA, const mxArray* volumeB, const
     throw OpcodeError(
         FormatMessage("mexitk:%s:volumeBClass", opcode),
         FormatMessage("%s: input volume B must be the same class as volume A.", opcode));
+  }
+  const mwSize* sizeA = mxGetDimensions(volumeA);
+  const mwSize* sizeB = mxGetDimensions(volumeB);
+  for (unsigned int axis = 0; axis < kDimension; ++axis) {
+    if (sizeA[axis] != sizeB[axis]) {
+      throw OpcodeError(
+          FormatMessage("mexitk:%s:volumeBSize", opcode),
+          FormatMessage("%s: input volume B must be the same size as volume A.", opcode));
+    }
   }
 }
 
