@@ -27,6 +27,21 @@ classdef tFomtReference < matlab.unittest.TestCase
         exactCase = {'fomt_N2_bins50_double', 'fomt_N2_bins50_single', ...
                      'fomt_N3_bins128_double', 'fomt_N3_bins128_single', ...
                      'fomt_N4_bins100_double', 'fomt_N4_bins100_single'};
+
+        % uint8's worst-output voxel disagreement fraction, per N,
+        % measured directly (see uint8DeviationStaysWithinMeasuredBound).
+        % Struct rather than a plain cell array so each case runs as its
+        % own independent test (one bad fixture does not abort the
+        % others), matching the pattern tests/tReferenceBounded.m uses;
+        % each value carries its own fixture name since the field name
+        % itself is not passed to the test method.
+        uint8DeviationCase = struct( ...
+            'fomt_N2_bins50_uint8', struct('name', 'fomt_N2_bins50_uint8', ...
+                'measured', 0.0017067238), ...
+            'fomt_N3_bins128_uint8', struct('name', 'fomt_N3_bins128_uint8', ...
+                'measured', 0.0038361726), ...
+            'fomt_N4_bins100_uint8', struct('name', 'fomt_N4_bins100_uint8', ...
+                'measured', 0.0084205910));
     end
 
     methods (Test)
@@ -103,24 +118,38 @@ classdef tFomtReference < matlab.unittest.TestCase
                 'mexitk:nargout');
         end
 
-        function uint8DeviationStaysWithinMeasuredBound(tc)
+        function uint8DeviationStaysWithinMeasuredBound(tc, uint8DeviationCase)
             % uint8 does NOT match the original: ITK changed how integral pixel
             % types are binned into the Otsu histogram since 2.4. This asserts
-            % the measured size of that disagreement so a regression (or an
-            % accidental fix) shows up as a test failure rather than going
-            % unnoticed. The bound is an observation, not a knob tuned to pass.
-            for name = {'fomt_N2_bins50_uint8', 'fomt_N3_bins128_uint8', 'fomt_N4_bins100_uint8'}
-                [fx, vin] = mexitkFixture(name{1});
-                N = fx.params(1);
-                outs = cell(1, N);
-                [outs{1:N}] = mexitk('FOMT', fx.params, vin);
-                for k = 1:N
-                    d = mean(double(outs{k}(:)) ~= double(fx.outputs{k}(:)));
-                    tc.verifyLessThan(d, 0.02, sprintf( ...
-                        ['%s output %d disagrees with matitk on %.3f%% of voxels; ' ...
-                         'documented bound is 2%%'], name{1}, k, 100 * d));
-                end
+            % the measured WORST-output disagreement fraction per N, tightened
+            % from an earlier flat 2% ceiling (loose enough to hide a real
+            % change in any of the three cases -- the true values are 0.17%,
+            % 0.38%, and 0.84%) to per-N bounds at the measured value, with
+            % the same 10% headroom / floor and "did it get suspiciously
+            % better" guard pattern tests/tReferenceBounded.m uses. Every
+            % number here was read off an actual comparison run
+            % (tools/classify_fixtures.m), not estimated or tuned to pass.
+            name = uint8DeviationCase.name;
+            measured = uint8DeviationCase.measured;
+
+            [fx, vin] = mexitkFixture(name);
+            N = fx.params(1);
+            outs = cell(1, N);
+            [outs{1:N}] = mexitk('FOMT', fx.params, vin);
+            worst = 0;
+            for k = 1:N
+                d = mean(double(outs{k}(:)) ~= double(fx.outputs{k}(:)));
+                worst = max(worst, d);
             end
+
+            ceiling = max(measured * 1.1, measured + 1e-6);
+            tc.verifyLessThan(worst, ceiling, sprintf( ...
+                '%s: worst-output disagreement %.6f%% exceeds documented %.6f%%', ...
+                name, 100 * worst, 100 * measured));
+            tc.verifyGreaterThan(worst, measured * 0.5, sprintf( ...
+                ['%s: now agrees with matitk far better than documented ' ...
+                 '(%.6f%% vs %.6f%%); re-baseline and update docs/COMPATIBILITY.md'], ...
+                name, 100 * worst, 100 * measured));
         end
     end
 end
