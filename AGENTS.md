@@ -77,8 +77,13 @@ The status ladder is load-bearing and appears in the code, in `mexitk('?')`, and
 - **bounded deviation** = compared and does *not* match; the difference is measured and bounded.
 - **smoke-tested** = runs, no reference.
 - **untested** = never run against a reference.
+- **unsupported** = registers and appears in `mexitk('?')`, but `Execute()` always throws --
+  a deliberate, documented refusal for an opcode whose original behaviour cannot be
+  faithfully reproduced even in principle, not a missing implementation.
 
-Never conflate these. A README implying 30 validated filters when only 1 is validated is a lie.
+Never conflate these. Claiming a bounded-deviation or smoke-tested opcode as validated,
+or letting an opcode's published status drift out of sync between the registry, `mexitk('?')`,
+and the README, is a lie.
 If an opcode cannot be faithfully reproduced on modern ITK,
 mark it unsupported rather than shipping something subtly different under the same name.
 
