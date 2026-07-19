@@ -35,7 +35,8 @@ classdef tReferenceRejections < matlab.unittest.TestCase
             'sct_arg4_mismatch_uint8', 'sic_20_255_extraignored_double', ...
             'sic_dimmax_double', 'snc_dimmax_double'};
 
-        mutualRejectionFixture = {'sct_base0_double', 'sic_split_s1only'};
+        mutualRejectionFixture = {'sct_base0_double', 'sic_split_s1only', ...
+            'rtps_tps_volB_seedS1_double', 'rtps_odd3_reject_double'};
     end
 
     methods (Test)  % mexitk refuses an input the original accepted
@@ -83,11 +84,21 @@ classdef tReferenceRejections < matlab.unittest.TestCase
 
     methods (Test)  % both reject, for their own reasons
         function bothRejectTheSameInput(tc, mutualRejectionFixture)
-            [fx, vin] = mexitkFixture(mutualRejectionFixture);
+            % vinB is fetched and threaded through unconditionally: it is
+            % [] for sct_base0_double/sic_split_s1only (single-volume
+            % opcodes, no arg4Recipe), where mexitkFixtureCall's own
+            % isempty(vinB) fallback keeps their prior behaviour unchanged,
+            % but rtps_tps_volB_seedS1_double was captured WITH a genuine
+            % volumeB (arg4Recipe) -- dropping it here would exercise a
+            % different call shape than the one the original actually
+            % rejected (RequireVolumeB would fire first, under
+            % mexitk:RTPS:volumeB, not the landmarks rejection this fixture
+            % is actually evidence for).
+            [fx, vin, vinB] = mexitkFixture(mutualRejectionFixture);
             tc.assertFalse(fx.success, sprintf( ...
                 '%s: original itself succeeded on this input', mutualRejectionFixture));
 
-            fn = @() mexitkFixtureCall(fx.opcode, fx, vin);
+            fn = @() mexitkFixtureCall(fx.opcode, fx, vin, vinB);
             tc.verifyError(fn, sprintf('mexitk:%s', ...
                 localExpectedIdSuffix(mutualRejectionFixture)));
         end
@@ -138,6 +149,10 @@ switch name
         suffix = 'seeds';
     case 'sic_split_s1only'
         suffix = 'SIC:seeds';
+    case 'rtps_tps_volB_seedS1_double'
+        suffix = 'RTPS:landmarks';
+    case 'rtps_odd3_reject_double'
+        suffix = 'RTPS:landmarks';
     otherwise
         error('tReferenceRejections:unknownFixture', ...
             'No expected error id mapping for %s', name);

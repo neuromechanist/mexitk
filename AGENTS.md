@@ -31,7 +31,7 @@ src/
 ├── mexitk.cpp          # mexFunction entry: arg parsing, validation, dispatch, diagnostics
 ├── mexitk_common.h     # pixel-type dispatch + mxArray <-> itk::Image bridge (zero-copy import)
 ├── opcode.h/.cpp       # the opcode registry; RegisterBuiltinOpcodes() is the one list
-└── opcodes/            # 33 files for 35 opcodes: one file per opcode, except
+└── opcodes/            # 35 files for 37 opcodes: one file per opcode, except
                         # fdg.cpp (FDG + FGA) and fdm.cpp (FDM + FDMV), each a
                         # deliberate shared pair, not an accident
 matlab/                 # built MEX lands here; run_mexitk_tests.m
@@ -58,8 +58,8 @@ so documented status cannot drift from what the code claims.
 
 ### Honesty about validation is the product
 
-35 of 40 opcodes are implemented, and they are not equally trustworthy:
-15 are validated, 19 have a measured bounded deviation, and 1 (FAAB) is
+37 of 40 opcodes are implemented, and they are not equally trustworthy:
+15 are validated, 21 have a measured bounded deviation, and 1 (FAAB) is
 smoke-tested because its disagreement is too large to bound meaningfully.
 `docs/COMPATIBILITY.md`'s Coverage section is the canonical tier list;
 update it and this paragraph together.
@@ -95,7 +95,7 @@ The reference input is MATLAB's built-in `load mri`, so no imaging data is redis
 
 Deviating only happens in two directions: accept strictly more, or refuse to reproduce a defect.
 Every deviation is enumerated, numbered, and justified in `docs/COMPATIBILITY.md`
-(rows 1-14 as of this writing) — read it rather than this summary. A few
+(rows 1-15 as of this writing) — read it rather than this summary. A few
 illustrative examples: `SWS` overthresholding errors instead of segfaulting
 MATLAB; non-finite or wildly out-of-range filter results export as a defined
 saturated/zero value on integral pixel types instead of an undefined-behaviour
