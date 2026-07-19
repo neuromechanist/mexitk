@@ -239,7 +239,18 @@ class RtpsOpcode : public Opcode {
            "three landmarks) are asserted in tests/tReferenceBounded.m / "
            "tests/tReferenceRejections.m. Only double has been captured; "
            "single/uint8/int32 carry no agreement claim and promote to "
-           "float internally.";
+           "float internally. No cap is placed on the landmark count: "
+           "ThinPlateSplineKernelTransform's own ComputeWMatrix solves an "
+           "augmented (N+D+1)x(N+D+1) system whose cost is O(N^3) in the "
+           "number of landmark PAIRS, measured directly at N=100 (0.125s), "
+           "N=300 (1.6s), N=800 (33.2s), and still running past 40s at "
+           "N=2000 -- a real, deterministic cost curve a caller with a very "
+           "large landmark set should expect, not a hang or a memory-safety "
+           "issue (no crash or unbounded memory growth was observed at any "
+           "size tested). An arbitrary cap was considered and rejected: the "
+           "original's own behaviour at large N is unknown, and refusing an "
+           "input the original might well have accepted would be the wrong "
+           "direction for this project's accept-strictly-more policy.";
   }
 
   const std::vector<ParamSpec>& Params() const override {
