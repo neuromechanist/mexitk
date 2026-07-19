@@ -33,41 +33,47 @@ Keeping ITK keeps the algorithms.
 
 This is version 0.3.0.
 **30 of the original's 40 opcodes are implemented.**
-3 of those are the ones NFT depends on, and the only 3 with captured reference data.
-The other 27 are smoke-tested (22 filters and 5 segmentation opcodes) with no reference capture.
+Epic 2 (Phases 1-3) extended reference capture to all 30 and measured every one of them
+against the original binary; the table below reflects that measurement, produced by
+`tools/classify_fixtures.m`.
+**Verification pending CI**: the numbers below were measured locally on this tree
+and are believed accurate, but this table is only fully trustworthy once CI has
+run the full suite (`tests/tReferenceExact.m`, `tests/tReferenceBounded.m`,
+`tests/tReferenceRejections.m`, plus the existing FCA/FOMT/SWS suites) green
+on this exact tree.
 
 | Opcode | ITK filter | Status | What that means |
 |---|---|---|---|
-| `FOMT` | `OtsuMultipleThresholdsImageFilter` | **validated** | Bit-identical to the original for `double` and `single` at N=2,3,4. `uint8` differs on ~0.2% of voxels. |
+| `FBB` | `BinomialBlurImageFilter` | **validated** | Bit-identical to the original on every captured fixture (4 of 4, all four pixel types). |
+| `FBD` | `BinaryDilateImageFilter` | **validated** | Bit-identical to the original on every fixture it itself accepted (7 of 8 captured, all four pixel types); the eighth is a deliberate out-of-range rejection. Non-foreground output is the original input value, unchanged. |
+| `FBE` | `BinaryErodeImageFilter` | **validated** | Bit-identical to the original on every captured fixture (7 of 7, all four pixel types). |
+| `FBT` | `BinaryThresholdImageFilter` | **validated** | Bit-identical to the original on every fixture it itself accepted (7 of 9 captured, all four pixel types); the other two are deliberate out-of-range rejections. |
+| `FD` | `DerivativeImageFilter` | **validated** | Bit-identical on every fixture the original itself accepted (double/single). `uint8`/`int32` are rejected outright by the original; `mexitk` accepts both and returns a defined result, with no agreement claim for that pair. |
+| `FF` | `FlipImageFilter` | **validated** | Bit-identical to the original on every captured fixture (12 of 12, all four pixel types). `XDIRECTION`/`YDIRECTION` are axis-swapped relative to their registry order. |
+| `FGM` | `GradientMagnitudeImageFilter` | **validated** | Bit-identical to the original on every captured fixture (4 of 4, all four pixel types). Zero parameters. Distinct algorithm from `FGMRG`. |
+| `FMEAN` | `MeanImageFilter` | **validated** | Bit-identical to the original on every captured fixture (8 of 8, all four pixel types); every captured point is symmetric-radius, so the X/Y axis swap is family-inferred rather than independently proven for this opcode. |
+| `FMEDIAN` | `MedianImageFilter` | **validated** | Bit-identical to the original on every captured fixture (10 of 10, all four pixel types). |
+| `FVBIH` | `VotingBinaryIterativeHoleFillingImageFilter` | **validated** | Bit-identical to the original on every fixture the original itself accepted (9 of 10 captured); the tenth is a deliberate out-of-range rejection. |
+| `SCC` | `ConfidenceConnectedImageFilter` | **validated** | Bit-identical to the original on every fixture with a genuine seed (8 of 10 captured); the empty-seed fixture is a non-reproducible session-state artifact of the original, not a defined reference (see COMPATIBILITY). |
+| `SCT` | `ConnectedThresholdImageFilter` | **validated** | Bit-identical to the original on every fixture it itself accepted (14 of 17 captured); the rest are rejection/accepts-more cases. ReplaceValue hardcoded to 255 (inferred from ITK's example; registry exposes none). |
+| `SIC` | `IsolatedConnectedImageFilter` | **validated** | Bit-identical to the original on every fixture with two valid seed groups (7 of 10 captured). Needs at least 2 seed points. |
+| `SOT` | `OtsuThresholdImageFilter` | **validated** | Bit-identical to the original on every captured fixture (6 of 6, all four pixel types). Inside/outside are a fixed `{0,255}` on every pixel type, matching the original (not the pixel type's own max, an earlier unverified assumption). |
 | `FCA` | `CurvatureAnisotropicDiffusionImageFilter` | **bounded deviation** | Not bit-identical. RMS 2.6e-3, max 4.7e-2 at 1 iteration over a 0-88 range; compounds with iterations. |
 | `SWS` | `WatershedImageFilter` | **bounded deviation** | Region count matches exactly at every tested setting; label images are not bit-identical at fine levels. |
-| `FAAB` | `AntiAliasBinaryImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Output is a signed level-set field (positive inside). Integral input promotes to `float`; on `uint8` the negative (outside) half saturates to 0 on export. |
-| `FBB` | `BinomialBlurImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
-| `FBD` | `BinaryDilateImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Non-foreground output is the original input value, unchanged. |
-| `FBE` | `BinaryErodeImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Unlike `FBD`, eroded-away foreground becomes the type's min sentinel (0 for `uint8`); untouched background is unchanged. |
-| `FBL` | `BilateralImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
-| `FBT` | `BinaryThresholdImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
-| `FCF` | `CurvatureFlowImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. `uint8`/`int32` promote to `float` internally. |
-| `FD` | `DerivativeImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. `uint8` promotes to `float` internally. |
-| `FDG` | `DiscreteGaussianImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
-| `FDM` | `DanielssonDistanceMapImageFilter` (distance) | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Distance is computed in `float` and saturates at the pixel-type max on integral input. |
-| `FDMV` | `DanielssonDistanceMapImageFilter` (Voronoi) | **smoke-tested** | Voronoi accessor identification is provisional (see COMPATIBILITY). |
-| `FF` | `FlipImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
-| `FGA` | `DiscreteGaussianImageFilter` | **smoke-tested** | Duplicate of `FDG`; the registry's parameter signature for `FGA` is identical to `FDG`'s. |
-| `FGAD` | `GradientAnisotropicDiffusionImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Gradient-conductance sibling of `FCA`; `uint8`/`int32` promote to `float` internally. |
-| `FGM` | `GradientMagnitudeImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Zero parameters. Distinct algorithm from `FGMRG`. |
-| `FGMRG` | `GradientMagnitudeRecursiveGaussianImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. `uint8`/`int32` promote to `float` internally. Distinct algorithm from `FGM`. |
-| `FLS` | `LaplacianRecursiveGaussianImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Signed output; on `uint8` negative response saturates to 0 on export (`uint8`/`int32` promote to `float`). |
-| `FMEAN` | `MeanImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
-| `FMEDIAN` | `MedianImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
-| `FSN` | `SigmoidImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
-| `FVBIH` | `VotingBinaryIterativeHoleFillingImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. |
-| `FVMI` | `HessianRecursiveGaussianImageFilter` + `Hessian3DToVesselnessMeasureImageFilter` | **smoke-tested** | Runs and returns plausible output; no reference capture exists. Two-filter vesselness pipeline; integral input promotes to `float`. |
-| `SCC` | `ConfidenceConnectedImageFilter` | **smoke-tested** | Region growing from seed(s); no reference capture exists. InitialNeighborhoodRadius left at ITK default. |
-| `SCT` | `ConnectedThresholdImageFilter` | **smoke-tested** | Region growing from seed(s); no reference capture. ReplaceValue hardcoded to 255 (inferred from ITK's example; registry exposes none). |
-| `SIC` | `IsolatedConnectedImageFilter` | **smoke-tested** | Region growing, two seed groups (first two seed points); no reference. Needs at least 2 seed points. |
-| `SNC` | `NeighborhoodConnectedImageFilter` | **smoke-tested** | Region growing from seed(s); no reference capture exists. |
-| `SOT` | `OtsuThresholdImageFilter` | **smoke-tested** | Two-valued output; no reference. Inside/outside left at ITK defaults (inside = pixel-type max, so {0,255} on uint8 but {0,realmax} on double). `numberOfHistogram` below 2 is rejected: it crashes the MATLAB process outright inside ITK's Otsu calculator. |
+| `FBL` | `BilateralImageFilter` | **bounded deviation** | Bit-identical on int32/single/uint8; double has a floating-point-noise-floor residual (RMS order 1e-13 to 1e-12). |
+| `FCF` | `CurvatureFlowImageFilter` | **bounded deviation** | Double/single at the floating-point noise floor; `uint8`/`int32` promote to `float` internally and have a much larger measured residual (RMS up to ~7.3 on uint8). |
+| `FDG` | `DiscreteGaussianImageFilter` | **bounded deviation** | RMS order 1e-3 to 4e-3 on double/single/int32; `uint8` is rejected by the original outright, `mexitk` accepts it with no agreement claim. |
+| `FDM` | `DanielssonDistanceMapImageFilter` (distance) | **bounded deviation** | Bit-identical on double/single/int32; `uint8` has a small measured residual (RMS ~0.2, max abs 6). All-background input is rejected (`mexitk:fdm:noObject`). |
+| `FDMV` | `DanielssonDistanceMapImageFilter` (Voronoi) | **bounded deviation** | Bit-identical on single/int32; double has a floating-point-noise-floor residual, `uint8` uses a different (wraparound, not rescale) formula with its own small residual. Voronoi labels are sequential per-object ids, not drawn from the input's own pixel values (an earlier assumption, now disproven). |
+| `FGA` | `DiscreteGaussianImageFilter` | **bounded deviation** | Duplicate of `FDG`, now fixture-confirmed: bit-identical to `FDG`'s own output in the original at every capturable point. Same measured deviation as `FDG`. |
+| `FGAD` | `GradientAnisotropicDiffusionImageFilter` | **bounded deviation** | Gradient-conductance sibling of `FCA`. RMS order 5e-5 to 0.35 on double/single; `uint8`/`int32` promote to `float` internally with a larger residual (RMS up to ~11.7 on uint8). |
+| `FGMRG` | `GradientMagnitudeRecursiveGaussianImageFilter` | **bounded deviation** | Bit-identical on int32/uint8 at sigma=2; double/single have a floating-point-noise-floor residual otherwise. Distinct algorithm from `FGM`. |
+| `FLS` | `LaplacianRecursiveGaussianImageFilter` | **bounded deviation** | Bit-identical on int32 at sigma=2; double/single at the floating-point noise floor. `uint8`'s clamp-to-0 export of the signed field amplifies that tiny difference into a much larger measured residual (RMS ~98.7). |
+| `FOMT` | `OtsuMultipleThresholdsImageFilter` | **bounded deviation** | Bit-identical to the original for `double`/`single` at N=2,3,4, and for `uint8` at N=1 (asserted exactly). `uint8` at N=2,3,4 deviates (0.17%/0.38%/0.84% of voxels, measured); confirmed a genuine ITK 2.4-to-5.x integral-histogram-binning difference, not the same fixable bug SOT had. |
+| `FSN` | `SigmoidImageFilter` | **bounded deviation** | Bit-identical on 5 of 6 captured fixtures; the sixth has a floating-point-noise-floor residual. |
+| `FVMI` | `HessianRecursiveGaussianImageFilter` + `Hessian3DToVesselnessMeasureImageFilter` | **bounded deviation** | Not bit-identical on any captured fixture; RMS 0.08-0.51, a real algorithmic drift from ITK's evolving Hessian/vesselness numerics, not noise. |
+| `SNC` | `NeighborhoodConnectedImageFilter` | **bounded deviation** | Bit-identical at radius [1,1,1] and the base threshold fixtures; other radii have a measured residual independent of axis order (an upstream algorithm difference, the same class as FCA/SWS). |
+| `FAAB` | `AntiAliasBinaryImageFilter` | **smoke-tested** | Runs and returns plausible output; reference fixtures exist but disagreement is too large to bound meaningfully (RMS in the hundreds). Output is a signed level-set field (positive inside). Integral input promotes to `float`; on `uint8` the negative (outside) half saturates to 0 on export. |
 
 Status vocabulary, used consistently in the code, in `mexitk('?')`, and here:
 
@@ -83,9 +89,9 @@ They are catalogued in `docs/matitk_opcode_registry.txt` (the original binary's 
 and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`.
 
 > **Comparing against an older result?**
-> Output from `FCA` and `SWS` will differ slightly from what the original `matitk`
-> binary produced on Linux before 2026.
-> `FOMT` is identical.
+> Output from any opcode marked **bounded deviation** above (`FCA` and `SWS` among them)
+> will differ slightly from what the original `matitk` binary produced on Linux before 2026.
+> Every opcode marked **validated** is identical.
 > This is upstream ITK's own evolution from 2.4 to 5.4, not a porting error,
 > and it is accepted deliberately: the alternative is that segmentation does not run
 > on Apple Silicon at all.

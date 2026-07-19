@@ -1,8 +1,15 @@
 classdef tFomtReference < matlab.unittest.TestCase
     % Reference tests for FOMT (Otsu multiple thresholds).
     %
-    % FOMT is the one opcode that reproduces the original bit-for-bit on
-    % floating-point input, so these are equality assertions, not tolerances.
+    % FOMT reproduces the original bit-for-bit on floating-point input at
+    % every captured threshold count, and on uint8 input at N=1, so these
+    % are equality assertions, not tolerances. uint8 at N=2,3,4 does NOT
+    % reproduce bit-for-bit (see uint8DeviationStaysWithinMeasuredBound):
+    % Epic 2 Phase 3 investigated this directly (tried, and ruled out, the
+    % same histogram-auto-range root cause that explained SOT's own
+    % deviation) and confirmed it is a genuine ITK 2.4-to-5.x difference in
+    % integral histogram binning, not a mexitk bug. See
+    % docs/COMPATIBILITY.md and FomtOpcode::StatusNote.
     %
     % SPDX-License-Identifier: BSD-3-Clause
     % Copyright (c) 2026, Seyed Yahya Shirazi <shirazi@ieee.org>
@@ -10,11 +17,31 @@ classdef tFomtReference < matlab.unittest.TestCase
     % Institute for Neural Computation (INC), UC San Diego.
 
     properties (TestParameter)
-        % Every (N, class) combination captured from the original. N=2 and N=4
-        % are the threshold counts NFT itself uses (segm_scalp, segm_brain).
+        % Every (N, class) combination captured from the original that is
+        % bit-exact AND uses the multi-output fixture shape (numel(outs)
+        % == N, one mask per threshold; see bitIdenticalToOriginal). N=2
+        % and N=4 are the threshold counts NFT itself uses (segm_scalp,
+        % segm_brain). N=1's fixtures (fomt_1_128_double/uint8) are
+        % single-output-shaped instead (a single mask, no cell array) and
+        % are asserted separately by n1IsBitIdenticalIncludingUint8 below.
         exactCase = {'fomt_N2_bins50_double', 'fomt_N2_bins50_single', ...
                      'fomt_N3_bins128_double', 'fomt_N3_bins128_single', ...
                      'fomt_N4_bins100_double', 'fomt_N4_bins100_single'};
+
+        % uint8's worst-output voxel disagreement fraction, per N,
+        % measured directly (see uint8DeviationStaysWithinMeasuredBound).
+        % Struct rather than a plain cell array so each case runs as its
+        % own independent test (one bad fixture does not abort the
+        % others), matching the pattern tests/tReferenceBounded.m uses;
+        % each value carries its own fixture name since the field name
+        % itself is not passed to the test method.
+        uint8DeviationCase = struct( ...
+            'fomt_N2_bins50_uint8', struct('name', 'fomt_N2_bins50_uint8', ...
+                'measured', 0.0017067238), ...
+            'fomt_N3_bins128_uint8', struct('name', 'fomt_N3_bins128_uint8', ...
+                'measured', 0.0038361726), ...
+            'fomt_N4_bins100_uint8', struct('name', 'fomt_N4_bins100_uint8', ...
+                'measured', 0.0084205910));
     end
 
     methods (Test)
@@ -33,6 +60,26 @@ classdef tFomtReference < matlab.unittest.TestCase
                     sprintf('output %d class must match the original', k));
                 tc.verifyEqual(outs{k}, fx.outputs{k}, ...
                     sprintf('output %d must be bit-identical to matitk', k));
+            end
+        end
+
+        function n1IsBitIdenticalIncludingUint8(tc)
+            % N=1's fixtures (fomt_1_128_double, fomt_1_128_uint8) use the
+            % single-output fixture shape, not the multi-output shape
+            % exactCase/bitIdenticalToOriginal handle, so they get their
+            % own assertion here. uint8 at N=1 is a genuinely different
+            % result than uint8 at N=2,3,4 (see the class docstring): the
+            % original itself computes only ONE Otsu threshold for N=1,
+            % and that single-threshold binning agrees exactly, even
+            % though the same ITK-version binning difference causes
+            % disagreement once multiple thresholds are computed together.
+            for name = {'fomt_1_128_double', 'fomt_1_128_uint8'}
+                [fx, vin] = mexitkFixture(name{1});
+                out = mexitk('FOMT', fx.params, vin);
+                tc.verifyClass(out, fx.outputClass, sprintf( ...
+                    '%s: output class must match the original', name{1}));
+                tc.verifyEqual(out, fx.output, sprintf( ...
+                    '%s: output must be bit-identical to matitk', name{1}));
             end
         end
 
@@ -71,24 +118,38 @@ classdef tFomtReference < matlab.unittest.TestCase
                 'mexitk:nargout');
         end
 
-        function uint8DeviationStaysWithinMeasuredBound(tc)
+        function uint8DeviationStaysWithinMeasuredBound(tc, uint8DeviationCase)
             % uint8 does NOT match the original: ITK changed how integral pixel
             % types are binned into the Otsu histogram since 2.4. This asserts
-            % the measured size of that disagreement so a regression (or an
-            % accidental fix) shows up as a test failure rather than going
-            % unnoticed. The bound is an observation, not a knob tuned to pass.
-            for name = {'fomt_N2_bins50_uint8', 'fomt_N3_bins128_uint8', 'fomt_N4_bins100_uint8'}
-                [fx, vin] = mexitkFixture(name{1});
-                N = fx.params(1);
-                outs = cell(1, N);
-                [outs{1:N}] = mexitk('FOMT', fx.params, vin);
-                for k = 1:N
-                    d = mean(double(outs{k}(:)) ~= double(fx.outputs{k}(:)));
-                    tc.verifyLessThan(d, 0.02, sprintf( ...
-                        ['%s output %d disagrees with matitk on %.3f%% of voxels; ' ...
-                         'documented bound is 2%%'], name{1}, k, 100 * d));
-                end
+            % the measured WORST-output disagreement fraction per N, tightened
+            % from an earlier flat 2% ceiling (loose enough to hide a real
+            % change in any of the three cases -- the true values are 0.17%,
+            % 0.38%, and 0.84%) to per-N bounds at the measured value, with
+            % the same 10% headroom / floor and "did it get suspiciously
+            % better" guard pattern tests/tReferenceBounded.m uses. Every
+            % number here was read off an actual comparison run
+            % (tools/classify_fixtures.m), not estimated or tuned to pass.
+            name = uint8DeviationCase.name;
+            measured = uint8DeviationCase.measured;
+
+            [fx, vin] = mexitkFixture(name);
+            N = fx.params(1);
+            outs = cell(1, N);
+            [outs{1:N}] = mexitk('FOMT', fx.params, vin);
+            worst = 0;
+            for k = 1:N
+                d = mean(double(outs{k}(:)) ~= double(fx.outputs{k}(:)));
+                worst = max(worst, d);
             end
+
+            ceiling = max(measured * 1.1, measured + 1e-6);
+            tc.verifyLessThan(worst, ceiling, sprintf( ...
+                '%s: worst-output disagreement %.6f%% exceeds documented %.6f%%', ...
+                name, 100 * worst, 100 * measured));
+            tc.verifyGreaterThan(worst, measured * 0.5, sprintf( ...
+                ['%s: now agrees with matitk far better than documented ' ...
+                 '(%.6f%% vs %.6f%%); re-baseline and update docs/COMPATIBILITY.md'], ...
+                name, 100 * worst, 100 * measured));
         end
     end
 end

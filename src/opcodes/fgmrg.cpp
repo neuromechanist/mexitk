@@ -74,10 +74,14 @@ class FgmrgOpcode : public Opcode {
   const char* Description() const override {
     return "Gradient magnitude (recursive Gaussian derivative)";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kBoundedDeviation; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists. "
-           "uint8/int32 promote to float internally and have no reference. "
+    return "bit-identical to the original on int32/uint8 at sigma=2 (see "
+           "tests/tReferenceExact.m); every other captured combination "
+           "(double at sigma 1/2/4, single at sigma 2) has a residual at "
+           "the floating-point noise floor (RMS order 1e-7 to 1e-8), "
+           "asserted by tests/tReferenceBounded.m. Not classified as "
+           "validated overall because of the double/single residual. "
            "Distinct algorithm from FGM (recursive Gaussian derivative vs "
            "central differences); the two return different output on the "
            "same volume by design.";

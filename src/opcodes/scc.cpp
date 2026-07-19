@@ -54,13 +54,20 @@ class SccOpcode : public Opcode {
   const char* Description() const override {
     return "Confidence-connected region growing from seed(s)";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kValidated; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists. "
-           "InitialNeighborhoodRadius is left at ITK's default of 1 (registry "
-           "exposes no such parameter; the ITK example sets 2, but the "
-           "original's param list omits it). An empty seed list yields an "
-           "all-zero output.";
+    return "bit-identical to the original on every fixture the original "
+           "itself accepted with a genuine (non-stale) seed (8 of 10 "
+           "captured), asserted by tests/tReferenceExact.m; one remaining "
+           "fixture is an accepts-more case (a dimension-maximum seed, see "
+           "tests/tReferenceRejections.m). The captured "
+           "scc_2p5_5_100_emptyseed_double fixture is deliberately EXCLUDED "
+           "from this validated claim: it is not a reproducible reference "
+           "for empty-seed behaviour, see tests/tReferenceRejections.m for "
+           "why. InitialNeighborhoodRadius is left at ITK's default of 1 "
+           "(registry exposes no such parameter; the ITK example sets 2, "
+           "but the original's param list omits it). An empty seed list "
+           "yields an all-zero output.";
   }
 
   const std::vector<ParamSpec>& Params() const override {

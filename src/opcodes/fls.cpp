@@ -75,12 +75,19 @@ class FlsOpcode : public Opcode {
   const char* Description() const override {
     return "Laplacian (recursive Gaussian second derivative)";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kBoundedDeviation; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists. "
-           "uint8/int32 promote to float internally. The Laplacian is "
-           "signed, so on uint8 input negative response saturates to 0 on "
-           "export (int32 keeps sign).";
+    return "bit-identical to the original on int32 at sigma=2 (see "
+           "tests/tReferenceExact.m); double/single have a residual at the "
+           "floating-point noise floor (RMS order 1e-8 to 1e-7) across "
+           "sigma 1/2/4; uint8's own residual is much larger (RMS about "
+           "98.7) because its clamp-back export saturates the signed "
+           "Laplacian field's negative half to 0, amplifying the "
+           "underlying tiny numeric difference into a binary sign flip at "
+           "many voxels near the zero crossing. All measured numbers are "
+           "in tests/tReferenceBounded.m. uint8/int32 promote to float "
+           "internally; the Laplacian is signed, so on uint8 input "
+           "negative response saturates to 0 on export (int32 keeps sign).";
   }
 
   const std::vector<ParamSpec>& Params() const override {

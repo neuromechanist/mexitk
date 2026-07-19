@@ -76,9 +76,14 @@ class SicOpcode : public Opcode {
   const char* Description() const override {
     return "Isolated-connected region growing (two seed groups)";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kValidated; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists. "
+    return "bit-identical to the original on every fixture with two valid "
+           "seed groups (7 of 10 captured, all four pixel types), asserted "
+           "by tests/tReferenceExact.m; the other three are a mutual "
+           "rejection (a single seed group) and two accepts-more cases (a "
+           "dimension-maximum second seed, an ignored out-of-bounds third "
+           "seed), see tests/tReferenceRejections.m. "
            "The single seedsArray is split: first point to seed group 1, "
            "second to group 2 (matching the ITK two-seed example); any "
            "further points are ignored and NOT bounds-checked (the original "

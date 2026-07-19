@@ -29,10 +29,20 @@ void RunFmean(OpContext& ctx) {
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(input);
 
+  // The 2006 original maps X-named parameters to MATLAB dim 2 (ITK axis 1)
+  // and Y-named parameters to MATLAB dim 1 (ITK axis 0); Z is unchanged.
+  // Applied here for family consistency with FMEDIAN/SNC/FVBIH, which all
+  // share the same XRADIUS/YRADIUS/ZRADIUS registry naming: FMEAN's own
+  // captured fixtures are all symmetric-radius, so this swap is NOT
+  // directly fixture-proven for FMEAN itself, only inferred. See
+  // docs/COMPATIBILITY.md, second capture campaign findings.
   typename FilterType::RadiusType radius;
-  radius[0] = CastParam<itk::SizeValueType>(p[0], "FMEAN", "XRADIUS");
-  radius[1] = CastParam<itk::SizeValueType>(p[1], "FMEAN", "YRADIUS");
-  radius[2] = CastParam<itk::SizeValueType>(p[2], "FMEAN", "ZRADIUS");
+  // Validate in declared parameter order; as call arguments the evaluation
+  // order (and so which name an error cites) would be unspecified.
+  const auto rx = CastParam<itk::SizeValueType>(p[0], "FMEAN", "XRADIUS");
+  const auto ry = CastParam<itk::SizeValueType>(p[1], "FMEAN", "YRADIUS");
+  const auto rz = CastParam<itk::SizeValueType>(p[2], "FMEAN", "ZRADIUS");
+  AssignSwappedXY(radius, rx, ry, rz);
   filter->SetRadius(radius);
   filter->Update();
 
@@ -46,9 +56,16 @@ class FmeanOpcode : public Opcode {
   const char* Description() const override {
     return "Mean filter over a rectangular neighbourhood";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kValidated; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists";
+    return "bit-identical to the original on every captured fixture (8 of "
+           "8, all four pixel types), asserted by tests/tReferenceExact.m. "
+           "This validated claim covers only the captured points, which "
+           "are all symmetric-radius (XRADIUS==YRADIUS): the XRADIUS/"
+           "YRADIUS axis swap applied here is family-inferred from "
+           "FMEDIAN/SNC/FVBIH's own fixture-proven swap, not independently "
+           "proven for FMEAN by an asymmetric-radius capture. See the "
+           "axis-mapping comment in this file and docs/COMPATIBILITY.md.";
   }
 
   const std::vector<ParamSpec>& Params() const override {

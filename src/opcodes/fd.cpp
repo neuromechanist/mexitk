@@ -53,7 +53,21 @@ void RunFd(OpContext& ctx) {
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(real);
   filter->SetOrder(CastParam<unsigned int>(p[0], "FD", "SETORDER"));
-  filter->SetDirection(CastParam<unsigned int>(p[1], "FD", "SETDIRECTION"));
+
+  // The 2006 original maps X-named parameters to MATLAB dim 2 (ITK axis 1)
+  // and Y-named parameters to MATLAB dim 1 (ITK axis 0); Z is unchanged.
+  // SETDIRECTION follows the same swap: original [order=1, direction=0] is
+  // BIT-EXACT equal to mexitk's [order=1, direction=1], and original
+  // [1,1] == mexitk's [1,0] (order 0 is exact regardless, a derivative of
+  // order 0 does not depend on direction). See docs/COMPATIBILITY.md,
+  // second capture campaign findings.
+  unsigned int direction = CastParam<unsigned int>(p[1], "FD", "SETDIRECTION");
+  if (direction == 0) {
+    direction = 1;
+  } else if (direction == 1) {
+    direction = 0;
+  }
+  filter->SetDirection(direction);
   filter->Update();
 
   if constexpr (std::is_same<PixelT, RealT>::value) {
@@ -74,11 +88,19 @@ class FdOpcode : public Opcode {
   const char* Name() const override { return "FD"; }
   Category GetCategory() const override { return Category::kFilter; }
   const char* Description() const override { return "Directional derivative of a given order"; }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kValidated; }
   const char* StatusNote() const override {
-    return "uint8 input is promoted to float for the derivative and cast back, "
-           "because ITK's DerivativeImageFilter requires a signed output pixel "
-           "type; int32/float/double run natively. No reference capture exists.";
+    return "bit-identical to the original on every fixture where the "
+           "original itself succeeded (double/single, both SETDIRECTION "
+           "values captured), asserted by tests/tReferenceExact.m. The "
+           "original rejects uint8/int32 input outright; mexitk accepts "
+           "both (uint8 promoted to float for the derivative and cast "
+           "back, since ITK's DerivativeImageFilter requires a signed "
+           "output pixel type; int32 runs natively) and returns a defined "
+           "result, with no agreement claim for that pixel-type pair (see "
+           "tests/tReferenceRejections.m). SETDIRECTION is axis-swapped "
+           "(0<->1, 2 unchanged); see the axis-mapping comment in this "
+           "file and docs/COMPATIBILITY.md.";
   }
 
   const std::vector<ParamSpec>& Params() const override {
