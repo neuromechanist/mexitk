@@ -61,11 +61,13 @@ so documented status cannot drift from what the code claims.
 ### Honesty about validation is the product
 
 All 40 opcodes are now addressed: 39 are implemented, and they are not
-equally trustworthy -- 15 are validated, 22 have a measured bounded
-deviation, and 2 (FAAB, FFFT) are smoke-tested because either the
-disagreement is too large to bound meaningfully (FAAB) or the exact
-per-mode packing could not be determined from the captured fixtures
-(FFFT). The fortieth, SCSS, is formally unsupported: registered, appears
+equally trustworthy -- 15 are validated, 23 have a measured bounded
+deviation, and 1 (FAAB) is smoke-tested because its disagreement is too
+large to bound meaningfully. FFFT's own packing was undetermined at
+first, but a follow-up controlled capture round (s15) settled it exactly
+and promoted FFFT to bounded deviation, alongside a real, independently
+investigated residual on the original mri-sized fixtures. The fortieth,
+SCSS, is formally unsupported: registered, appears
 in `mexitk('?')`, but always throws, because the original's own output
 for it is not an image. `docs/COMPATIBILITY.md`'s Coverage section is the
 canonical tier list; update it and this paragraph together.

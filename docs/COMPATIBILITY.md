@@ -587,13 +587,17 @@ then settled its calling convention, supplied eight successful captures, and
 isolated the exact cause of its two initially-unexplained residuals, promoting
 it out of smoke-tested. Epic 4 Phase 2 closed out the roadmap: `FGMS` is
 implemented as a registry duplicate of `FGMRG` (fixture-confirmed
-bit-identical in the original), `FFFT` runs but carries no fixture-agreement
-claim, and `SCSS` is registered with a deliberate refusal -- see "`SCSS`:
-formally unsupported (Epic 4 Phase 2)" and "`FGMS` and `FFFT`: resolved (Epic
-4 Phase 2)" above. All ten opcodes from Epic 3 and Epic 4 (FMMCF, SFM, SGAC,
-SLLS, SSDLS, RD, RTPS, FGMS, FFFT, SCSS) have their own captured fixture(s),
-measured the same way. The status ladder now splits the 40 into four tiers by
-that measurement, not by guesswork:
+bit-identical in the original); `FFFT`'s packing was fully determined by a
+follow-up controlled capture round (`s15`) after the original two (mri-sized)
+fixtures alone proved insufficient, and carries a real, measured, bounded
+residual on those two fixtures even with the confirmed packing (investigated
+down to independently proving this codebase's own FFT computation exact, not
+left as an open question); and `SCSS` is registered with a deliberate refusal
+-- see "`SCSS`: formally unsupported (Epic 4 Phase 2)" and "`FGMS` and `FFFT`:
+resolved (Epic 4 Phase 2)" above. All ten opcodes from Epic 3 and Epic 4
+(FMMCF, SFM, SGAC, SLLS, SSDLS, RD, RTPS, FGMS, FFFT, SCSS) have their own
+captured fixture(s), measured the same way. The status ladder now splits the
+40 into four tiers by that measurement, not by guesswork:
 
 - **Validated (15):** FBB, FBD, FBE, FBT, FD, FF, FGM, FMEAN, FMEDIAN,
   FVBIH, SCC, SCT, SGAC, SIC, SOT.
@@ -604,9 +608,9 @@ that measurement, not by guesswork:
   than a defined reference (SCC's empty-seed fixture; see above) — those
   are asserted separately in `tests/tReferenceRejections.m` with no
   agreement claim.
-- **Bounded deviation (22):** FCA, SWS (their own dedicated sections
-  above), FBL, FCF, FDG, FDM, FDMV, FGA, FGAD, FGMRG, FGMS, FLS, FMMCF,
-  FOMT, FSN, FVMI, SFM, SLLS, SNC, SSDLS, RD, RTPS.
+- **Bounded deviation (23):** FCA, SWS (their own dedicated sections
+  above), FBL, FCF, FDG, FDM, FDMV, FFFT, FGA, FGAD, FGMRG, FGMS, FLS,
+  FMMCF, FOMT, FSN, FVMI, SFM, SLLS, SNC, SSDLS, RD, RTPS.
   Runs the same ITK filter with the same parameters, but does not
   reproduce the original bit-for-bit; the difference is measured and
   bounded (`tests/tReferenceBounded.m`, plus FCA/SWS/FOMT's own dedicated
@@ -652,13 +656,20 @@ that measurement, not by guesswork:
   measures the identical residual FGMRG measures against its own
   fixtures at the same sigma -- see "`FGMS` and `FFFT`: resolved (Epic 4
   Phase 2)" above and `src/opcodes/fgmrg.cpp`'s `FgmsOpcode::StatusNote`.
-- **Smoke-tested (2):** FAAB, FFFT. FAAB's disagreement with the
+  FFFT (Epic 4 Phase 2, `s15` controlled-capture round) has its packing
+  fully confirmed (4 of 6 small captures bit-exact, the other 2 at the
+  double-precision noise floor -- see `tests/tReferenceExact.m`) but
+  still shows a real, larger residual on the two original mri-sized
+  fixtures despite the confirmed packing (real mode RMS 20.2/maxabs
+  95.5; complex mode RMS 16121/maxabs 3.54495e6) -- independently traced
+  to a genuine difference in the original's own ITK-2.4-vintage VNL FFT
+  on this specific composite size, not a bug in this codebase (this
+  codebase's own FFT was proven exact against MATLAB's `fftn` on the
+  same volume) -- see "`FGMS` and `FFFT`: resolved (Epic 4 Phase 2)"
+  above and `src/opcodes/ffft.cpp`'s `StatusNote` for the full evidence.
+- **Smoke-tested (1):** FAAB. Its disagreement with the
   original is large enough (RMS in the hundreds) that pinning a bound
   would not be a useful signal — see "SWS and FAAB: not bounded" below.
-  FFFT (Epic 4 Phase 2) runs cleanly on all four pixel types but neither
-  of its two captured fixtures is reproduced by any packing this project
-  could determine, so no bound is asserted for either output mode — see
-  "`FGMS` and `FFFT`: resolved (Epic 4 Phase 2)" above.
 - **Unsupported (1):** SCSS. Registers and appears in `mexitk('?')`, but
   `Execute()` always throws `mexitk:SCSS:unsupported` by design: the
   original's own output for this opcode is not an image (a `[10 1]`
@@ -703,6 +714,7 @@ status reflects its OTHER captured points, not that class.
 | SSDLS | 6.7e-8 (double) | 5.3e-6 (double) | floating-point noise floor, raw un-thresholded output; only one fixture (double); uint8/int32 unmeasured |
 | RD | 4.63626 (double) | 88.0 (double) | full input intensity range; only one fixture (double); uint8/int32 unmeasured |
 | RTPS | 4.159985 (double) | 88.0 (double) | worst of 3 captures with fewer than 3 distinct landmark pairs; 5 well-posed (3+ distinct pairs) captures at the floating-point noise floor instead (3 at RMS ~1e-12, 2 at RMS ~2e-10); only double captured, uint8/int32/single unmeasured |
+| FFFT | 16121.494 (double, complex mode) | 3544950.7 (double, complex mode) | packing confirmed exact (s15 controlled captures, 4/6 bit-exact, 2/6 at noise floor); real mode alone is much smaller, RMS 20.2/maxabs 95.5; residual independently traced to the original's own FFT on this composite (non-power-of-2) size, not this codebase (own FFT proven exact vs MATLAB fftn); only double captured, uint8/int32/single unmeasured |
 
 All 40 opcodes are catalogued in `docs/matitk_opcode_registry.txt`
 (the original binary's own parameter dump)
@@ -1547,19 +1559,46 @@ evidence rather than left as "needs verification":
   floating-point noise floor). Status: **bounded deviation**.
 - **`FFFT`**: the concrete `itk::VnlForwardFFTImageFilter` (not the abstract, object-factory-
   resolved `ForwardFFTImageFilter` the mapping pass pointed at, which fails to instantiate on
-  this build with no PocketFFT backend compiled in) runs cleanly on all four pixel types, but
-  the real/complex output switch semantics remain genuinely unconfirmed: neither captured
-  fixture (`ffft_real0_double`, `ffft_complex1_double`) is reproduced by any packing tried —
-  full or per-slice/per-axis FFTs, with or without `fftshift`, linear/log-magnitude rescales
-  over six percentile-clip windows, and a power-law family, none within floating-point noise
-  of either fixture. One inline guess from an earlier pass is directly disproven, not just
-  unconfirmed: `ffft_complex1_double`'s own extreme value (±3543768.099) is NOT the DC
-  component of the volume's FFT (the true DC term, computed directly, is 9650539 — the sum of
-  all voxel intensities); this implementation's own raw-real-part output independently
-  reproduces that 9650539 DC value exactly, confirming the real-part extraction itself is
-  arithmetically correct while also showing the original's output cannot be that raw,
-  unscaled quantity. Status: **smoke-tested**, no agreement claim for either mode. A targeted
-  reference-host capture (a small all-constant volume, plus a small single-impulse volume,
-  both at 8x8x8 or smaller for byte-for-byte comparison) would very likely settle the exact
-  packing; see `src/opcodes/ffft.cpp`'s `StatusNote` for the full diagnostic writeup and the
-  precise proposed capture.
+  this build with no PocketFFT backend compiled in) runs cleanly on all four pixel types. The
+  packing was initially undetermined from the original two (mri-sized) fixtures alone — one
+  inline guess from that first pass was directly disproven, not just unconfirmed:
+  `ffft_complex1_double`'s own extreme value (±3543768.099) is NOT the DC component of the
+  volume's FFT (the true DC term, computed directly, is 9650539 — the sum of all voxel
+  intensities). A follow-up controlled reference-host capture round (`s15`:
+  `tools/capture_reference/s15_ffft_packing.m`, three small 8x8x8 volumes with analytically
+  known spectra) then settled the packing exactly, not by inference: **Real mode (param 0)
+  = the REAL PART of the full 3-D forward FFT, rescaled to [0,255]; Complex mode (param 1) =
+  the IMAGINARY PART, raw and unscaled.** Proof: an impulse one voxel off-origin has a
+  real/imaginary phase-ramp spectrum in closed form, and its real-mode fixture is exactly
+  that rescaled to [0,255] (maxabs 2.84e-14); an impulse at the origin has a constant,
+  purely-real spectrum, and its real-mode fixture is exactly all-zero, matching
+  `RescaleIntensityImageFilter`'s own documented min==max collapses to `OutputMinimum`
+  behaviour — and ruling out magnitude (the earlier top candidate) decisively, since
+  magnitude is *also* constant for the off-origin impulse (only phase varies), which would
+  wrongly all-zero that case too. The captures also forced one correction nobody predicted in
+  advance: `itk::VnlForwardFFTImageFilter`'s own raw imaginary part is the *exact negation* of
+  the original's (confirmed: `mexitk_output + fixture == 0` to floating-point noise, not
+  merely `mexitk_output - fixture` being small), so Complex mode negates post-hoc via
+  `ShiftScaleImageFilter`. 4 of the 6 `s15` fixtures are bit-exact; the other 2 (the two
+  impulse cases' real-mode outputs) are at the absolute double-precision noise floor
+  (~1e-14/1e-15). The two *original* mri-sized fixtures still do not match closely even with
+  the now-confirmed packing (real mode RMS 20.2/maxabs 95.5 against `[0,255]`; complex mode
+  RMS 16121/maxabs 3.54495e6 against a fixture ranging ±3.54377e6) — investigated, not left
+  unexplained: this codebase's own ITK-native FFT was independently verified mathematically
+  EXACT (RMS 1.8e-11) against MATLAB's own `fftn` on the real 128×128×27 volume, ruling out
+  every hypothesis that would implicate this implementation specifically (axis-order
+  mismatch — tested via all 6 permutations, all land at the same ~1e-11 floor; `z=27`
+  radix-3 mixed-radix mishandling — the one prime factor the cubic, power-of-2-only `s15`
+  captures never exercise; an unapplied `fftshift` — already ruled out at small scale; and
+  size-driven zero-padding — ruled out by reading `itkVnlForwardFFTImageFilter.hxx` directly,
+  which explicitly *rejects* illegal sizes via `VnlFFTCommon::IsDimensionSizeLegal` rather
+  than padding them, and 27=3³ is a legal, unpadded radix-3 size). With this implementation's
+  own FFT independently proven exact, the residual is best explained as a genuine difference
+  between the original 2006 binary's own ITK-2.4-vintage VNL FFT and modern ITK's, specific to
+  this composite (non-power-of-2) size — the same category of real, measured, bounded
+  numerics difference as `FCA`/`RD`, not floating-point noise, and not something the
+  power-of-2-only `s15` captures could have revealed even in principle. Status: **bounded
+  deviation**, scoped to `double` (`single`/`uint8`/`int32` promote to a real type the same
+  way but carry no fixture of their own). See `src/opcodes/ffft.cpp`'s `StatusNote` for the
+  full evidence trail, `tests/tReferenceExact.m`/`tests/tReferenceBounded.m` for the
+  assertions, and `tools/capture_reference/s15_ffft_packing.m` for the capture script.

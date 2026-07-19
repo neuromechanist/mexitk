@@ -42,15 +42,19 @@ capture rounds (`tools/capture_reference/s14_rtps_landmarks.m`, nine fixtures to
 disproved the phase's original inference outright, pinned down the real one, and then
 isolated the exact cause of its two residual cases. Epic 4 Phase 2 closed out the roadmap:
 `FGMS` is confirmed a registry duplicate of `FGMRG` (bit-identical in the original at every
-captured sigma, the same situation as `FGA`/`FDG`); `FFFT` runs but its exact per-mode packing
-against the original could not be determined from the two captured fixtures, so it carries no
-agreement claim; `SCSS` is formally dispositioned **unsupported** rather than implemented --
-see below. See `docs/COMPATIBILITY.md` for the full story on every one of these.
+captured sigma, the same situation as `FGA`/`FDG`); `FFFT`'s packing (undetermined from the
+two original fixtures alone) was pinned down exactly by a follow-up controlled capture round
+(`tools/capture_reference/s15_ffft_packing.m`, three small volumes with analytically known
+spectra) -- real mode is the real part of the FFT rescaled to `[0,255]`, complex mode is the
+raw imaginary part -- though a real, independently-investigated residual remains on the
+original mri-sized fixtures even with the confirmed packing; `SCSS` is formally dispositioned
+**unsupported** rather than implemented -- see below. See `docs/COMPATIBILITY.md` for the full
+story on every one of these.
 The table below reflects that measurement, produced by `tools/classify_fixtures.m`.
 Every claim in the table is enforced by the test suite
 (`tests/tReferenceExact.m`, `tests/tReferenceBounded.m`,
 `tests/tReferenceRejections.m`, plus the dedicated FCA/FOMT/SWS suites):
-829 tests, passing locally on macOS arm64 against Homebrew ITK for the tree this table
+843 tests, passing locally on macOS arm64 against Homebrew ITK for the tree this table
 describes. CI (Linux x86_64 static-artifact and macOS arm64 no-ITK-installed runs) has not
 yet run against this tree; update this line once it has.
 
@@ -93,8 +97,8 @@ yet run against this tree; update this line once it has.
 | `SSDLS` | `ShapeDetectionLevelSetImageFilter` | **bounded deviation** | Not bit-identical on the one captured fixture (double): max-abs 5.25e-6, RMS 6.7e-8, the floating-point noise floor, the same category as `SFM`'s. Two-volume opcode, same role assignment as `SGAC`/`SLLS`. Unlike `SGAC`/`SLLS`, returns the raw, un-thresholded narrow-band level set directly (bounded +-4 on the captured fixture). |
 | `RD` | `HistogramMatchingImageFilter` + `DemonsRegistrationFilter` + `WarpImageFilter` | **bounded deviation** | Not bit-identical on the one captured fixture (double): RMS 4.63626, max-abs 88 (the full 0-88 input intensity range), 39.1% of voxels differ -- a real numerics difference in the iterative Demons solver, the same category as `FCA`/`FMMCF`, not floating-point noise. `numberOfIterations=0` is confirmed an exact identity no-op. Fixed/moving roles (volume A fixed, volume B moving) confirmed by a swap test; the swapped wiring measures materially worse (RMS 21.7). `uint8`/`int32`/`single` promote to `float` internally; no fixture exists for them. |
 | `RTPS` | `ThinPlateSplineKernelTransform` + `ResampleImageFilter` | **bounded deviation** | Two reference-host capture rounds (nine fixtures) disproved the phase's original inference (split-in-half landmarks, volume A fixed) outright and pinned down the real convention: landmarks are INTERLEAVED (`source1,target1,source2,target2,...`), and volume B is fixed / volume A is moving -- the opposite of `RD`. Five of eight successful captures reproduce at the floating-point noise floor (three at RMS ~1e-12, two at RMS ~2e-10); the other three have a real, modest, measured residual (RMS 2.23 to 4.16). A round-2 follow-up pinned the exact cause: 3 or more DISTINCT landmark pairs reproduce exactly regardless of coplanarity; fewer than 3 (whether from a small landmark count or duplicate pairs) leaves the underlying least-squares system underdetermined enough to diverge slightly between ITK 2.4 and 5.4, the same upstream-numerics category as `FCA`/`SNC`/`SWS`. Not a gradual improvement either: 2 distinct pairs (RMS 4.16) measures worse than 1 (RMS 3.65) before reproduction jumps straight to the noise floor at 3 -- a threshold, not a monotonic shrink, disproving the capture round's own working assumption. See docs/COMPATIBILITY.md for the full evidence, including why the original inference was wrong. `uint8`/`int32`/`single` promote to `float` internally; no fixture exists for them. |
+| `FFFT` | `ForwardFFTImageFilter` (via the concrete `VnlForwardFFTImageFilter`) | **bounded deviation** | Packing confirmed exactly by a follow-up controlled capture round (`s15`: three small 8x8x8 volumes with analytically known spectra) after the original two mri-sized fixtures alone proved insufficient: real mode is the real part of the FFT rescaled to `[0,255]`; complex mode is the raw imaginary part (with a sign correction the captures themselves revealed -- `VnlForwardFFTImageFilter`'s own convention is the exact negation of the original's). 4 of 6 small captures are bit-exact, the other 2 at the double-precision noise floor. The two original mri-sized fixtures still show a real, larger residual (real mode RMS 20.2/maxabs 95.5; complex mode RMS 16121/maxabs 3.54495e6) even with the confirmed packing -- independently traced to a genuine difference in the original's own FFT on this composite (non-power-of-2) size, not a bug here: this codebase's own FFT was proven mathematically exact (RMS 1.8e-11) against MATLAB's own `fftn` on the same volume. See `src/opcodes/ffft.cpp`'s `StatusNote` for the full evidence. |
 | `FAAB` | `AntiAliasBinaryImageFilter` | **smoke-tested** | Runs and returns plausible output; reference fixtures exist but disagreement is too large to bound meaningfully (RMS in the hundreds). Output is a signed level-set field (positive inside). Integral input promotes to `float`; on `uint8` the negative (outside) half saturates to 0 on export. |
-| `FFFT` | `ForwardFFTImageFilter` (via the concrete `VnlForwardFFTImageFilter`) | **smoke-tested** | Runs cleanly on all four pixel types (real-modulus and raw-real-part output modes), but neither of the two captured fixtures is reproduced by any packing this project could determine, and a substantial diagnostic effort (Epic 4 Phase 2) could not pin down the original's exact per-mode formula from those two fixtures alone. No agreement claim is made for either mode. See `src/opcodes/ffft.cpp`'s `StatusNote` for the full diagnostic writeup, including a specific proposed disambiguating capture. |
 | `SCSS` | `bio::CellularAggregate` (BioCell remote module, not built into `mexitk`) | **unsupported** | Deliberately refused, not implemented. `SCSS` maps to a stateful mitosis/chemotaxis simulation whose native output is a triangulated surface mesh, not an image -- the captured fixture confirms the original's own output is a `[10 1]` vector of iteration counters, not anything `mexitk`'s image-in/image-out convention could return under this name without misleading a caller. Calling `SCSS` always throws `mexitk:SCSS:unsupported`. See `src/opcodes/scss.cpp` and `docs/itk_opcode_mapping.md`. |
 
 Status vocabulary, used consistently in the code, in `mexitk('?')`, and here:
@@ -134,7 +138,7 @@ Read it before relying on this for science.
 
 | Platform | State |
 |---|---|
-| macOS arm64 (`maca64`) | Builds, loads, 829/829 tests pass locally against Homebrew ITK. CI (including the full suite on a runner with **no ITK installed**, against static ITK) previously ran green through the RD/RTPS tree (774 tests, then more); it has not yet run against this Epic 4 Phase 2 tree (`FFFT`/`FGMS`/`SCSS`). |
+| macOS arm64 (`maca64`) | Builds, loads, 843/843 tests pass locally against Homebrew ITK. CI (including the full suite on a runner with **no ITK installed**, against static ITK) previously ran green through the RD/RTPS tree (774 tests, then more); it has not yet run against this Epic 4 Phase 2 tree (`FFFT`/`FGMS`/`SCSS`). |
 | Linux x86_64 (`glnxa64`) | Builds, loads, and previously ran the full suite green against static ITK on a runner with **no ITK installed**, through the RD/RTPS tree. Not yet re-verified against this Epic 4 Phase 2 tree (no Linux/static-ITK environment available for this phase's local work). Must be built with GCC 12 or older; see BUILDING.md. |
 | macOS x86_64 (`maci64`) | Legacy; built on a best-effort basis only. R2025b is MathWorks' final Intel-Mac release. |
 | Windows | Best-effort only; the ITK toolchain there is unresolved. Not attempted. |
