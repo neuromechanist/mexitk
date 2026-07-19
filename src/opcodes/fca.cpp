@@ -14,6 +14,7 @@
 
 #include "itkCurvatureAnisotropicDiffusionImageFilter.h"
 
+#include <cmath>
 #include <type_traits>
 
 namespace mexitk {
@@ -55,8 +56,15 @@ void RunFca(OpContext& ctx) {
   // backward in time, which is ill-posed (the original's behaviour on a
   // negative timeStep is unknown and unreproducible), so it is rejected
   // rather than reproduced; timeStep == 0 stays accepted as a defined no-op.
-  if (p[1] < 0.0) {
-    throw OpcodeError("mexitk:FCA:timeStep", "timeStep must not be negative.");
+  // Non-finite (NaN/+Inf) is rejected too, not just negative: measured
+  // directly, a NaN timeStep silently returns an all-NaN output on every
+  // voxel, and +Inf silently returns a mix of NaN and Inf values -- both
+  // with no exception. -Inf was already caught by `< 0.0` before this
+  // guard existed; NaN and +Inf were not, since NaN compares false against
+  // every ordered relational operator and +Inf does not compare < 0.0.
+  if (!std::isfinite(p[1]) || p[1] < 0.0) {
+    throw OpcodeError("mexitk:FCA:timeStep",
+                      "timeStep must be finite and not negative.");
   }
   filter->SetTimeStep(p[1]);
   filter->SetConductanceParameter(p[2]);
