@@ -79,15 +79,16 @@ void RunSlls(OpContext& ctx) {
   // Downstream binary threshold, fixture-verified -- and NOT what
   // LaplacianSegmentationLevelSetImageFilter's own header documents.
   // The header says "Positive values ... inside ... negative values ...
-  // outside", the opposite of SGAC/SSDLS. Tried exactly that against the
-  // fixture first (bounds [0, max] -> 255) and it was wrong by nearly the
-  // entire volume (442088/442368 voxels, mean output 101 vs the fixture's
-  // 154). The convention that actually matches, confirmed against the
-  // fixture, is the SAME as SGAC/SSDLS: negative values -> 255 (inside),
-  // bounds [lowest, 0] inclusive of the zero crossing. This is not a
-  // reproduction of the documented semantics; it is what the fixture
-  // evidence shows the original actually did. See StatusNote for the
-  // residual this leaves.
+  // outside", the opposite of SGAC (SSDLS is not a threshold comparison
+  // point here: it does not threshold its output at all, see ssdls.cpp).
+  // Tried exactly that against the fixture first (bounds [0, max] -> 255)
+  // and it was wrong by nearly the entire volume (442088/442368 voxels,
+  // mean output 101 vs the fixture's 154). The convention that actually
+  // matches, confirmed against the fixture, is the SAME as SGAC: negative
+  // values -> 255 (inside), bounds [lowest, 0] inclusive of the zero
+  // crossing. This is not a reproduction of the documented semantics; it
+  // is what the fixture evidence shows the original actually did. See
+  // StatusNote for the residual this leaves.
   using ThresholdType = itk::BinaryThresholdImageFilter<RealImage, InImage>;
   typename ThresholdType::Pointer thresh = ThresholdType::New();
   thresh->SetInput(filter->GetOutput());
@@ -124,8 +125,9 @@ class SllsOpcode : public Opcode {
            "set) matches SGAC/SSDLS, independently re-confirmed by "
            "rebuilding with the volumes swapped (422527/442368 differ, a "
            "completely different segmentation). Threshold polarity is the "
-           "SAME as SGAC/SSDLS (negative values -> 255), NOT what "
-           "LaplacianSegmentationLevelSetImageFilter's own header claims "
+           "SAME as SGAC (negative values -> 255; SSDLS does not threshold "
+           "its output, so it is not a comparison point for polarity), NOT "
+           "what LaplacianSegmentationLevelSetImageFilter's own header claims "
            "(positive-inside) -- see the comments in this file; the "
            "documented polarity was tried first and was wrong by nearly "
            "the entire volume. Seeds are accepted and ignored (verified: "

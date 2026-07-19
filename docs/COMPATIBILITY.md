@@ -811,18 +811,17 @@ tuned away, specifically so a future reader can see this was verified, not
 assumed uniform after the first opcode confirmed it.
 
 **Threshold polarity is opcode-specific, not filter-generic.** `SGAC` and
-`SSDLS` binary-threshold their raw level-set output to `{0, 255}`; `SLLS`
-does too, but `SSDLS` does not (see below). For the two that threshold,
-negative level-set values map to 255 (inside) and non-negative values map
-to 0 (outside). This matches what `GeodesicActiveContourLevelSetImageFilter`
-and `ShapeDetectionLevelSetImageFilter`'s own headers document
-("negative … inside … positive … outside") — but it does **not** match what
-`LaplacianSegmentationLevelSetImageFilter`'s own header documents for
-`SLLS` ("positive … inside … negative … outside", the opposite). The
+`SLLS` binary-threshold their raw level-set output to `{0, 255}`; `SSDLS`
+does not (see below). For the two that threshold, negative level-set values
+map to 255 (inside) and non-negative values map to 0 (outside). For `SGAC`
+this matches what `GeodesicActiveContourLevelSetImageFilter`'s own header
+documents ("negative … inside … positive … outside") — but it does **not**
+match what `LaplacianSegmentationLevelSetImageFilter`'s own header documents
+for `SLLS` ("positive … inside … negative … outside", the opposite). The
 documented `SLLS` polarity was tried first and was wrong by nearly the
 entire volume (442088/442368 voxels differed, mean output 101 vs. the
 fixture's 154); the polarity that actually matches the fixture is the same
-as `SGAC`/`SSDLS` (negative → 255), not what the class's own documentation
+as `SGAC`'s (negative → 255), not what `SLLS`'s own class documentation
 says. This is fixture evidence overriding documented semantics, recorded
 here rather than silently "fixed" to match the docstring.
 
