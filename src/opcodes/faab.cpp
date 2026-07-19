@@ -58,6 +58,16 @@ void RunFaab(OpContext& ctx) {
   using FilterType = itk::AntiAliasBinaryImageFilter<RealImage, RealImage>;
   typename FilterType::Pointer filter = FilterType::New();
   filter->SetInput(real);
+  // Deliberate passthrough, no finiteness guard: maximumRMSError is a
+  // convergence threshold checked as "has the RMS change dropped below
+  // this?" each iteration. A NaN value makes that comparison always false
+  // (NaN compares false against every ordered relational operator), so the
+  // early-stop criterion simply never fires and the solver falls back to
+  // running the full numberOfIterations -- a defined, if surprising,
+  // outcome, confirmed empirically (output matched the expected range from
+  // an already-passing test, not corrupted), unlike the silent-NaN/crash
+  // defect class fixed elsewhere in this file set (param-guard hardening,
+  // Epic 3).
   filter->SetMaximumRMSError(p[0]);
   // SetNumberOfIterations is IdentifierType on the FiniteDifferenceImageFilter
   // base, same as FCF; do NOT use the deprecated SetMaximumIterations alias

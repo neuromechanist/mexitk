@@ -87,6 +87,22 @@ classdef tPhase1FilterSmoke < matlab.unittest.TestCase
             end
         end
 
+        function flipNonFiniteDirectionBehavesAsNonzero(tc)
+            % Deliberate passthrough, no finiteness guard (param-guard
+            % hardening, Epic 3 issue #26): `p(i) != 0.0` is a plain IEEE
+            % comparison feeding a boolean flag, not a numeric ITK
+            % computation -- NaN != 0.0 and Inf != 0.0 are both well-defined
+            % (true), so a non-finite direction parameter just flips that
+            % axis, the same as any other nonzero value. Verified: bit-
+            % identical to the equivalent flip-on call, not merely
+            % non-crashing.
+            outNan = mexitk('FF', [NaN 0 0], tc.V);
+            outInf = mexitk('FF', [Inf 0 0], tc.V);
+            outOne = mexitk('FF', [1 0 0], tc.V);
+            tc.verifyEqual(outNan, outOne);
+            tc.verifyEqual(outInf, outOne);
+        end
+
         function flipMatchesBuiltinPerAxis(tc)
             % Not just a no-op / round-trip check: pin FF against MATLAB's own
             % flip() on each axis independently. XDIRECTION/YDIRECTION are

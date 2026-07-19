@@ -302,6 +302,25 @@ classdef tPhase4GradientsSmoke < matlab.unittest.TestCase
             tc.verifyGreaterThan(max(out50(:)), 20);
         end
 
+        function faabNanMaximumRMSErrorMatchesNeverTriggeringThreshold(tc)
+            % Deliberate passthrough, no finiteness guard (param-guard
+            % hardening, Epic 3 issue #26): maximumRMSError is a
+            % convergence threshold checked as "has the RMS change dropped
+            % below this?" each iteration; NaN makes that comparison
+            % always false (every ordered comparison against NaN is
+            % false), so early stopping never fires and the solver falls
+            % back to running the full numberOfIterations. Verified: this
+            % is not merely "didn't crash" -- the NaN-threshold output is
+            % bit-identical to a call with an extremely small but finite
+            % threshold (1e-300) that also can never trigger early
+            % stopping within 50 iterations, confirming the two really do
+            % take the same code path rather than coincidentally matching.
+            B = 255 * double(tc.Vu > 33);
+            outNan = mexitk('FAAB', [NaN 50 2], B);
+            outNeverTriggers = mexitk('FAAB', [1e-300 50 2], B);
+            tc.verifyEqual(outNan, outNeverTriggers);
+        end
+
         function faabUint8ClampsOutsideToZero(tc)
             % Same binarization in uint8. Measured: class uint8, min=0,
             % and a substantial fraction (72.8%) of voxels are exactly 0
