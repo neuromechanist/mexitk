@@ -31,7 +31,7 @@ Keeping ITK keeps the algorithms.
 
 ## Status: honest summary
 
-This is version 0.4.0.
+This is version 0.5.0.
 **35 of the original's 40 opcodes are implemented.**
 Epic 2 (Phases 1-3) extended reference capture to 30 of them and measured every one against
 the original binary; Epic 3 added `FMMCF` and `SFM` (Phase 1), then `SGAC`, `SLLS`, and `SSDLS`
@@ -41,8 +41,9 @@ The table below reflects that measurement, produced by `tools/classify_fixtures.
 Every claim in the table is enforced by the test suite
 (`tests/tReferenceExact.m`, `tests/tReferenceBounded.m`,
 `tests/tReferenceRejections.m`, plus the dedicated FCA/FOMT/SWS suites):
-772 tests locally (CI verification on this tree is pending; 721 of these were
-run green in CI on Linux x86_64 and macOS arm64 before `FMMCF`/`SFM` landed).
+774 tests, run green in CI on Linux x86_64 and macOS arm64
+(including the no-ITK-installed static-artifact runs)
+for the tree this table describes.
 
 | Opcode | ITK filter | Status | What that means |
 |---|---|---|---|
@@ -113,8 +114,8 @@ Read it before relying on this for science.
 
 | Platform | State |
 |---|---|
-| macOS arm64 (`maca64`) | Builds, loads, 772/772 tests pass locally against Homebrew ITK. CI verification of this exact tree (including the no-ITK-installed static-artifact run) is pending; the prior 721/721 ran green in CI before `FMMCF`/`SFM` landed. |
-| Linux x86_64 (`glnxa64`) | 721/721 previously verified in CI against static ITK, including the full suite on a runner with **no ITK installed**; CI verification of the 772-test tree with `FMMCF`/`SFM`/`SGAC`/`SLLS`/`SSDLS` is pending. Must be built with GCC 12 or older; see BUILDING.md. |
+| macOS arm64 (`maca64`) | Builds, loads, 774/774 tests pass. Verified locally against Homebrew ITK and in CI against static ITK, including the full suite on a runner with **no ITK installed**. |
+| Linux x86_64 (`glnxa64`) | Builds, loads, 774/774 tests pass. Verified in CI against static ITK, including the full suite on a runner with **no ITK installed**. Must be built with GCC 12 or older; see BUILDING.md. |
 | macOS x86_64 (`maci64`) | Legacy; built on a best-effort basis only. R2025b is MathWorks' final Intel-Mac release. |
 | Windows | Best-effort only; the ITK toolchain there is unresolved. Not attempted. |
 

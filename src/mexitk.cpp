@@ -44,7 +44,7 @@ using mexitk::PixelTypeName;
 using mexitk::RegisterBuiltinOpcodes;
 using mexitk::StatusName;
 
-constexpr const char* kVersion = "0.4.0";
+constexpr const char* kVersion = "0.5.0";
 constexpr const char* kUsage =
     "mexitk(operationName,[parameters],[inputArray1],[inputArray2],"
     "[seed(s)Array],[Image(s)Spacing])";
