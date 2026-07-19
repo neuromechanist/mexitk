@@ -53,9 +53,16 @@ class FmeanOpcode : public Opcode {
   const char* Description() const override {
     return "Mean filter over a rectangular neighbourhood";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kValidated; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists";
+    return "bit-identical to the original on every captured fixture (8 of "
+           "8, all four pixel types), asserted by tests/tReferenceExact.m. "
+           "This validated claim covers only the captured points, which "
+           "are all symmetric-radius (XRADIUS==YRADIUS): the XRADIUS/"
+           "YRADIUS axis swap applied here is family-inferred from "
+           "FMEDIAN/SNC/FVBIH's own fixture-proven swap, not independently "
+           "proven for FMEAN by an asymmetric-radius capture. See the "
+           "axis-mapping comment in this file and docs/COMPATIBILITY.md.";
   }
 
   const std::vector<ParamSpec>& Params() const override {

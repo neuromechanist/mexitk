@@ -114,7 +114,7 @@ end
 
 args = {f.opcode, f.params, vin};
 if isfield(f, 'seedArg')
-    args = [args, {cast([], class(vin))}, {f.seedArg}]; %#ok<CCAT>
+    args = [args, {cast([], class(vin))}, {f.seedArg}];
 end
 
 isMultiOutput = isfield(f, 'outputs') && f.success;

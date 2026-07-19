@@ -79,9 +79,11 @@ class SotOpcode : public Opcode {
   const char* Description() const override {
     return "Otsu threshold; returns a two-valued image";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kValidated; }
   const char* StatusNote() const override {
-    return "reference fixtures exist (sot_*). InsideValue/OutsideValue are "
+    return "bit-identical to the original on every captured fixture (6 of "
+           "6, all four pixel types), asserted by tests/tReferenceExact.m. "
+           "InsideValue/OutsideValue are "
            "hardcoded (inside = 0, outside = 255) on every pixel type, "
            "matching the original: the mask value is fixed at 255 "
            "regardless of pixel type, not the pixel type's own max, "

@@ -263,9 +263,13 @@ class FdmOpcode : public Opcode {
   const char* Description() const override {
     return "Danielsson distance map (distance output)";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kBoundedDeviation; }
   const char* StatusNote() const override {
-    return "reference fixtures exist (fdm_*). Reproduces the original's own "
+    return "bit-exact against every double/single/int32 fixture, asserted "
+           "by tests/tReferenceExact.m; uint8 has a small measured, "
+           "bounded residual, asserted by tests/tReferenceBounded.m -- not "
+           "a validated claim overall because of that uint8 gap. "
+           "Reproduces the original's own "
            "pipeline: X/Y axes permuted before and after the Danielsson "
            "pass (see docs/COMPATIBILITY.md, second capture campaign "
            "findings), distance computed NATIVELY at the input's own pixel "
@@ -300,9 +304,13 @@ class FdmvOpcode : public Opcode {
   const char* Description() const override {
     return "Danielsson distance map (Voronoi output)";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kBoundedDeviation; }
   const char* StatusNote() const override {
-    return "reference fixtures exist (fdmv_*). The \"V = Voronoi (not "
+    return "bit-exact against every single/int32 fixture, asserted by "
+           "tests/tReferenceExact.m; double and uint8 each have a small "
+           "measured, bounded residual (different mechanisms -- see "
+           "below), asserted by tests/tReferenceBounded.m -- not a "
+           "validated claim overall because of those gaps. The \"V = Voronoi (not "
            "Vector) map\" accessor identification is now fixture-"
            "confirmed, not just secondary-sourced: verified formula at "
            "object voxels is output = (id-1) * typeMax/(N-1) for "

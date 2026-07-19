@@ -69,17 +69,21 @@ class SncOpcode : public Opcode {
   const char* Description() const override {
     return "Neighborhood-connected region growing from seed(s)";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kBoundedDeviation; }
   const char* StatusNote() const override {
-    return "reference fixtures exist (snc_*). RadiusX maps onto ITK axis 1 "
-           "(MATLAB dim 2), RadiusY onto ITK axis 0 (MATLAB dim 1), matching "
-           "the original; radius [1,1,1] and the base threshold fixtures "
-           "are bit-exact, but NeighborhoodConnectedImageFilter itself "
-           "diverges from the original for other radii independent of "
-           "axis order (measured on a swap-invariant symmetric-radius "
-           "fixture), so this opcode is not bit-exact overall. See "
-           "docs/COMPATIBILITY.md for the measured bound. An empty seed "
-           "list yields an all-zero output.";
+    return "bit-exact against radius [1,1,1] and the base threshold "
+           "fixtures, asserted by tests/tReferenceExact.m; RadiusX maps "
+           "onto ITK axis 1 (MATLAB dim 2), RadiusY onto ITK axis 0 "
+           "(MATLAB dim 1), matching the original. Other radii have a "
+           "measured, bounded residual, asserted by "
+           "tests/tReferenceBounded.m: NeighborhoodConnectedImageFilter "
+           "itself diverges from the original independent of axis order "
+           "(measured on a swap-invariant symmetric-radius fixture), so "
+           "this opcode is not bit-exact overall. See "
+           "docs/COMPATIBILITY.md for the measured bounds. An empty seed "
+           "list yields an all-zero output; the captured "
+           "snc_emptyseed_double fixture is NOT a counterexample to that "
+           "-- see tests/tReferenceRejections.m for why.";
   }
 
   const std::vector<ParamSpec>& Params() const override {

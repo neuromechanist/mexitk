@@ -41,9 +41,10 @@ class FbbOpcode : public Opcode {
   const char* Description() const override {
     return "Binomial blur (repeated nearest-neighbour smoothing)";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kValidated; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists";
+    return "bit-identical to the original on every captured fixture (4 of "
+           "4, all four pixel types), asserted by tests/tReferenceExact.m.";
   }
 
   const std::vector<ParamSpec>& Params() const override {

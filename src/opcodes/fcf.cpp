@@ -84,10 +84,17 @@ class FcfOpcode : public Opcode {
   const char* Description() const override {
     return "Curvature flow (edge-preserving smoothing)";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kBoundedDeviation; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists. "
-           "uint8/int32 promote to float internally and have no reference.";
+    return "does not reproduce the original bit-for-bit: "
+           "CurvatureFlowImageFilter's numerics moved between ITK 2.4 and "
+           "5.x, the same class of upstream evolution as FCA. Measured "
+           "residual on double is at the floating-point noise floor (RMS "
+           "order 1e-15); single is small (order 1e-7); uint8/int32 "
+           "promote to float internally and have a much larger measured "
+           "residual (RMS up to about 7.3 on uint8). See "
+           "tests/tReferenceBounded.m for the exact measured numbers per "
+           "fixture.";
   }
 
   const std::vector<ParamSpec>& Params() const override {

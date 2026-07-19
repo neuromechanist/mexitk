@@ -59,9 +59,14 @@ class SctOpcode : public Opcode {
   const char* Description() const override {
     return "Connected-threshold region growing from seed(s)";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kValidated; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists. "
+    return "bit-identical to the original on every fixture the original "
+           "itself accepted (14 of 17 captured), asserted by "
+           "tests/tReferenceExact.m; the other three are a mutual "
+           "rejection (an out-of-range seed) and two accepts-more cases "
+           "(a dimension-maximum seed, an arg4-class-mismatch call), see "
+           "tests/tReferenceRejections.m. "
            "ReplaceValue is hardcoded to 255 (inferred: the registry exposes "
            "no ReplaceValue and ITK's ConnectedThreshold example hardcodes "
            "255; ITK's own default is 1). Seed coordinates map onto image "

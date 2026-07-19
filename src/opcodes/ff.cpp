@@ -49,9 +49,13 @@ class FfOpcode : public Opcode {
   const char* Name() const override { return "FF"; }
   Category GetCategory() const override { return Category::kFilter; }
   const char* Description() const override { return "Flip image along selected axes"; }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kValidated; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists";
+    return "bit-identical to the original on every captured fixture (12 of "
+           "12, all four pixel types), asserted by tests/tReferenceExact.m. "
+           "XDIRECTION/YDIRECTION are axis-swapped relative to their "
+           "registry order; see the axis-mapping comment in this file and "
+           "docs/COMPATIBILITY.md.";
   }
 
   const std::vector<ParamSpec>& Params() const override {

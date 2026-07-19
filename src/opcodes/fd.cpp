@@ -88,11 +88,19 @@ class FdOpcode : public Opcode {
   const char* Name() const override { return "FD"; }
   Category GetCategory() const override { return Category::kFilter; }
   const char* Description() const override { return "Directional derivative of a given order"; }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kValidated; }
   const char* StatusNote() const override {
-    return "uint8 input is promoted to float for the derivative and cast back, "
-           "because ITK's DerivativeImageFilter requires a signed output pixel "
-           "type; int32/float/double run natively. No reference capture exists.";
+    return "bit-identical to the original on every fixture where the "
+           "original itself succeeded (double/single, both SETDIRECTION "
+           "values captured), asserted by tests/tReferenceExact.m. The "
+           "original rejects uint8/int32 input outright; mexitk accepts "
+           "both (uint8 promoted to float for the derivative and cast "
+           "back, since ITK's DerivativeImageFilter requires a signed "
+           "output pixel type; int32 runs natively) and returns a defined "
+           "result, with no agreement claim for that pixel-type pair (see "
+           "tests/tReferenceRejections.m). SETDIRECTION is axis-swapped "
+           "(0<->1, 2 unchanged); see the axis-mapping comment in this "
+           "file and docs/COMPATIBILITY.md.";
   }
 
   const std::vector<ParamSpec>& Params() const override {

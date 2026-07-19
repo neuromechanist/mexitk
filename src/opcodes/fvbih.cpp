@@ -71,12 +71,18 @@ class FvbihOpcode : public Opcode {
   const char* Description() const override {
     return "Iterative binary voting hole filling";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kValidated; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists. "
-           "MajorityThreshold is an offset above 50% of the neighborhood, not "
-           "an absolute vote count; a large value silently makes the filter "
-           "a no-op, matching ITK/original semantics.";
+    return "bit-identical to the original on every fixture the original "
+           "itself accepted (9 of 10 captured), asserted by "
+           "tests/tReferenceExact.m; the tenth (foreground=300 on uint8) is "
+           "a deliberate mexitk:paramRange rejection, see "
+           "tests/tReferenceRejections.m. radiusX/radiusY are axis-swapped; "
+           "see the axis-mapping comment in this file and "
+           "docs/COMPATIBILITY.md. MajorityThreshold is an offset above 50% "
+           "of the neighborhood, not an absolute vote count; a large value "
+           "silently makes the filter a no-op, matching ITK/original "
+           "semantics.";
   }
 
   const std::vector<ParamSpec>& Params() const override {

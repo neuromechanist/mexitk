@@ -78,9 +78,10 @@ class FgmOpcode : public Opcode {
   const char* Description() const override {
     return "Gradient magnitude (central differences)";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kValidated; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists. "
+    return "bit-identical to the original on every captured fixture (4 of "
+           "4, all four pixel types), asserted by tests/tReferenceExact.m. "
            "Distinct algorithm from FGMRG (central differences vs recursive "
            "Gaussian derivative); the two return different output on the "
            "same volume by design. uint8/int32 export through a saturating "

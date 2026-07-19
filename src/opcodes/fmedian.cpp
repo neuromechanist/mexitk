@@ -52,9 +52,12 @@ class FmedianOpcode : public Opcode {
   const char* Description() const override {
     return "Median filter over a rectangular neighbourhood";
   }
-  Status GetStatus() const override { return Status::kSmokeTested; }
+  Status GetStatus() const override { return Status::kValidated; }
   const char* StatusNote() const override {
-    return "runs and returns plausible output; no reference capture exists";
+    return "bit-identical to the original on every captured fixture (10 of "
+           "10, all four pixel types), asserted by tests/tReferenceExact.m. "
+           "XRADIUS/YRADIUS are axis-swapped; see the axis-mapping comment "
+           "in this file and docs/COMPATIBILITY.md.";
   }
 
   const std::vector<ParamSpec>& Params() const override {
