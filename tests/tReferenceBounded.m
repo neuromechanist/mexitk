@@ -173,7 +173,28 @@ classdef tReferenceBounded < matlab.unittest.TestCase
             ... match EXACTLY; every differing voxel is a genuinely computed
             ... arrival time differing only at double precision's own limit
             ... -- see src/opcodes/sfm.cpp.
-            'SFM', 'sfm_stop100_seedS1_double', 6.10523e-15, 9.01501e-14};
+            'SFM', 'sfm_stop100_seedS1_double', 6.10523e-15, 9.01501e-14; ...
+            ...
+            ... SLLS: LaplacianSegmentationLevelSetImageFilter (Epic 3
+            ... Phase 2, two-volume opcode). 280/442368 voxels (0.063%)
+            ... land on the wrong side of the binary threshold; every one
+            ... of those voxels' raw, pre-threshold level-set value is
+            ... within 0.077 of the zero crossing (median 0.00087) -- the
+            ... floating-point noise floor of a 50-iteration finite-
+            ... difference solver flipping a boundary voxel's sign, not an
+            ... algorithmic difference. RMS/max-abs are measured on the
+            ... exported {0,255} categorical output, so max-abs is 255 (a
+            ... full category flip) even though the underlying level-set
+            ... values differ by fractions of a percent -- see
+            ... src/opcodes/slls.cpp.
+            'SLLS', 'slls_slls_volB_seedS1_double', 6.41545, 255.0; ...
+            ...
+            ... SSDLS: ShapeDetectionLevelSetImageFilter (Epic 3 Phase 2,
+            ... two-volume opcode). Raw, un-thresholded narrow-band output
+            ... (unlike SGAC/SLLS): floating-point noise floor of a
+            ... 50-iteration finite-difference solver, the same category as
+            ... SFM's own bounded deviation -- see src/opcodes/ssdls.cpp.
+            'SSDLS', 'ssdls_ssdls_volB_seedS1_double', 6.69151e-08, 5.25301e-06};
     end
 
     methods (Static)
@@ -199,11 +220,11 @@ classdef tReferenceBounded < matlab.unittest.TestCase
             rmsMeasured = boundedCase.rmsMeasured;
             maxMeasured = boundedCase.maxMeasured;
 
-            [fx, vin] = mexitkFixture(name);
+            [fx, vin, vinB] = mexitkFixture(name);
             tc.assertTrue(fx.success, sprintf( ...
                 '%s: fixture recorded success=false', name));
 
-            got = mexitkFixtureCall(opcode, fx, vin);
+            got = mexitkFixtureCall(opcode, fx, vin, vinB);
 
             e = abs(double(got(:)) - double(fx.output(:)));
             rms = sqrt(mean(e .^ 2));

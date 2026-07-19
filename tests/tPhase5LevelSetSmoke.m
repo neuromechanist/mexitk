@@ -1,14 +1,17 @@
 classdef tPhase5LevelSetSmoke < matlab.unittest.TestCase
     % Smoke tests for the Phase 5 (Epic 3 Phase 1) level-set opcodes, FMMCF
-    % and SFM. Reference fixtures exist for both (see tests/tReferenceBounded.m
-    % -- neither reproduces the original bit-for-bit, so their measured
-    % deviations live there, not in tReferenceExact.m), but each fixture
-    % covers exactly one parameter set on double input; this suite instead
-    % asserts structural invariants (shape, class, monotonicity, and ITK's
-    % own documented semantics) across all four pixel types and the
-    % parameter/seed validation paths. Every non-guaranteed assertion here
-    % was empirically confirmed against a real build before being
-    % committed; none is guessed from the ITK header evidence alone.
+    % and SFM, plus the Epic 3 Phase 2 level-set opcodes, SGAC, SLLS, and
+    % SSDLS. Reference fixtures exist for all five (see
+    % tests/tReferenceExact.m for SGAC; tests/tReferenceBounded.m for
+    % FMMCF, SFM, SLLS, and SSDLS -- none of the last four reproduces the
+    % original bit-for-bit, so their measured deviations live there, not in
+    % tReferenceExact.m), but each fixture covers exactly one parameter set
+    % on double input; this suite instead asserts structural invariants
+    % (shape, class, monotonicity, and ITK's own documented semantics)
+    % across all four pixel types and the parameter/seed/arity validation
+    % paths. Every non-guaranteed assertion here was empirically confirmed
+    % against a real build before being committed; none is guessed from the
+    % ITK header evidence alone.
     %
     % SPDX-License-Identifier: BSD-3-Clause
     % Copyright (c) 2026, Seyed Yahya Shirazi <shirazi@ieee.org>
@@ -271,6 +274,143 @@ classdef tPhase5LevelSetSmoke < matlab.unittest.TestCase
             sub = tPhase5LevelSetSmoke.Seed;
             tc.verifyError(@() withOutputs(2, @() mexitk('SFM', 100, tc.V, [], sub)), ...
                 'mexitk:nargout');
+        end
+    end
+
+    methods (Test)  % SGAC / SLLS / SSDLS: shared two-volume-opcode contract
+        function twoVolumeOpcodesRunAndPreserveShapeAndClass(tc)
+            % Same volume passed as both feature image (volumeA) and
+            % initial level set (volumeB): not a meaningful segmentation,
+            % but a real, finite computation that exercises every pixel
+            % class through the full role-assignment/threshold pipeline.
+            % A small MaxIteration keeps this fast (measured: all three
+            % opcodes across all four classes complete in well under a
+            % second on the mri volume).
+            for f = {@double, @single, @uint8, @int32}
+                vin = f{1}(tc.Vu);
+
+                outGac = mexitk('SGAC', [1 1 1 0.02 5], vin, vin);
+                tc.verifyClass(outGac, class(vin));
+                tc.verifySize(outGac, size(vin));
+                tc.verifyTrue(all(isfinite(double(outGac(:)))), sprintf( ...
+                    'SGAC (%s): non-finite value in output', class(vin)));
+                tc.verifyTrue(all(ismember(unique(outGac(:)), [0 255])), sprintf( ...
+                    'SGAC (%s): output is not binary {0,255}', class(vin)));
+
+                outLls = mexitk('SLLS', [0.5 1 1 0.02 5], vin, vin);
+                tc.verifyClass(outLls, class(vin));
+                tc.verifySize(outLls, size(vin));
+                tc.verifyTrue(all(isfinite(double(outLls(:)))), sprintf( ...
+                    'SLLS (%s): non-finite value in output', class(vin)));
+                tc.verifyTrue(all(ismember(unique(outLls(:)), [0 255])), sprintf( ...
+                    'SLLS (%s): output is not binary {0,255}', class(vin)));
+
+                outSdls = mexitk('SSDLS', [1 1 0.02 5], vin, vin);
+                tc.verifyClass(outSdls, class(vin));
+                tc.verifySize(outSdls, size(vin));
+                tc.verifyTrue(all(isfinite(double(outSdls(:)))), sprintf( ...
+                    'SSDLS (%s): non-finite value in output', class(vin)));
+                % SSDLS is not thresholded: bounded within the narrow-band
+                % solver's own range, measured [-4, 4] on this volume for
+                % every signed pixel class; uint8 (unsigned) clamps the
+                % negative half of that range to 0 on export (the same
+                % saturate-on-export convention as SFM's sentinel), so its
+                % own minimum is 0, not -4.
+                tc.verifyGreaterThanOrEqual(min(double(outSdls(:))), -4);
+                tc.verifyLessThanOrEqual(max(double(outSdls(:))), 4);
+            end
+        end
+
+        function twoVolumeOpcodesRequireVolumeB(tc)
+            % Omitting volumeB (either by passing only 3 arguments, or an
+            % explicit empty 4th argument -- OptionalVolume in mexitk.cpp
+            % treats both identically) must error with each opcode's own
+            % RequireVolumeB id, not a generic ITK null-input exception.
+            tc.verifyError(@() mexitk('SGAC', [1 1 1 0.02 5], tc.V), 'mexitk:SGAC:volumeB');
+            tc.verifyError(@() mexitk('SGAC', [1 1 1 0.02 5], tc.V, []), 'mexitk:SGAC:volumeB');
+            tc.verifyError(@() mexitk('SLLS', [0.5 1 1 0.02 5], tc.V), 'mexitk:SLLS:volumeB');
+            tc.verifyError(@() mexitk('SLLS', [0.5 1 1 0.02 5], tc.V, []), 'mexitk:SLLS:volumeB');
+            tc.verifyError(@() mexitk('SSDLS', [1 1 0.02 5], tc.V), 'mexitk:SSDLS:volumeB');
+            tc.verifyError(@() mexitk('SSDLS', [1 1 0.02 5], tc.V, []), 'mexitk:SSDLS:volumeB');
+        end
+
+        function twoVolumeOpcodesRejectMismatchedVolumeBClass(tc)
+            % RequireVolumeB also checks volumeB's class matches volumeA's;
+            % see the comment on RequireVolumeB in mexitk_common.h for why
+            % this is not a verbatim reproduction of the original's own
+            % documented error text.
+            tc.verifyError(@() mexitk('SGAC', [1 1 1 0.02 5], tc.V, single(tc.V)), ...
+                'mexitk:SGAC:volumeBClass');
+            tc.verifyError(@() mexitk('SLLS', [0.5 1 1 0.02 5], tc.V, single(tc.V)), ...
+                'mexitk:SLLS:volumeBClass');
+            tc.verifyError(@() mexitk('SSDLS', [1 1 0.02 5], tc.V, single(tc.V)), ...
+                'mexitk:SSDLS:volumeBClass');
+        end
+
+        function twoVolumeOpcodesRejectShortParamCount(tc)
+            tc.verifyError(@() mexitk('SGAC', [1 1 1 0.02], tc.V, tc.V), 'mexitk:params');
+            tc.verifyError(@() mexitk('SLLS', [0.5 1 1 0.02], tc.V, tc.V), 'mexitk:params');
+            tc.verifyError(@() mexitk('SSDLS', [1 1 0.02], tc.V, tc.V), 'mexitk:params');
+        end
+
+        function twoVolumeOpcodesRejectNonFiniteParams(tc)
+            % Deviation 12: every floating-point parameter without a prior
+            % sign/range constraint must reject NaN/+-Inf explicitly (see
+            % each opcode's own non-finite guards). MaxIteration is
+            % self-guarded via CastParam<itk::IdentifierType> and is
+            % exercised by the *IntegralParamRejectsNonFinite tests below.
+            tc.verifyError(@() mexitk('SGAC', [NaN 1 1 0.02 5], tc.V, tc.V), ...
+                'mexitk:SGAC:propagationScaling');
+            tc.verifyError(@() mexitk('SGAC', [1 Inf 1 0.02 5], tc.V, tc.V), ...
+                'mexitk:SGAC:CurvatureScaling');
+            tc.verifyError(@() mexitk('SGAC', [1 1 -Inf 0.02 5], tc.V, tc.V), ...
+                'mexitk:SGAC:AdvectionScaling');
+            tc.verifyError(@() mexitk('SGAC', [1 1 1 NaN 5], tc.V, tc.V), ...
+                'mexitk:SGAC:MaximumRMSError');
+
+            tc.verifyError(@() mexitk('SLLS', [NaN 1 1 0.02 5], tc.V, tc.V), ...
+                'mexitk:SLLS:IsoSurfaceValue');
+            tc.verifyError(@() mexitk('SLLS', [0.5 Inf 1 0.02 5], tc.V, tc.V), ...
+                'mexitk:SLLS:PropagationScaling');
+            tc.verifyError(@() mexitk('SLLS', [0.5 1 -Inf 0.02 5], tc.V, tc.V), ...
+                'mexitk:SLLS:CurvatureScaling');
+            tc.verifyError(@() mexitk('SLLS', [0.5 1 1 NaN 5], tc.V, tc.V), ...
+                'mexitk:SLLS:MaximumRMSError');
+
+            tc.verifyError(@() mexitk('SSDLS', [NaN 1 0.02 5], tc.V, tc.V), ...
+                'mexitk:SSDLS:propagationScaling');
+            tc.verifyError(@() mexitk('SSDLS', [1 Inf 0.02 5], tc.V, tc.V), ...
+                'mexitk:SSDLS:curvatureScaling');
+            tc.verifyError(@() mexitk('SSDLS', [1 1 -Inf 5], tc.V, tc.V), ...
+                'mexitk:SSDLS:MaximumRMSError');
+        end
+
+        function twoVolumeOpcodesRejectNonFiniteMaxIteration(tc)
+            % MaxIteration routes through CastParam<itk::IdentifierType>,
+            % which self-guards non-finite and negative values under
+            % mexitk:paramRange, the same shared id every other integral
+            % CastParam use in this codebase produces (see e.g. FMMCF's own
+            % fmmcfRejectsNegativeStencilRadius).
+            tc.verifyError(@() mexitk('SGAC', [1 1 1 0.02 NaN], tc.V, tc.V), 'mexitk:paramRange');
+            tc.verifyError(@() mexitk('SLLS', [0.5 1 1 0.02 NaN], tc.V, tc.V), 'mexitk:paramRange');
+            tc.verifyError(@() mexitk('SSDLS', [1 1 0.02 NaN], tc.V, tc.V), 'mexitk:paramRange');
+        end
+
+        function twoVolumeOpcodesSeedsAcceptedAndIgnored(tc)
+            % Same convention as SWS/SFM: a seed argument is accepted but
+            % never referenced by these three opcodes' Run functions.
+            sub = tPhase5LevelSetSmoke.Seed;
+            outGacSeed = mexitk('SGAC', [1 1 1 0.02 5], tc.V, tc.V, sub);
+            outGacNoSeed = mexitk('SGAC', [1 1 1 0.02 5], tc.V, tc.V);
+            tc.verifyEqual(outGacSeed, outGacNoSeed);
+
+            outLlsSeed = mexitk('SLLS', [0.5 1 1 0.02 5], tc.V, tc.V, sub);
+            outLlsNoSeed = mexitk('SLLS', [0.5 1 1 0.02 5], tc.V, tc.V);
+            tc.verifyEqual(outLlsSeed, outLlsNoSeed);
+
+            outSdlsSeed = mexitk('SSDLS', [1 1 0.02 5], tc.V, tc.V, sub);
+            outSdlsNoSeed = mexitk('SSDLS', [1 1 0.02 5], tc.V, tc.V);
+            tc.verifyEqual(outSdlsSeed, outSdlsNoSeed);
         end
     end
 end
