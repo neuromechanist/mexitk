@@ -162,6 +162,28 @@ classdef tFixtureHygiene < matlab.unittest.TestCase
                 tc.verifyClass(f.inputRecipe, 'char');
                 tc.verifyNotEmpty(f.inputRecipe, sprintf('%s: empty inputRecipe', name));
             end
+            % arg4Recipe/arg4Hash (Epic 3 Phase 2): the second-volume
+            % counterpart to inputRecipe/inputHash, present on two-volume
+            % fixtures (SGAC/SLLS/SSDLS, plus the not-yet-implemented
+            % RD/RTPS registration fixtures which were captured with a
+            % second volume too). Same char/non-empty shape check as
+            % inputRecipe, plus a format check inputHash itself does not
+            % get: arg4Hash must actually look like an MD5 digest (32
+            % lowercase hex characters, local_md5's own output format), so
+            % a malformed future two-volume fixture is caught here rather
+            % than surfacing later as a confusing mismatch inside
+            % reconstructFixtureInput's own verification.
+            if isfield(f, 'arg4Recipe')
+                tc.verifyClass(f.arg4Recipe, 'char');
+                tc.verifyNotEmpty(f.arg4Recipe, sprintf('%s: empty arg4Recipe', name));
+            end
+            if isfield(f, 'arg4Hash')
+                tc.verifyClass(f.arg4Hash, 'char');
+                tc.verifyNotEmpty(f.arg4Hash, sprintf('%s: empty arg4Hash', name));
+                tc.verifyTrue(~isempty(regexp(f.arg4Hash, '^[0-9a-f]{32}$', 'once')), sprintf( ...
+                    '%s: arg4Hash "%s" is not a 32-character lowercase hex MD5 digest', ...
+                    name, f.arg4Hash));
+            end
             expectedPrefix = [lower(f.opcode) '_'];
             tc.verifyTrue(startsWith(lower(name), expectedPrefix), sprintf( ...
                 '%s: filename does not start with "%s" (opcode %s)', name, expectedPrefix, f.opcode));

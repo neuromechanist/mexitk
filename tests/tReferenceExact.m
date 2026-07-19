@@ -139,17 +139,23 @@ classdef tReferenceExact < matlab.unittest.TestCase
             'fls_2_int32', ...
             'fsn_10_240_10_170_double', 'fsn_10_240_10_170_int32', ...
             'fsn_10_240_10_170_single', 'fsn_10_240_10_170_uint8', ...
-            'fsn_10_240_10_44_uint8'};
+            'fsn_10_240_10_44_uint8', ...
+            ... SGAC: GeodesicActiveContourLevelSetImageFilter (Epic 3
+            ... Phase 2, the first two-volume opcode). Bit-exact on the one
+            ... captured fixture; SLLS and SSDLS, the other two level-set
+            ... opcodes from the same phase, both have a small measured
+            ... residual instead (see tReferenceBounded.m).
+            'sgac_sgac_volB_seedS1_double'};
     end
 
     methods (Test)
         function bitIdenticalToOriginal(tc, exactFixture)
-            [fx, vin] = mexitkFixture(exactFixture);
+            [fx, vin, vinB] = mexitkFixture(exactFixture);
             tc.assertTrue(fx.success, sprintf( ...
                 '%s: fixture recorded success=false, does not belong in tReferenceExact', ...
                 exactFixture));
 
-            got = mexitkFixtureCall(fx.opcode, fx, vin);
+            got = mexitkFixtureCall(fx.opcode, fx, vin, vinB);
 
             tc.verifyClass(got, fx.outputClass, sprintf( ...
                 '%s: output class does not match matitk', exactFixture));

@@ -32,14 +32,16 @@ Keeping ITK keeps the algorithms.
 ## Status: honest summary
 
 This is version 0.4.0.
-**32 of the original's 40 opcodes are implemented.**
+**35 of the original's 40 opcodes are implemented.**
 Epic 2 (Phases 1-3) extended reference capture to 30 of them and measured every one against
-the original binary; Epic 3 Phase 1 added `FMMCF` and `SFM` with their own captured fixtures.
+the original binary; Epic 3 added `FMMCF` and `SFM` (Phase 1), then `SGAC`, `SLLS`, and `SSDLS`
+(Phase 2, the first opcodes to genuinely consume a second image volume), each with its own
+captured fixture.
 The table below reflects that measurement, produced by `tools/classify_fixtures.m`.
 Every claim in the table is enforced by the test suite
 (`tests/tReferenceExact.m`, `tests/tReferenceBounded.m`,
 `tests/tReferenceRejections.m`, plus the dedicated FCA/FOMT/SWS suites):
-741 tests locally (CI verification on this tree is pending; 721 of these were
+772 tests locally (CI verification on this tree is pending; 721 of these were
 run green in CI on Linux x86_64 and macOS arm64 before `FMMCF`/`SFM` landed).
 
 | Opcode | ITK filter | Status | What that means |
@@ -58,6 +60,7 @@ run green in CI on Linux x86_64 and macOS arm64 before `FMMCF`/`SFM` landed).
 | `SCT` | `ConnectedThresholdImageFilter` | **validated** | Bit-identical to the original on every fixture it itself accepted (14 of 17 captured); the rest are rejection/accepts-more cases. ReplaceValue hardcoded to 255 (inferred from ITK's example; registry exposes none). |
 | `SIC` | `IsolatedConnectedImageFilter` | **validated** | Bit-identical to the original on every fixture with two valid seed groups (7 of 10 captured). Needs at least 2 seed points. |
 | `SOT` | `OtsuThresholdImageFilter` | **validated** | Bit-identical to the original on every captured fixture (6 of 6, all four pixel types). Inside/outside are a fixed `{0,255}` on every pixel type, matching the original (not the pixel type's own max, an earlier unverified assumption). |
+| `SGAC` | `GeodesicActiveContourLevelSetImageFilter` | **validated** | Bit-identical to the original on the one captured fixture (double). The first two-volume opcode: volume A is the feature (edge-potential) image, volume B is the initial level set. The original's own console output corroborates volume A's role ("Input A will be used as feature image."); which ITK setter volume B is wired to was confirmed by a swap test against the fixture. Threshold polarity (negative level-set values -> 255) matches ITK's own documented convention for this filter. See docs/COMPATIBILITY.md for the full sourcing. |
 | `FCA` | `CurvatureAnisotropicDiffusionImageFilter` | **bounded deviation** | Not bit-identical. RMS 2.6e-3, max 4.7e-2 at 1 iteration over a 0-88 range; compounds with iterations. |
 | `SWS` | `WatershedImageFilter` | **bounded deviation** | Region count matches exactly at every tested setting; label images are not bit-identical at fine levels. |
 | `FBL` | `BilateralImageFilter` | **bounded deviation** | Bit-identical on int32/single/uint8; double has a floating-point-noise-floor residual (RMS order 1e-13 to 1e-12). |
@@ -75,6 +78,8 @@ run green in CI on Linux x86_64 and macOS arm64 before `FMMCF`/`SFM` landed).
 | `FVMI` | `HessianRecursiveGaussianImageFilter` + `Hessian3DToVesselnessMeasureImageFilter` | **bounded deviation** | Not bit-identical on any captured fixture; RMS 0.08-0.51, a real algorithmic drift from ITK's evolving Hessian/vesselness numerics, not noise. |
 | `SFM` | `FastMarchingImageFilter` | **bounded deviation** | Not bit-identical on the one captured fixture (double, stoppingTime=100; RMS 6.1e-15, max 9.0e-14), at the floating-point noise floor. Returns the RAW arrival-time map with ITK's own LargeValue sentinel intact (`NumericTraits<double>::max()/2`, 61% of voxels here); the 270838 sentinel voxels match the original exactly. `uint8`/`int32` promote to `float` internally and saturate the sentinel on export; no fixture exists for them. |
 | `SNC` | `NeighborhoodConnectedImageFilter` | **bounded deviation** | Bit-identical at radius [1,1,1] and the base threshold fixtures; other radii have a measured residual independent of axis order (an upstream algorithm difference, the same class as FCA/SWS). |
+| `SLLS` | `LaplacianSegmentationLevelSetImageFilter` | **bounded deviation** | Not bit-identical on the one captured fixture (double): 280/442368 voxels (0.063%) land on the wrong side of the binary threshold, each within 0.077 of the zero crossing -- the floating-point noise floor of a 50-iteration finite-difference solver. Two-volume opcode, same role assignment as `SGAC`. Threshold polarity is the SAME as `SGAC` (negative -> 255), the opposite of what this filter's own ITK header documents; the documented polarity was tried first and was wrong by nearly the entire volume. |
+| `SSDLS` | `ShapeDetectionLevelSetImageFilter` | **bounded deviation** | Not bit-identical on the one captured fixture (double): max-abs 5.25e-6, RMS 6.7e-8, the floating-point noise floor, the same category as `SFM`'s. Two-volume opcode, same role assignment as `SGAC`/`SLLS`. Unlike `SGAC`/`SLLS`, returns the raw, un-thresholded narrow-band level set directly (bounded +-4 on the captured fixture). |
 | `FAAB` | `AntiAliasBinaryImageFilter` | **smoke-tested** | Runs and returns plausible output; reference fixtures exist but disagreement is too large to bound meaningfully (RMS in the hundreds). Output is a signed level-set field (positive inside). Integral input promotes to `float`; on `uint8` the negative (outside) half saturates to 0 on export. |
 
 Status vocabulary, used consistently in the code, in `mexitk('?')`, and here:
@@ -86,7 +91,7 @@ Status vocabulary, used consistently in the code, in `mexitk('?')`, and here:
 - **smoke-tested**: runs and returns plausible output, but no reference capture exists.
 - **untested**: implemented from the ITK mapping only; never run against a reference.
 
-The remaining 8 opcodes are **not implemented**.
+The remaining 5 opcodes are **not implemented**.
 They are catalogued in `docs/matitk_opcode_registry.txt` (the original binary's own parameter dump)
 and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`.
 
@@ -108,8 +113,8 @@ Read it before relying on this for science.
 
 | Platform | State |
 |---|---|
-| macOS arm64 (`maca64`) | Builds, loads, 741/741 tests pass locally against Homebrew ITK. CI verification of this exact tree (including the no-ITK-installed static-artifact run) is pending; the prior 721/721 ran green in CI before `FMMCF`/`SFM` landed. |
-| Linux x86_64 (`glnxa64`) | 721/721 previously verified in CI against static ITK, including the full suite on a runner with **no ITK installed**; CI verification of the 741-test tree with `FMMCF`/`SFM` is pending. Must be built with GCC 12 or older; see BUILDING.md. |
+| macOS arm64 (`maca64`) | Builds, loads, 772/772 tests pass locally against Homebrew ITK. CI verification of this exact tree (including the no-ITK-installed static-artifact run) is pending; the prior 721/721 ran green in CI before `FMMCF`/`SFM` landed. |
+| Linux x86_64 (`glnxa64`) | 721/721 previously verified in CI against static ITK, including the full suite on a runner with **no ITK installed**; CI verification of the 772-test tree with `FMMCF`/`SFM`/`SGAC`/`SLLS`/`SSDLS` is pending. Must be built with GCC 12 or older; see BUILDING.md. |
 | macOS x86_64 (`maci64`) | Legacy; built on a best-effort basis only. R2025b is MathWorks' final Intel-Mac release. |
 | Windows | Best-effort only; the ITK toolchain there is unresolved. Not attempted. |
 
@@ -144,6 +149,13 @@ b = mexitk('FCA', [5 0.0625 3.0], double(V));
 % Watershed; returns a label image
 labels = mexitk('SWS', [0.05 0.01], double(V));
 
+% Geodesic active contour: a two-volume opcode. inputArray1 is the feature
+% image; inputArray2 is the initial level set (a seed mask, here a crude
+% intensity threshold), the reverse of what the argument names suggest --
+% see the gotcha below.
+seedMask = double(V > 40);
+seg = mexitk('SGAC', [1 1 1 0.02 50], double(V), seedMask);
+
 mexitk('?')                          % list opcodes with their validation status
 ```
 
@@ -172,6 +184,11 @@ This mirrors the original, and it is why `FOMT` on `uint8` differs from `FOMT` o
   This is an upstream off-by-one that callers depend on, so it is preserved.
 - **`SWS` accepts a seed argument and ignores it.** Watershed never consumes it.
   Callers pass one anyway and index the label image afterwards.
+- **`SGAC`/`SLLS`/`SSDLS` require `inputArray2` and use it as the initial level set**,
+  with `inputArray1` as the feature image -- the reverse of what either name suggests.
+  The original's own console output corroborates `inputArray1`'s role; which ITK setter
+  `inputArray2` is wired to was confirmed by a swap test against each fixture, not assumed.
+  See docs/COMPATIBILITY.md for the full sourcing. All three also accept and ignore a seed argument.
 
 ## Testing
 

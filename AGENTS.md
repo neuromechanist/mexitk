@@ -31,7 +31,7 @@ src/
 ├── mexitk.cpp          # mexFunction entry: arg parsing, validation, dispatch, diagnostics
 ├── mexitk_common.h     # pixel-type dispatch + mxArray <-> itk::Image bridge (zero-copy import)
 ├── opcode.h/.cpp       # the opcode registry; RegisterBuiltinOpcodes() is the one list
-└── opcodes/            # 30 files for 32 opcodes: one file per opcode, except
+└── opcodes/            # 33 files for 35 opcodes: one file per opcode, except
                         # fdg.cpp (FDG + FGA) and fdm.cpp (FDM + FDMV), each a
                         # deliberate shared pair, not an accident
 matlab/                 # built MEX lands here; run_mexitk_tests.m
@@ -58,8 +58,8 @@ so documented status cannot drift from what the code claims.
 
 ### Honesty about validation is the product
 
-32 of 40 opcodes are implemented, and they are not equally trustworthy:
-14 are validated, 17 have a measured bounded deviation, and 1 (FAAB) is
+35 of 40 opcodes are implemented, and they are not equally trustworthy:
+15 are validated, 19 have a measured bounded deviation, and 1 (FAAB) is
 smoke-tested because its disagreement is too large to bound meaningfully.
 `docs/COMPATIBILITY.md`'s Coverage section is the canonical tier list;
 update it and this paragraph together.
@@ -117,6 +117,12 @@ Quirks that ARE reproduced (do not "fix" these):
   `-Wl,-ld_classic` is the current fix and is itself deprecated; revisit when MathWorks updates FindMatlab.
 - **`SetReturnBinMidpoint` looks like the fix for `FOMT` and is not.** ITK 2.4 semantics suggest
   midpoint; setting it makes every exact case diverge. Left explicit with a comment. Do not change it.
+- **`SLLS`'s threshold polarity looks backwards and is not.** `LaplacianSegmentationLevelSetImageFilter`'s
+  own header documents positive-inside/negative-outside; wiring the threshold to match that
+  documentation is wrong -- it diverges from the fixture by nearly the entire volume. The polarity
+  that actually matches (negative-inside, the same as `SGAC`) was confirmed against the fixture, not
+  assumed from the docstring. Left explicit with a comment in `src/opcodes/slls.cpp`. Do not "fix" it
+  to match the documented convention.
 - **MATLAB `-batch` cd's to the script's directory**, so `addpath` explicitly.
   Script filenames cannot start with a digit.
 

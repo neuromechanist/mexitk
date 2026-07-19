@@ -115,9 +115,12 @@ const Opcode* GetFvmiOpcode();
 const Opcode* GetSccOpcode();
 const Opcode* GetSctOpcode();
 const Opcode* GetSfmOpcode();
+const Opcode* GetSgacOpcode();
 const Opcode* GetSicOpcode();
+const Opcode* GetSllsOpcode();
 const Opcode* GetSncOpcode();
 const Opcode* GetSotOpcode();
+const Opcode* GetSsdlsOpcode();
 const Opcode* GetSwsOpcode();
 
 // Registration is explicit rather than via static initialisers in each opcode
@@ -160,9 +163,12 @@ void RegisterBuiltinOpcodes() {
   RegisterOpcode(GetSccOpcode());
   RegisterOpcode(GetSctOpcode());
   RegisterOpcode(GetSfmOpcode());
+  RegisterOpcode(GetSgacOpcode());
   RegisterOpcode(GetSicOpcode());
+  RegisterOpcode(GetSllsOpcode());
   RegisterOpcode(GetSncOpcode());
   RegisterOpcode(GetSotOpcode());
+  RegisterOpcode(GetSsdlsOpcode());
   RegisterOpcode(GetSwsOpcode());
 }
 

@@ -569,17 +569,19 @@ or refuses to reproduce a defect.
 
 ## Coverage
 
-`mexitk` currently implements **32 of the original's 40 opcodes**. Epic 2
+`mexitk` currently implements **35 of the original's 40 opcodes**. Epic 2
 Phases 1-3 extended the capture harness to 30 of them, captured reference
 fixtures for every one, and measured `mexitk`'s own agreement against every
 fixture (`tools/classify_fixtures.m`; see "Second capture campaign: Phase 3
-findings" above for how). Epic 3 Phase 1 added the remaining two,
-`FMMCF` and `SFM`, each with its own captured fixture, measured the same
-way. The status ladder now splits the 32 into three tiers by that
-measurement, not by guesswork:
+findings" above for how). Epic 3 Phase 1 added `FMMCF` and `SFM`; Epic 3
+Phase 2 added `SGAC`, `SLLS`, and `SSDLS` -- the first opcodes to genuinely
+consume a second image volume (`inputArray2`) rather than accept-and-ignore
+it. All five have their own captured fixture, measured the same way. The
+status ladder now splits the 35 into three tiers by that measurement, not by
+guesswork:
 
-- **Validated (14):** FBB, FBD, FBE, FBT, FD, FF, FGM, FMEAN, FMEDIAN,
-  FVBIH, SCC, SCT, SIC, SOT.
+- **Validated (15):** FBB, FBD, FBE, FBT, FD, FF, FGM, FMEAN, FMEDIAN,
+  FVBIH, SCC, SCT, SGAC, SIC, SOT.
   Bit-identical to the original on every comparable captured fixture
   (`tests/tReferenceExact.m`).
   "Comparable" excludes fixtures where the original itself rejected the
@@ -587,9 +589,9 @@ measurement, not by guesswork:
   than a defined reference (SCC's empty-seed fixture; see above) — those
   are asserted separately in `tests/tReferenceRejections.m` with no
   agreement claim.
-- **Bounded deviation (17):** FCA, SWS (their own dedicated sections
+- **Bounded deviation (19):** FCA, SWS (their own dedicated sections
   above), FBL, FCF, FDG, FDM, FDMV, FGA, FGAD, FGMRG, FLS, FMMCF, FOMT,
-  FSN, FVMI, SFM, SNC.
+  FSN, FVMI, SFM, SLLS, SNC, SSDLS.
   Runs the same ITK filter with the same parameters, but does not
   reproduce the original bit-for-bit; the difference is measured and
   bounded (`tests/tReferenceBounded.m`, plus FCA/SWS/FOMT's own dedicated
@@ -604,7 +606,15 @@ measurement, not by guesswork:
   class as FCA/SWS; SFM's residual (RMS 6.1e-15, max 9.0e-14) is at the
   floating-point noise floor, with its 270838 sentinel-valued voxels
   matching the original exactly — see their own `StatusNote`s in
-  `src/opcodes/fmmcf.cpp` / `src/opcodes/sfm.cpp`.
+  `src/opcodes/fmmcf.cpp` / `src/opcodes/sfm.cpp`. SLLS and SSDLS (Epic 3
+  Phase 2) also each have exactly one captured fixture (double only):
+  SLLS's residual (280/442368 voxels, 0.063%, each within 0.077 of the
+  zero crossing) is the floating-point noise floor of a 50-iteration
+  finite-difference solver flipping a boundary voxel's sign after
+  thresholding, not an algorithmic difference; SSDLS's residual (RMS
+  6.7e-8, max-abs 5.25e-6, on its raw un-thresholded output) is the same
+  noise-floor category as SFM's — see their own `StatusNote`s in
+  `src/opcodes/slls.cpp` / `src/opcodes/ssdls.cpp`.
 - **Smoke-tested (1):** FAAB. Its disagreement with the
   original is large enough (RMS in the hundreds) that pinning a bound
   would not be a useful signal — see "SWS and FAAB: not bounded" below.
@@ -640,9 +650,11 @@ status reflects its OTHER captured points, not that class.
 | FDMV | 11.4 (uint8) | 255.0 (uint8) | double at noise floor (~3e-12); single/int32 exact |
 | FMMCF | 1.60 (double) | 43.3 (double) | only one fixture (double); uint8/int32 unmeasured |
 | SFM | 6.1e-15 (double) | 9.0e-14 (double) | floating-point noise floor; only one fixture (double); uint8/int32 unmeasured |
+| SLLS | 6.42 (double) | 255.0 (double) | 280/442368 voxels (0.063%) flip category near the zero crossing; only one fixture (double); uint8/int32 unmeasured |
 | SNC | 73.3 (double) | 255.0 (double) | radius [1,1,1] and base-threshold fixtures exact |
+| SSDLS | 6.7e-8 (double) | 5.3e-6 (double) | floating-point noise floor, raw un-thresholded output; only one fixture (double); uint8/int32 unmeasured |
 
-The remaining 8 opcodes are catalogued in `docs/matitk_opcode_registry.txt`
+The remaining 5 opcodes are catalogued in `docs/matitk_opcode_registry.txt`
 (the original binary's own parameter dump)
 and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`,
 but they are **not implemented**.
@@ -666,7 +678,7 @@ numbers above are the honest record, not a target.
 
 ## Opcode-to-ITK-class reference
 
-This table covers all 32 implemented opcodes regardless of tier (it
+This table covers all 35 implemented opcodes regardless of tier (it
 predates the validated/bounded-deviation/smoke-tested split above, and is
 kept as a single reference rather than split three ways).
 
@@ -700,9 +712,12 @@ kept as a single reference rather than split three ways).
 | SCC | `ConfidenceConnectedImageFilter` |
 | SCT | `ConnectedThresholdImageFilter` |
 | SFM | `FastMarchingImageFilter` |
+| SGAC | `GeodesicActiveContourLevelSetImageFilter` (see "SGAC, SLLS, SSDLS" below) |
 | SIC | `IsolatedConnectedImageFilter` |
+| SLLS | `LaplacianSegmentationLevelSetImageFilter` (see "SGAC, SLLS, SSDLS" below) |
 | SNC | `NeighborhoodConnectedImageFilter` |
 | SOT | `OtsuThresholdImageFilter` |
+| SSDLS | `ShapeDetectionLevelSetImageFilter` (see "SGAC, SLLS, SSDLS" below) |
 | SWS | `WatershedImageFilter` (see "SWS: bounded deviation" above) |
 
 **FGA is implemented as a deliberate duplicate of FDG.** Both opcodes have the
@@ -766,6 +781,74 @@ apart silently:
 
 The underlying sourcing is in `docs/itk_opcode_mapping.md` (FDMV, Drift/risk;
 confidence Medium).
+
+### SGAC, SLLS, SSDLS: the first two-volume opcodes, roles and polarity determined empirically
+
+`SGAC`, `SLLS`, and `SSDLS` (Epic 3 Phase 2) are the first opcodes in this
+codebase where `inputArray2` is genuinely consumed rather than
+accepted-and-ignored. All three wrap a classic-framework ITK level-set
+segmentation filter (`itk::SegmentationLevelSetImageFilter` subclasses,
+module `ITKLevelSets`), which take two image inputs with distinct roles: an
+initial level set (the seed isosurface) and a feature image (the speed
+function's source). `docs/matitk_opcode_registry.txt`'s own dump for these
+three opcodes was captured from a zero-volume call (it only reaches the
+"not enough parameters" error path), so it says nothing about role
+assignment — but the original binary's own console output on a genuine
+two-volume call, preserved verbatim in each opcode's captured fixture
+(`consoleText`), does: **"This method requires two image volumes. Input A
+will be used as feature image. Input B will be used as input A's
+gradient."**, identical across all three fixtures. This corroborates that
+`inputArray1` is the feature image — the same conclusion the swap-test
+below reaches independently — but it does not by itself prove which ITK
+setter each argument is wired to: the original's own wording, "input A's
+gradient", is not the same concept as ITK's own "initial level set" role
+for `SetInput()` (a gradient image and a seed isosurface are different
+things), and no assumption is made here that they must mean the same
+argument. The swap-test is what actually confirms the `SetInput()`/
+`SetFeatureImage()` wiring below; the console text is corroborating
+context for `inputArray1`'s role, not a substitute for it.
+
+**Role assignment, the same for all three:** `inputArray1` (volume A) is the
+**feature image**; `inputArray2` (volume B) is the **initial level set**.
+Determined by building each opcode with the roles wired one way, running it
+against the fixture's own natural argument order, and comparing; then
+rebuilding with the roles swapped and comparing again. For all three
+opcodes the correct assignment reproduces the fixture (bit-exact for SGAC,
+within the measured bounded deviation for SLLS/SSDLS); the swapped
+assignment produces a substantially different result every time — for
+SGAC, a close-but-wrong match (1492-voxel difference on a ~235000-voxel
+region, not exact); for SLLS, a massive difference (422527/442368 voxels
+differ, a completely different segmentation, against the correct
+assignment's 280/442368); for SSDLS, a massive difference (max-abs 8 vs.
+5.25e-6, RMS 1.57 vs. 6.7e-8). The swapped-role numbers are recorded here,
+not tuned away, specifically so a future reader can see this was verified,
+not assumed uniform after the first opcode confirmed it.
+
+**Threshold polarity is opcode-specific, not filter-generic.** `SGAC` and
+`SLLS` binary-threshold their raw level-set output to `{0, 255}`; `SSDLS`
+does not (see below). For the two that threshold, negative level-set values
+map to 255 (inside) and non-negative values map to 0 (outside). For `SGAC`
+this matches what `GeodesicActiveContourLevelSetImageFilter`'s own header
+documents ("negative … inside … positive … outside") — but it does **not**
+match what `LaplacianSegmentationLevelSetImageFilter`'s own header documents
+for `SLLS` ("positive … inside … negative … outside", the opposite). The
+documented `SLLS` polarity was tried first and was wrong by nearly the
+entire volume (442088/442368 voxels differed, mean output 101 vs. the
+fixture's 154); the polarity that actually matches the fixture is the same
+as `SGAC`'s (negative → 255), not what `SLLS`'s own class documentation
+says. This is fixture evidence overriding documented semantics, recorded
+here rather than silently "fixed" to match the docstring.
+
+**`SSDLS` alone returns the raw, un-thresholded narrow-band level set.**
+Verified directly against its fixture: output range `[-4, 4]`, not `{0,
+255}`. `SGAC` and `SLLS` both binary-threshold; `SSDLS` does not — three
+opcodes wrapping filters from the same ITK module, with two different
+output conventions, confirmed per-opcode rather than assumed from the
+other two.
+
+Full detail, including the exact measured residuals and the swapped-role
+control numbers, is in each opcode's own `StatusNote()`:
+`src/opcodes/sgac.cpp`, `src/opcodes/slls.cpp`, `src/opcodes/ssdls.cpp`.
 
 ### Seed coordinate convention
 

@@ -45,6 +45,8 @@ set(MEXITK_ITK_COMPONENTS
   ITKCurvatureFlow         # FCF, FMMCF: (MinMax)CurvatureFlowImageFilter
   ITKAntiAlias             # FAAB: AntiAliasBinaryImageFilter (pulls ITKLevelSets transitively)
   ITKFastMarching          # SFM: FastMarchingImageFilter
+  ITKLevelSets             # SGAC, SLLS, SSDLS: (Geodesic|ShapeDetection)-
+                           # /LaplacianSegmentationLevelSetImageFilter
 )
 find_package(ITK 5.4 REQUIRED COMPONENTS ${MEXITK_ITK_COMPONENTS})
 
@@ -90,9 +92,12 @@ set(MEXITK_SOURCES
   src/opcodes/scc.cpp
   src/opcodes/sct.cpp
   src/opcodes/sfm.cpp
+  src/opcodes/sgac.cpp
   src/opcodes/sic.cpp
+  src/opcodes/slls.cpp
   src/opcodes/snc.cpp
   src/opcodes/sot.cpp
+  src/opcodes/ssdls.cpp
   src/opcodes/sws.cpp
 )
 
