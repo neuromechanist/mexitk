@@ -14,6 +14,8 @@
 
 #include "itkConfidenceConnectedImageFilter.h"
 
+#include <cmath>
+
 namespace mexitk {
 namespace {
 
@@ -80,6 +82,15 @@ class SccOpcode : public Opcode {
   }
 
   void Execute(OpContext& ctx) const override {
+    // multiplier has no prior sign/range constraint (ConfidenceConnected
+    // treats it as a confidence-interval width scale; no ITK-level
+    // exception exists for it). Confirmed empirically: a NaN multiplier
+    // silently produced an all-zero (nnz=0) output, no exception. Only
+    // the non-finite case is guarded here, param-guard hardening pass --
+    // no new sign/range constraint is added since none existed before.
+    if (!std::isfinite((*ctx.params)[0])) {
+      throw OpcodeError("mexitk:SCC:multiplier", "multiplier must be finite.");
+    }
     DispatchOnPixelType(mxGetClassID(ctx.volumeA),
                         [&](auto tag) { RunScc<typename decltype(tag)::type>(ctx); });
   }
