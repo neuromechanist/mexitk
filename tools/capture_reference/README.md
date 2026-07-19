@@ -198,6 +198,25 @@ for i = 1:numel(files)
 end
 ```
 
+## s14: settling RTPS's landmark calling convention
+
+`s14_rtps_landmarks.m` is a targeted, single-opcode follow-up run after
+`RD`/`RTPS` were implemented (Epic 4 Phase 1) from an inference with no
+successful reference capture to check it against. It captures six
+fixtures and answers two open questions `s13`'s own single-seed probe
+left open: whether the flat landmark list splits in half (a full source
+block then a full target block) or interleaves
+(`source1,target1,source2,target2,...`), and which volume the transform
+resamples, in which direction. Both questions are answered by the
+captures themselves, not guessed: see `docs/COMPATIBILITY.md`'s "RD and
+RTPS: the first registration opcodes" section and `src/opcodes/rtps.cpp`'s
+`StatusNote` for the full evidence trail. One structural finding worth
+noting here rather than only in the opcode's own docs: the original
+rejects a landmark argument passed as a **matrix** with `Seed array must
+be a vector.` — landmarks, like every other seed array in this codebase,
+must be a flat row vector of concatenated 3-tuples. Run it exactly like
+`s07`–`s13` (its own `matlab -batch` invocation).
+
 ## Completion sentinels: telling exit-time corruption from a mid-script crash
 
 The original binary was measured (run 1) to sometimes corrupt the heap

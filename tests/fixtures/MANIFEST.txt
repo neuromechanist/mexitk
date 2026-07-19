@@ -208,6 +208,12 @@ fvmi_3_0p5_2_double.mat
 mri_base_volume.mat
 provenance.mat
 rd_demons_volB_double.mat
+rtps_nc5_identity_double.mat
+rtps_nc5_translate_double.mat
+rtps_odd3_reject_double.mat
+rtps_pair1_minimal_double.mat
+rtps_pairs4_identity_double.mat
+rtps_pairs4_translate_double.mat
 rtps_tps_volB_seedS1_double.mat
 s12_closing_fbd_fbe.mat
 s12_fdmv_accessor.mat
