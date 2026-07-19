@@ -104,6 +104,7 @@ const Opcode* GetFgaOpcode();
 const Opcode* GetFgadOpcode();
 const Opcode* GetFgmOpcode();
 const Opcode* GetFgmrgOpcode();
+const Opcode* GetFgmsOpcode();
 const Opcode* GetFlsOpcode();
 const Opcode* GetFmeanOpcode();
 const Opcode* GetFmedianOpcode();
@@ -154,6 +155,7 @@ void RegisterBuiltinOpcodes() {
   RegisterOpcode(GetFgadOpcode());
   RegisterOpcode(GetFgmOpcode());
   RegisterOpcode(GetFgmrgOpcode());
+  RegisterOpcode(GetFgmsOpcode());
   RegisterOpcode(GetFlsOpcode());
   RegisterOpcode(GetFmeanOpcode());
   RegisterOpcode(GetFmedianOpcode());

@@ -82,7 +82,7 @@ set(MEXITK_SOURCES
   src/opcodes/ff.cpp
   src/opcodes/fgad.cpp
   src/opcodes/fgm.cpp
-  src/opcodes/fgmrg.cpp
+  src/opcodes/fgmrg.cpp        # FGMRG and FGMS
   src/opcodes/fls.cpp
   src/opcodes/fmean.cpp
   src/opcodes/fmedian.cpp
