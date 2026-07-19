@@ -36,13 +36,16 @@ This is version 0.5.0.
 Epic 2 (Phases 1-3) extended reference capture to 30 of them and measured every one against
 the original binary; Epic 3 added `FMMCF` and `SFM` (Phase 1), then `SGAC`, `SLLS`, and `SSDLS`
 (Phase 2, the first opcodes to genuinely consume a second image volume); Epic 4 (Phase 1) added
-`RD` and `RTPS`, the first `Category::kRegistration` opcodes, each with its own captured
-fixture -- though RTPS's is a rejection, not a successful capture (see below).
+`RD` and `RTPS`, the first `Category::kRegistration` opcodes. `RTPS`'s landmark calling
+convention (which no fixture initially proved) was settled by a follow-up reference-host
+capture round (`tools/capture_reference/s14_rtps_landmarks.m`, six fixtures) that disproved
+the phase's original inference outright and pinned down the real one -- see
+`docs/COMPATIBILITY.md` for the full story.
 The table below reflects that measurement, produced by `tools/classify_fixtures.m`.
 Every claim in the table is enforced by the test suite
 (`tests/tReferenceExact.m`, `tests/tReferenceBounded.m`,
 `tests/tReferenceRejections.m`, plus the dedicated FCA/FOMT/SWS suites):
-796 tests, passing locally on macOS arm64 against Homebrew ITK for the tree this table
+808 tests, passing locally on macOS arm64 against Homebrew ITK for the tree this table
 describes. CI (Linux x86_64 static-artifact and macOS arm64 no-ITK-installed runs) has not
 yet run against this tree; update this line once it has.
 
@@ -83,8 +86,8 @@ yet run against this tree; update this line once it has.
 | `SLLS` | `LaplacianSegmentationLevelSetImageFilter` | **bounded deviation** | Not bit-identical on the one captured fixture (double): 280/442368 voxels (0.063%) land on the wrong side of the binary threshold, each within 0.077 of the zero crossing -- the floating-point noise floor of a 50-iteration finite-difference solver. Two-volume opcode, same role assignment as `SGAC`. Threshold polarity is the SAME as `SGAC` (negative -> 255), the opposite of what this filter's own ITK header documents; the documented polarity was tried first and was wrong by nearly the entire volume. |
 | `SSDLS` | `ShapeDetectionLevelSetImageFilter` | **bounded deviation** | Not bit-identical on the one captured fixture (double): max-abs 5.25e-6, RMS 6.7e-8, the floating-point noise floor, the same category as `SFM`'s. Two-volume opcode, same role assignment as `SGAC`/`SLLS`. Unlike `SGAC`/`SLLS`, returns the raw, un-thresholded narrow-band level set directly (bounded +-4 on the captured fixture). |
 | `RD` | `HistogramMatchingImageFilter` + `DemonsRegistrationFilter` + `WarpImageFilter` | **bounded deviation** | Not bit-identical on the one captured fixture (double): RMS 4.63626, max-abs 88 (the full 0-88 input intensity range), 39.1% of voxels differ -- a real numerics difference in the iterative Demons solver, the same category as `FCA`/`FMMCF`, not floating-point noise. `numberOfIterations=0` is confirmed an exact identity no-op. Fixed/moving roles (volume A fixed, volume B moving) confirmed by a swap test; the swapped wiring measures materially worse (RMS 21.7). `uint8`/`int32`/`single` promote to `float` internally; no fixture exists for them. |
+| `RTPS` | `ThinPlateSplineKernelTransform` + `ResampleImageFilter` | **bounded deviation** | A follow-up reference-host capture round (six fixtures) disproved the phase's original inference (split-in-half landmarks, volume A fixed) outright and pinned down the real convention: landmarks are INTERLEAVED (`source1,target1,source2,target2,...`), and volume B is fixed / volume A is moving -- the opposite of `RD`. Three of five successful captures reproduce at the floating-point noise floor (RMS ~2e-10 to 2e-12); the other two use structurally degenerate landmark sets (duplicate correspondence pairs; a single underdetermined pair) with a real, modest, measured residual (RMS 2.23 and 3.65), the same upstream-numerics category as `FCA`/`SNC`/`SWS`. See docs/COMPATIBILITY.md for the full evidence, including why the original inference was wrong. `uint8`/`int32`/`single` promote to `float` internally; no fixture exists for them. |
 | `FAAB` | `AntiAliasBinaryImageFilter` | **smoke-tested** | Runs and returns plausible output; reference fixtures exist but disagreement is too large to bound meaningfully (RMS in the hundreds). Output is a signed level-set field (positive inside). Integral input promotes to `float`; on `uint8` the negative (outside) half saturates to 0 on export. |
-| `RTPS` | `ThinPlateSplineKernelTransform` + `ResampleImageFilter` | **smoke-tested** | No successful reference capture exists: the one captured fixture is a REJECTION, proving only that a single landmark point is refused and the count must be even. The split-in-half source/target landmark convention, the fixed/moving role assignment, and the source=fixed-space/target=moving-space wiring are all inferred (ITK's own worked-example convention and consistency with RD), not fixture-proven. See docs/COMPATIBILITY.md for what is and is not verified. |
 
 Status vocabulary, used consistently in the code, in `mexitk('?')`, and here:
 
@@ -117,7 +120,7 @@ Read it before relying on this for science.
 
 | Platform | State |
 |---|---|
-| macOS arm64 (`maca64`) | Builds, loads, 796/796 tests pass locally against Homebrew ITK. CI (including the full suite on a runner with **no ITK installed**, against static ITK) previously ran green through 774 tests; it has not yet re-run against the RD/RTPS tree. |
+| macOS arm64 (`maca64`) | Builds, loads, 808/808 tests pass locally against Homebrew ITK. CI (including the full suite on a runner with **no ITK installed**, against static ITK) previously ran green through 774 tests; it has not yet re-run against the RD/RTPS tree. |
 | Linux x86_64 (`glnxa64`) | Builds, loads, 774/774 tests passed as of the last CI run against static ITK, including the full suite on a runner with **no ITK installed**. Not yet re-verified against the RD/RTPS tree (no Linux/static-ITK environment available for this phase's local work). Must be built with GCC 12 or older; see BUILDING.md. |
 | macOS x86_64 (`maci64`) | Legacy; built on a best-effort basis only. R2025b is MathWorks' final Intel-Mac release. |
 | Windows | Best-effort only; the ITK toolchain there is unresolved. Not attempted. |

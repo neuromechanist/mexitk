@@ -59,11 +59,8 @@ so documented status cannot drift from what the code claims.
 ### Honesty about validation is the product
 
 37 of 40 opcodes are implemented, and they are not equally trustworthy:
-15 are validated, 20 have a measured bounded deviation, and 2 are
-smoke-tested: FAAB because its disagreement is too large to bound
-meaningfully, RTPS because no successful reference capture exists at all
-(only a rejection fixture, proving the original refuses a single landmark
-point).
+15 are validated, 21 have a measured bounded deviation, and 1 (FAAB) is
+smoke-tested because its disagreement is too large to bound meaningfully.
 `docs/COMPATIBILITY.md`'s Coverage section is the canonical tier list;
 update it and this paragraph together.
 The status ladder is load-bearing and appears in the code, in `mexitk('?')`, and in the README:

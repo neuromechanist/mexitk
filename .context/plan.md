@@ -11,9 +11,16 @@ capture campaign" sections), Epic 3 (`FMMCF`/`SFM`, then `SGAC`/`SLLS`/
 `SSDLS`, the first two-volume opcodes). Epic 4 (registration) is
 underway: Phase 1 added `RD` (Demons deformable registration, bounded
 deviation -- one fixture, RMS 4.63626/max-abs 88) and `RTPS`
-(thin-plate-spline landmark warping, smoke-tested -- only a rejection
-fixture exists), the first `Category::kRegistration` opcodes. Remaining:
-`SCSS` (will not implement), `FGMS`, `FFFT`. See
+(thin-plate-spline landmark warping), the first `Category::kRegistration`
+opcodes. `RTPS` shipped smoke-tested on an inferred landmark convention
+(only a rejection fixture existed); a follow-up reference-host capture
+round (`s14`, six fixtures) disproved that inference and settled the real
+one (interleaved landmarks, volumeB fixed/volumeA moving -- the opposite
+of `RD`), promoting `RTPS` to bounded-deviation (3 of 5 new fixtures at
+the floating-point noise floor, 2 with a real modest residual from
+degenerate landmark configurations). See `docs/COMPATIBILITY.md`'s "RD
+and RTPS: the first registration opcodes" for the full evidence trail.
+Remaining: `SCSS` (will not implement), `FGMS`, `FFFT`. See
 `docs/COMPATIBILITY.md`'s Coverage section for the authoritative tier
 breakdown; the `## Done` log below is a historical record that stops at
 Epic 2 Phase 2 and is not being retroactively rewritten -- treat

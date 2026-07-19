@@ -577,11 +577,13 @@ findings" above for how). Epic 3 Phase 1 added `FMMCF` and `SFM`; Epic 3
 Phase 2 added `SGAC`, `SLLS`, and `SSDLS` -- the first opcodes to genuinely
 consume a second image volume (`inputArray2`) rather than accept-and-ignore
 it. Epic 4 Phase 1 added `RD` and `RTPS`, the first `Category::kRegistration`
-opcodes -- see "RD and RTPS: the first registration opcodes" below. All
+opcodes -- see "RD and RTPS: the first registration opcodes" below. `RTPS`'s
+own initial fixture was a rejection only; a follow-up reference-host capture
+round (`s14`, six more fixtures) then settled its calling convention and
+supplied five successful captures, promoting it out of smoke-tested. All
 seven (FMMCF, SFM, SGAC, SLLS, SSDLS, RD, RTPS) have their own captured
-fixture(s), measured the same way, except RTPS: its one fixture is a
-rejection, not a successful capture (see below). The status ladder now
-splits the 37 into three tiers by that measurement, not by guesswork:
+fixture(s), measured the same way. The status ladder now splits the 37 into
+three tiers by that measurement, not by guesswork:
 
 - **Validated (15):** FBB, FBD, FBE, FBT, FD, FF, FGM, FMEAN, FMEDIAN,
   FVBIH, SCC, SCT, SGAC, SIC, SOT.
@@ -592,9 +594,9 @@ splits the 37 into three tiers by that measurement, not by guesswork:
   than a defined reference (SCC's empty-seed fixture; see above) — those
   are asserted separately in `tests/tReferenceRejections.m` with no
   agreement claim.
-- **Bounded deviation (20):** FCA, SWS (their own dedicated sections
+- **Bounded deviation (21):** FCA, SWS (their own dedicated sections
   above), FBL, FCF, FDG, FDM, FDMV, FGA, FGAD, FGMRG, FLS, FMMCF, FOMT,
-  FSN, FVMI, SFM, SLLS, SNC, SSDLS, RD.
+  FSN, FVMI, SFM, SLLS, SNC, SSDLS, RD, RTPS.
   Runs the same ITK filter with the same parameters, but does not
   reproduce the original bit-for-bit; the difference is measured and
   bounded (`tests/tReferenceBounded.m`, plus FCA/SWS/FOMT's own dedicated
@@ -624,8 +626,15 @@ splits the 37 into three tiers by that measurement, not by guesswork:
   floor, a real numerics difference in the iterative Demons solver, the
   same category as FCA/FMMCF rather than SFM/SLLS/SSDLS's noise-floor
   category -- see "RD and RTPS: the first registration opcodes" below and
-  `src/opcodes/rd.cpp`'s own `StatusNote`.
-- **Smoke-tested (2):** FAAB, RTPS. FAAB's disagreement with the
+  `src/opcodes/rd.cpp`'s own `StatusNote`. RTPS (Epic 4 Phase 1, `s14`
+  capture round) has five captured fixtures (double only): three are at
+  the floating-point noise floor (RMS 2.12e-10, 2.00e-10, 2.63e-12), the
+  other two (structurally degenerate landmark sets) have a real, modest
+  residual (RMS 2.226571 and 3.647131) — see "RD and RTPS: the first
+  registration opcodes" below and `src/opcodes/rtps.cpp`'s own
+  `StatusNote` for the full evidence, including how the calling
+  convention itself was determined.
+- **Smoke-tested (1):** FAAB. Its disagreement with the
   original is large enough (RMS in the hundreds) that pinning a bound
   would not be a useful signal — see "SWS and FAAB: not bounded" below.
 
@@ -664,6 +673,7 @@ status reflects its OTHER captured points, not that class.
 | SNC | 73.3 (double) | 255.0 (double) | radius [1,1,1] and base-threshold fixtures exact |
 | SSDLS | 6.7e-8 (double) | 5.3e-6 (double) | floating-point noise floor, raw un-thresholded output; only one fixture (double); uint8/int32 unmeasured |
 | RD | 4.63626 (double) | 88.0 (double) | full input intensity range; only one fixture (double); uint8/int32 unmeasured |
+| RTPS | 3.647131 (double) | 88.0 (double) | worst of 2 degenerate-landmark captures; 3 well-posed captures at the floating-point noise floor (RMS <= 2.12e-10) instead; only double captured, uint8/int32/single unmeasured |
 
 The remaining 3 opcodes are catalogued in `docs/matitk_opcode_registry.txt`
 (the original binary's own parameter dump)
@@ -867,10 +877,16 @@ control numbers, is in each opcode's own `StatusNote()`:
 
 `RD` (Demons deformable registration) and `RTPS` (thin-plate-spline
 landmark warping) are Epic 4 Phase 1's two additions, the first opcodes in
-`Category::kRegistration`. They land in very different places on the
-status ladder: `RD` has a successful reference fixture and a measured
-bounded deviation; `RTPS` has only a rejection fixture and is capped at
-smoke-tested, since there is nothing to measure agreement against.
+`Category::kRegistration`. Both are now bounded-deviation, but `RTPS` got
+there in two steps: its own first captured fixture was a rejection only,
+enough to cap it at smoke-tested with an INFERRED calling convention; a
+follow-up reference-host capture round (`s14`,
+`tools/capture_reference/s14_rtps_landmarks.m`, six more fixtures) then
+disproved that inference outright and pinned down the real one. Both the
+original inference and what replaced it are recorded below, not just the
+final answer, because the wrong inference is itself useful evidence
+about what does and does not follow from "landmarks ride the seed
+argument, one point is rejected, the count must be even."
 
 **RD: fixed/moving role assignment, determined by the same swap-test
 method as SGAC.** The registry (`docs/matitk_opcode_registry.txt`) gives
@@ -926,69 +942,116 @@ calls `SmoothDisplacementFieldOn()` explicitly; removing it would make
 `DemonStandardDeviations` a parameter that is accepted, validated, and
 then silently ignored.
 
-**RTPS: only a rejection fixture exists.** The one captured fixture
-(`rtps_tps_volB_seedS1_double`, a single seed point `[70 50 14]`) is a
-FAILED capture: the original's full error text is `This method requires
-landmarks.  Each landmark should be 3-dimensional, and there should be
-even number of landmarks (source->target)`. This proves three things and
-no more: landmarks ride the seed argument (arg5); a single landmark point
-is refused; the count must be even. `mexitk` reproduces exactly that --
-`mexitk:RTPS:landmarks` on an empty or odd-count landmark list -- and
-this rejection fixture is asserted in `tests/tReferenceRejections.m`
-(`bothRejectTheSameInput`). No stricter minimum (e.g. requiring at least
-4 point pairs, the number a 3-D thin-plate spline's affine component
-needs to be fully determined) is enforced: the original's own message
-states no such minimum, and inventing one without evidence would risk
-refusing an input the original accepted.
+**RTPS, round 1: only a rejection fixture existed.** The one fixture
+captured before `s14` (`rtps_tps_volB_seedS1_double`, a single seed point
+`[70 50 14]`) is a FAILED capture: the original's full error text is
+`This method requires landmarks.  Each landmark should be 3-dimensional,
+and there should be even number of landmarks (source->target)`. This
+proved three things and no more: landmarks ride the seed argument
+(arg5); a single landmark point is refused; the count must be even.
+`mexitk` reproduces exactly that -- `mexitk:RTPS:landmarks` on an empty
+or odd-count landmark list. With no successful capture, Phase 1 shipped
+an INFERENCE: landmarks split in half (a full source block then a full
+target block, the Insight Software Guide's own landmark-warping worked
+example), fixed/moving roles carried over from RD's own determination
+(volumeA fixed, volumeB moving), and the standard source=fixed-space /
+target=moving-space wiring into `ResampleImageFilter`. Status was capped
+at smoke-tested accordingly, since none of that was checked against the
+original.
 
-**RTPS: everything past "even and nonempty" is inferred, not
-fixture-proven**, so `RTPS` is capped at smoke-tested rather than
-bounded-deviation -- there is no successful capture to measure agreement
-against. Three separate inferences, each documented in
-`src/opcodes/rtps.cpp` and its `StatusNote`:
+**RTPS, round 2: the `s14` captures disproved the inference directly.**
+`tools/capture_reference/s14_rtps_landmarks.m` captured six fixtures
+targeting exactly the two open questions the round-1 error text left
+open: does the landmark list split in half or interleave, and which
+volume does the transform resample, in which direction. One structural
+finding surfaced along the way, worth recording on its own: the original
+rejects a landmark argument passed as a **matrix** with `Seed array must
+be a vector.` -- landmarks, like every other seed array in this
+codebase, must be a flat row vector of concatenated 3-tuples, not a
+2-column matrix of points.
 
-1. **Split-in-half landmark convention.** The flat landmark list's first
-   half is treated as the source-landmark set and the second half as the
-   target-landmark set, matching the Insight Software Guide's own
-   landmark-warping worked example (a full source list, then a full
-   target list, not interleaved pairs). An interleaved convention
-   (source1, target1, source2, target2, ...) was not ruled out by any
-   fixture.
-2. **Fixed/moving role assignment.** Carried over from RD's own
-   swap-tested determination (volumeA fixed, volumeB moving) for
-   consistency between this epic's two registration opcodes, not
-   independently confirmed for RTPS.
-3. **Source=fixed-space / target=moving-space wiring into Resample.**
-   The standard convention for plugging a `KernelTransform` directly into
-   `ResampleImageFilter` without inverting it (`ResampleImageFilter` calls
-   `transform->TransformPoint(outputPoint)` to find the corresponding
-   input point, and `KernelTransform::TransformPoint` maps
-   source-landmark space to target-landmark space by construction, so
-   source landmarks must be expressed in the fixed/output image's space
-   for that call to mean what `Resample` needs) -- not a fixture finding.
+The DECISIVE result is `rtps_nc5_identity_double`: `volumeA==volumeB`
+(both the raw `mri` volume) and a landmark seed array built as
+`[src5 src5]` (five well-spread, non-coplanar points, repeated). Under
+Phase 1's split-half reading this is a literal identity landmark set
+(source==target, 5 well-posed pairs) and the resulting warp MUST
+reproduce the input exactly. It does not: measured, 181548/442368 voxels
+differ (41%), output mean 2.62 against the raw volume's own mean 21.82 --
+proof the split-half inference was simply wrong, not merely imprecise.
+`rtps_nc5_translate_double` (same `volumeA==volumeB`, second half offset
+by a fixed `[6 -4 2]` translation instead of repeated) gave the second
+data point needed to diagnose it: since both `nc5_*` fixtures share the
+identical FIRST-HALF/SECOND-HALF point stream structure and differ only
+in whether the second half repeats or offsets, comparing candidate
+readings against both together isolates the correct one. **The flat
+landmark list is INTERLEAVED**
+(`source1,target1,source2,target2,...`), not split into a source block
+and a target block: reading `[src5 src5]` as 5 interleaved pairs gives
+`(src5pt1,src5pt2), (src5pt3,src5pt4), (src5pt5,src5pt1), ...` -- NOT an
+identity correspondence at all, which is exactly why the fixture named
+"identity" does not reproduce the input under either reading naively
+assumed identity, but DOES reproduce it under interleaved reading once
+the correct fixed/moving assignment below is also used (verified
+directly: RMS 2.12e-10, 20898/442368 voxels differ only at the
+floating-point noise floor, not zero, because the "identical" landmark
+stream is not literally an identity map, just a self-consistent one that
+the original and `mexitk` now agree on bit-for-bit modulo double-precision
+noise). `rtps_nc5_translate_double` confirms the same reading
+independently: RMS 2.00e-10.
 
-**What internal verification does exist**, short of a reference
-comparison: calling with `volumeA==volumeB` and IDENTICAL source/target
-landmark coordinates (a true no-op warp) reproduces the input EXACTLY
-(0/442368 voxels differ) once 4 or more well-spread landmark pairs are
-given, confirming the landmark indexing, the source/target convention,
-and the Resample wiring are all internally self-consistent, even though
-none of it is checked against the original. With only 1-2 pairs the
-identity check holds only at and near the given points -- expected, not a
-bug: a 3-D thin-plate spline's affine component needs at least 4
-non-degenerate point pairs to be determined, so fewer leave the transform
-genuinely underdetermined elsewhere, and ITK's SVD-based solve returns a
-defined but not-necessarily-identity answer there.
+`rtps_pairs4_translate_double` is the DECISIVE capture for direction:
+`volumeB` here is `circshift(flip(volumeA,1),[5 9 2])`, asymmetric on
+purpose (flipped, not just shifted), so a source/target or fixed/moving
+mixup misplaces the output visibly rather than looking coincidentally
+close. **volumeB is FIXED (the source-landmark/output space) and volumeA
+is MOVING (the target-landmark/input space, the one actually
+resampled)** -- the OPPOSITE of `RD`'s own role assignment. With volumeB
+fixed, this capture reproduces at RMS 2.63e-12 (floating-point noise
+floor); with volumeA fixed (Phase 1's original, RD-consistent
+assumption), RMS is 37.7 -- not a close call. Three of the five `s14`
+successful captures (`nc5_identity`, `nc5_translate`, `pairs4_translate`)
+are therefore reproduced at the floating-point noise floor under
+INTERLEAVED landmarks + volumeB-fixed/volumeA-moving, with the
+source/target roles read literally (no further swap needed): this rules
+out a wiring bug as the residual's source in the two remaining captures
+below, since the wiring is identical across all five and three of them
+match essentially exactly.
 
-**What would settle RTPS's open questions.** A targeted reference-host
-capture with several PAIRED landmarks (at least 4, to also exercise the
-well-determined case) and a geometrically distinctive `volumeB` (not a
-symmetric `circshift`, so a source/target or fixed/moving mixup would
-visibly misplace the result rather than looking coincidentally correct)
-would settle all three inferences above at once. This is a proposal for
-a future reference-host capture round, not something this phase
-attempted: reference-host work is coordinated separately from opcode
-implementation.
+**The other two `s14` captures have a real, modest, measured residual,
+not a wiring problem.** `rtps_pairs4_identity_double` (RMS 2.226571,
+58566/442368 voxels differ, 13.2%) and `rtps_pair1_minimal_double` (RMS
+3.647131, 100523/442368 voxels differ, 22.7%) both involve landmark
+configurations that are structurally degenerate for a thin-plate spline,
+not merely coincidentally hard: `pairs4_identity`'s four interleaved
+pairs collapse to only TWO distinct (source,target) pairs, each supplied
+twice -- verified directly, pair 1 equals pair 3 and pair 2 equals pair
+4, exactly -- a rank-deficient landmark system (the same coplanar
+4-point set that made this capture's own affine part underdetermined
+even before the duplication is compounded by two literally identical
+rows in the fitting matrix). `pair1_minimal` supplies only one landmark
+pair, far below the four non-degenerate pairs a 3-D thin-plate spline's
+affine component needs to be well-determined. Both residuals are
+consistent with ITK's SVD-based pseudo-inverse resolving a near-singular
+or severely underdetermined system slightly differently between 2.4 (the
+original's 2006 build) and 5.4, the same upstream-numerics-evolution
+category as `FCA`/`SNC`/`SWS` elsewhere in this project -- not tuned
+away, measured and asserted as-is in `tests/tReferenceBounded.m`.
+
+`rtps_odd3_reject_double` (three landmarks, captured alongside the five
+successes) is a second rejection fixture, confirming the even-count
+requirement independently of the original round-1 capture; both
+rejections are asserted in `tests/tReferenceRejections.m`.
+
+**RTPS's status is now bounded-deviation, not smoke-tested.** Five
+successful fixtures exist (all double only; `uint8`/`int32`/`single`
+carry no agreement claim and promote to `float` internally, same as
+every other promoted opcode). The internal identity self-check Phase 1
+used as a stand-in for reference evidence (`volumeA==volumeB` with
+matching source/target landmarks reproduces the input exactly) still
+holds, but now under the CORRECT interleaved reading -- a landmark list
+built from repeated `(p_i, p_i)` pairs, not Phase 1's
+`[p1 p2 ... pN p1 p2 ... pN]`, which the `s14` captures proved is not an
+identity map at all under the real convention.
 
 ### Seed coordinate convention
 
