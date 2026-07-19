@@ -373,9 +373,13 @@ log as how we got here.
    see COMPATIBILITY.md). It feeds Otsu thresholding in NFT's segmentation,
    so the downstream masks can shift slightly.
    The alternative today is that segmentation does not run at all on Apple Silicon.
-3. **How broad should the opcode surface get?** 30 of 40 are now implemented;
-   only 3 (FCA, FOMT, SWS) have reference data, and reference capture requires
-   the Intel-Linux binary. The 27 Phase 1/2/3/4 opcodes ship smoke-tested only.
+3. **How broad should the opcode surface get?** Answered by continuing:
+   37 of 40 are now implemented (up from 30 when this item was written),
+   and the vast majority have reference data from Epic 2's capture
+   campaign onward -- 36 of 37 carry a validated or bounded-deviation
+   status; only `FAAB` remains smoke-tested with no useful bound. See
+   `docs/COMPATIBILITY.md`'s Coverage section for the authoritative
+   current tier breakdown; this item is stale, not current state.
 
 ## Next
 
@@ -421,11 +425,14 @@ log as how we got here.
 
 ### Broadening the opcode surface
 
-10 opcodes remain unimplemented; parameters are known exactly
-(`docs/matitk_opcode_registry.txt`) and ITK classes are mapped.
-Phase 1 (FMEDIAN, FMEAN, FBT, FDG, FBB, FSN, FF, FD, FGA), Phase 2 (FBD,
-FBE, FDM, FDMV, FVBIH), Phase 3 (SCT, SCC, SIC, SNC, SOT) and Phase 4
-(FAAB, FBL, FCF, FGAD, FGM, FGMRG, FLS, FVMI) are done.
+Stale below this line as of Epic 4 Phase 1: written when 10 opcodes
+remained unimplemented (Epic 1's own state). Only 3 remain now (`SCSS`
+-- will not implement, `FGMS`, `FFFT`); see the "Current state" section
+at the top of this file and `docs/COMPATIBILITY.md`'s Coverage section
+for what is actually current. Epic 1's own Phase 1 (FMEDIAN, FMEAN, FBT,
+FDG, FBB, FSN, FF, FD, FGA), Phase 2 (FBD, FBE, FDM, FDMV, FVBIH), Phase
+3 (SCT, SCC, SIC, SNC, SOT) and Phase 4 (FAAB, FBL, FCF, FGAD, FGM,
+FGMRG, FLS, FVMI) are done, followed by Epics 2-4 (see "Current state").
 Each ships with an honest status; no reference data means `smoke-tested` at best.
 
 Known problem cases:
