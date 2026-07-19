@@ -701,6 +701,64 @@ bound that would only ever measure "still roughly this different," not
 "still the same algorithm." `FAAB` stays smoke-tested; the measured
 numbers above are the honest record, not a target.
 
+## Bound margins for noise-floor entries
+
+`tests/tReferenceBounded.m`'s ceiling formula gates its RMS headroom by
+magnitude, a policy ruling from Epic 4 Phase 1's PR #30 review, applied
+project-wide, not a per-fixture exception. Below RMS 1e-5 (relative
+~1e-7 on this project's 0-88 reference volume), the ceiling is
+`max(measured * 1.5, measured + 1e-12)`; at or above 1e-5, it stays
+`max(measured * 1.1, measured + 1e-12)`, exactly the original flat 10%
+rule. Only the ASSERTION MARGIN changed. No measured value in
+`tests/tReferenceBounded.m`'s `Cases` table changed because of this
+policy, and it is not a relaxation of "never loosen a tolerance to make
+a test pass": the entries it widens are not being reproduced any
+differently than before, and the entries it does not touch (any real
+algorithmic disagreement, however small) keep exactly the tight margin
+they always had.
+
+**Why the gate exists.** A measured RMS below 1e-5 on this project's
+data is presumptively floating-point/library noise, not a real
+algorithmic difference: several opcodes here (`RTPS`'s
+`ThinPlateSplineKernelTransform`, and others with an internal
+finite-difference or kernel solve) route through `vnl_svd` or similar
+LAPACK/BLAS-backed linear algebra, whose exact last-bit result is
+platform-dependent -- the same class of non-determinism this project
+already documents for ITK's own 2.4-to-5.x numerics evolution, except
+here the two things being compared are two runs of the SAME `mexitk`
+build on different platforms, not `mexitk` versus the original. A bound
+tighter than the platform variation itself does not test agreement with
+the original; it tests which platform's linear-algebra library happened
+to run the test.
+
+**What was actually observed, not assumed.** `rtps_pairs3_distinct_double`
+measured RMS 5.264588848e-12 on macOS arm64 and 6.78818e-12 on Linux
+x86_64 -- a ~29% spread between two measurements that are both genuine
+double-precision noise (see "RD and RTPS: the first registration
+opcodes" above for the full writeup of that specific fixture). The prior
+flat 10% margin, derived from the macOS measurement alone, did not
+absorb the Linux measurement and failed CI on PR #30. A magnitude-gated
+survey across every noise-floor-adjacent entry in `tests/
+tReferenceBounded.m`'s `Cases` table (not just `RTPS`'s own) found 13
+entries sitting at exactly the prior flat-10%-headroom floor once their
+own RMS clears roughly 1e-11 (where the formula's `+1e-12` additive term
+becomes negligible): `FCF`'s `fcf_10_0p0625_single`; `FGMRG`'s
+`fgmrg_1_double`, `fgmrg_2_double`, `fgmrg_2_single`, `fgmrg_4_double`;
+`FLS`'s `fls_1_double`, `fls_2_double`, `fls_2_single`, `fls_4_double`;
+`SSDLS`'s `ssdls_ssdls_volB_seedS1_double`; `RTPS`'s
+`rtps_nc5_identity_double`, `rtps_nc5_translate_double`, and
+`rtps_pairs3_distinct_double` itself even after its own bound was
+corrected -- all with 10-15% headroom, less than the ~29% spread already
+measured on one of them. Under the 1.5x gate, all 13 now carry 50%
+headroom, comfortably above the observed spread with room to spare.
+Every entry at or above 1e-5 -- every genuine algorithmic disagreement
+this project has measured, from `FGAD`'s uint8 residual through `RD`'s
+Demons-solver drift to the three real-residual `RTPS` captures
+(`rtps_pairs4_identity_double`, `rtps_pair1_minimal_double`,
+`rtps_pairs2_distinct_double`) -- keeps exactly the 10% margin it had
+before this policy, unchanged, because a real disagreement is exactly
+where a tight margin is meaningful regression detection.
+
 ## Opcode-to-ITK-class reference
 
 This table covers all 37 implemented opcodes regardless of tier (it

@@ -299,11 +299,44 @@ classdef tReferenceBounded < matlab.unittest.TestCase
             rms = sqrt(mean(e .^ 2));
             mx = max(e);
 
-            % 10% headroom over the measured value: enough to absorb
-            % platform floating-point ordering, far too tight to hide
-            % a real behavioural change. A floor keeps this meaningful
-            % for measurements at (or near) zero.
-            rmsCeiling = max(rmsMeasured * 1.1, rmsMeasured + 1e-12);
+            % RMS headroom is magnitude-gated, a policy ruling from the
+            % PR #30 review, not an ad hoc per-fixture choice: below 1e-5
+            % (relative ~1e-7 on this project's 0-88 reference data), a
+            % residual is presumptively floating-point/library noise
+            % rather than a real algorithmic difference -- RTPS's
+            % ThinPlateSplineKernelTransform and several other filters
+            % here solve through vnl_svd or similar LAPACK/BLAS-backed
+            % routines, whose exact last-bit result is platform-dependent.
+            % A margin tighter than the observed platform variation would
+            % assert false precision and test the linear-algebra library
+            % rather than agreement with the original -- caught directly
+            % on PR #30's Linux CI run: rtps_pairs3_distinct_double
+            % measured RMS 6.78818e-12 there against a macOS-only-derived
+            % bound of 5.264588848e-12 (a ~29% spread), which the prior
+            % flat 10% margin did not absorb. Above 1e-5 the residual is a
+            % real, if sometimes small, algorithmic difference (FGAD's
+            % uint8 residual, FDM's uint8 residual, RD, the three
+            % non-noise-floor RTPS cases, etc.), where a tight 10% margin
+            % is meaningful regression detection and stays exactly as
+            % before -- loosening it there would be exactly the "raise a
+            % bound to hide disagreement" move this project forbids. See
+            % docs/COMPATIBILITY.md's "Bound margins for noise-floor
+            % entries" for the full policy and the measured spread that
+            % motivated it. This widens ASSERTION MARGINS only: no
+            % measured value in the Cases table above changed because of
+            % this gate, and every case at or above 1e-5 keeps exactly the
+            % same 10% factor it always had.
+            if rmsMeasured < 1e-5
+                rmsFactor = 1.5;
+            else
+                rmsFactor = 1.1;
+            end
+            rmsCeiling = max(rmsMeasured * rmsFactor, rmsMeasured + 1e-12);
+            % max-abs headroom is unchanged by this policy: its own +1e-9
+            % additive floor already gives ample margin at every magnitude
+            % this suite has measured (no max-abs entry was found at risk
+            % in the PR #30 platform-spread survey), and no CI failure
+            % involved max-abs.
             maxCeiling = max(maxMeasured * 1.1, maxMeasured + 1e-9);
             tc.verifyLessThan(rms, rmsCeiling, sprintf( ...
                 '%s (%s): RMS deviation %.6g exceeds documented %.6g', ...
