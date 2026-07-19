@@ -87,6 +87,35 @@ classdef tPhase7DispositionsSmoke < matlab.unittest.TestCase
             tc.verifyError(@() withOutputs(2, @() mexitk('FFFT', 0, tc.V)), ...
                 'mexitk:nargout');
         end
+
+        function ffftModeParamIsUnguardedByDesign(tc)
+            % Execute() deliberately leaves the mode parameter unguarded
+            % (`p0 != 0.0`, the same FF XDIRECTION/YDIRECTION/ZDIRECTION
+            % precedent, deviation 12) rather than restricting it to
+            % exactly {0, 1} -- this locks that decision in with a real
+            % assertion, not just a code comment, so a future "tighten
+            % the guard to {0,1}" change or an accidentally-broken
+            % `!= 0.0` (e.g. swapped to `== 1.0`) is caught either
+            % direction. Every value here was run against a real build
+            % before being asserted, not guessed from the comparison's
+            % own IEEE semantics alone.
+            ref1 = mexitk('FFFT', 1, tc.V);
+            for m = [NaN, Inf, -Inf, 2, -1, 0.5]
+                out = mexitk('FFFT', m, tc.V);
+                tc.verifyEqual(out, ref1, sprintf( ...
+                    'FFFT mode=%g: expected the complex-mode path (== ref1.0), IEEE ~= 0.0 is true for this value', m));
+            end
+
+            % -0.0 == 0.0 under IEEE 754, so `p0 != 0.0` is false and this
+            % must route to the REAL mode path, the opposite of the block
+            % above -- the one value in this test that must NOT match
+            % ref1, confirming the comparison direction itself is right
+            % and not merely "always true, test is vacuous".
+            ref0 = mexitk('FFFT', 0, tc.V);
+            outNegZero = mexitk('FFFT', -0.0, tc.V);
+            tc.verifyEqual(outNegZero, ref0, ...
+                'FFFT mode=-0.0: expected the real-mode path (== ref0), IEEE -0.0 == 0.0');
+        end
     end
 
     methods (Test)  % FGMS guard paths (structural coverage lives in tReferenceBounded.m)
@@ -115,6 +144,27 @@ classdef tPhase7DispositionsSmoke < matlab.unittest.TestCase
                 tc.verifySize(out, size(vin));
                 tc.verifyTrue(all(isfinite(double(out(:)))), sprintf( ...
                     'FGMS (%s): non-finite value in output', class(vin)));
+            end
+        end
+
+        function fgmsFixtureMatchesFgmrgFixtureExactly(tc)
+            % The registry-duplicate claim (FGMS and FGMRG are the SAME
+            % opcode in the original binary, not two independently
+            % implemented filters) rests on the two captured fixture
+            % SETS agreeing with each other, not merely on prose in
+            % FgmsOpcode::StatusNote. Asserted here directly against the
+            % fixture files themselves (fx.output), independent of
+            % mexitk's own implementation, so a future recapture that
+            % broke the alias -- or a StatusNote claim that quietly
+            % stopped being true -- is caught by this test rather than
+            % only by comment review.
+            sigmas = {'1', '2', '4'};
+            for i = 1:numel(sigmas)
+                [fxGmrg, ~] = mexitkFixture(sprintf('fgmrg_%s_double', sigmas{i}));
+                [fxGms, ~] = mexitkFixture(sprintf('fgms_sigma%s_double', sigmas{i}));
+                tc.verifyEqual(fxGms.output, fxGmrg.output, sprintf( ...
+                    'fgms_sigma%s_double and fgmrg_%s_double fixtures are not bit-identical -- the FGMS/FGMRG alias claim no longer holds', ...
+                    sigmas{i}, sigmas{i}));
             end
         end
     end
