@@ -149,6 +149,13 @@ b = mexitk('FCA', [5 0.0625 3.0], double(V));
 % Watershed; returns a label image
 labels = mexitk('SWS', [0.05 0.01], double(V));
 
+% Geodesic active contour: a two-volume opcode. inputArray1 is the feature
+% image; inputArray2 is the initial level set (a seed mask, here a crude
+% intensity threshold), the reverse of what the argument names suggest --
+% see the gotcha below.
+seedMask = double(V > 40);
+seg = mexitk('SGAC', [1 1 1 0.02 50], double(V), seedMask);
+
 mexitk('?')                          % list opcodes with their validation status
 ```
 
