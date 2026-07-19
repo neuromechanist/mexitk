@@ -14,6 +14,8 @@
 
 #include "itkSigmoidImageFilter.h"
 
+#include <cmath>
+
 namespace mexitk {
 namespace {
 
@@ -65,9 +67,23 @@ class FsnOpcode : public Opcode {
   void Execute(OpContext& ctx) const override {
     // alpha == 0 makes SigmoidImageFilter's functor divide by zero, producing
     // NaN that then hits an undefined-behaviour cast into an integer pixel
-    // type. Reject it rather than reproduce the corruption.
-    if ((*ctx.params)[2] == 0.0) {
-      throw OpcodeError("mexitk:FSN:alpha", "alpha must be nonzero.");
+    // type. Reject it rather than reproduce the corruption. A NaN alpha
+    // reaches the same silent path (confirmed empirically: on uint8 it
+    // produced an all-zero output via the same undefined native cast, no
+    // exception) since `== 0.0` alone does not catch NaN -- guarded here
+    // too, param-guard hardening pass. The nonzero constraint itself is
+    // unchanged; only the non-finite gap is new.
+    const double alpha = (*ctx.params)[2];
+    if (!std::isfinite(alpha) || alpha == 0.0) {
+      throw OpcodeError("mexitk:FSN:alpha", "alpha must be finite and nonzero.");
+    }
+    // beta has no sign/range constraint anywhere in SigmoidImageFilter's own
+    // documentation or implementation, but a NaN beta was confirmed to
+    // propagate silently into the output with no exception, the same
+    // defect class as alpha; only non-finite is rejected here, since no
+    // prior constraint exists to preserve.
+    if (!std::isfinite((*ctx.params)[3])) {
+      throw OpcodeError("mexitk:FSN:beta", "beta must be finite.");
     }
     DispatchOnPixelType(mxGetClassID(ctx.volumeA),
                         [&](auto tag) { RunFsn<typename decltype(tag)::type>(ctx); });

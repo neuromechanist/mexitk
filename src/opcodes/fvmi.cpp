@@ -17,6 +17,7 @@
 #include "itkHessian3DToVesselnessMeasureImageFilter.h"
 #include "itkHessianRecursiveGaussianImageFilter.h"
 
+#include <cmath>
 #include <type_traits>
 
 namespace mexitk {
@@ -119,6 +120,23 @@ class FvmiOpcode : public Opcode {
   }
 
   void Execute(OpContext& ctx) const override {
+    // None of the three has a prior sign/range constraint anywhere in this
+    // file or in ITK's own documentation (unlike FLS/FGMRG's sigma, which
+    // ITK itself rejects for <= 0). Confirmed empirically: a NaN SetSigma
+    // silently produced an all-zero output (min=max=0, no exception); NaN
+    // SetAlpha1/SetAlpha2 each silently propagated into the output. Only
+    // the non-finite case is guarded, param-guard hardening pass -- no new
+    // sign/range constraint is added since none existed before.
+    const std::vector<double>& p = *ctx.params;
+    if (!std::isfinite(p[0])) {
+      throw OpcodeError("mexitk:FVMI:SetSigma", "SetSigma must be finite.");
+    }
+    if (!std::isfinite(p[1])) {
+      throw OpcodeError("mexitk:FVMI:SetAlpha1", "SetAlpha1 must be finite.");
+    }
+    if (!std::isfinite(p[2])) {
+      throw OpcodeError("mexitk:FVMI:SetAlpha2", "SetAlpha2 must be finite.");
+    }
     DispatchOnPixelType(mxGetClassID(ctx.volumeA),
                         [&](auto tag) { RunFvmi<typename decltype(tag)::type>(ctx); });
   }

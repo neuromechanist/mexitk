@@ -34,6 +34,14 @@ void RunFf(OpContext& ctx) {
   // Verified bit-exact against the reference: original XDIRECTION=1 ==
   // flip(vin,2), original YDIRECTION=1 == flip(vin,1) (see
   // docs/COMPATIBILITY.md, second capture campaign findings).
+  //
+  // Deliberate passthrough, no finiteness guard: `!= 0.0` is a plain IEEE
+  // comparison feeding a boolean flag array, not a numeric ITK computation
+  // -- NaN != 0.0 is well-defined (true, since every unordered comparison
+  // against NaN except != is false), so this can never be the silent-NaN/
+  // crash defect class fixed elsewhere in this file set (param-guard
+  // hardening, Epic 3): a NaN/Inf direction parameter just flips that axis,
+  // the same as any other nonzero value.
   typename FilterType::FlipAxesArrayType axes;
   AssignSwappedXY(axes, p[0] != 0.0, p[1] != 0.0, p[2] != 0.0);
   filter->SetFlipAxes(axes);

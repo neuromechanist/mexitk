@@ -14,6 +14,8 @@
 
 #include "itkBilateralImageFilter.h"
 
+#include <cmath>
+
 namespace mexitk {
 namespace {
 
@@ -89,9 +91,13 @@ class FblOpcode : public Opcode {
     //    normalization -- silently, with no exception, confirmed live
     //    (mexitk('FBL',[0 5],V) returns all-NaN on double, uniformly zero
     //    on uint8, no error). Same family as FDG's non-positive-variance
-    //    guard either way.
-    if (p[0] <= 0.0) {
-      throw OpcodeError("mexitk:FBL:domainSigma", "domainSigma must be positive.");
+    //    guard either way. A NaN domainSigma reaches the exact same silent
+    //    path (confirmed empirically, not just by construction: NaN
+    //    compares false against every ordered relational operator, so
+    //    `<= 0.0` alone does not catch it) -- guarded here too, param-guard
+    //    hardening pass.
+    if (!std::isfinite(p[0]) || p[0] <= 0.0) {
+      throw OpcodeError("mexitk:FBL:domainSigma", "domainSigma must be finite and positive.");
     }
     // rangeSigma <= 0: m_DynamicRangeUsed = m_RangeMu * m_RangeSigma
     // (m_RangeMu is a fixed positive 4.0) becomes <= 0, which is used
@@ -104,9 +110,10 @@ class FblOpcode : public Opcode {
     // INSIDE ITK's own DynamicThreadedGenerateData
     // (itkBilateralImageFilter.hxx:296-311) -- before mexitk's export step
     // ever runs, so ClampExport cannot intervene here the way it can for
-    // the promoted opcodes.
-    if (p[1] <= 0.0) {
-      throw OpcodeError("mexitk:FBL:rangeSigma", "rangeSigma must be positive.");
+    // the promoted opcodes. A NaN rangeSigma reaches the same silent path
+    // for the same reason as NaN domainSigma above; guarded here too.
+    if (!std::isfinite(p[1]) || p[1] <= 0.0) {
+      throw OpcodeError("mexitk:FBL:rangeSigma", "rangeSigma must be finite and positive.");
     }
     DispatchOnPixelType(mxGetClassID(ctx.volumeA),
                         [&](auto tag) { RunFbl<typename decltype(tag)::type>(ctx); });

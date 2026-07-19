@@ -31,8 +31,13 @@ void RunFomt(OpContext& ctx) {
   using InImage = Image3<PixelT>;
 
   const std::vector<double>& p = *ctx.params;
-  const int nThresholds = static_cast<int>(p[0]);
-  const int nBins = static_cast<int>(p[1]);
+  // Execute() has already validated and range-checked both parameters
+  // before dispatching here, so these two casts can never actually reject
+  // anything at this point; CastParam is used anyway rather than a raw
+  // static_cast, so no UB-prone cast of a double into int remains anywhere
+  // in this file, not just on the two paths the caller can reach first.
+  const int nThresholds = CastParam<int>(p[0], "FOMT", "numberOfThresholds");
+  const int nBins = CastParam<int>(p[1], "FOMT", "numberOfBins");
 
   typename InImage::Pointer input = ImportVolume<PixelT>(ctx.volumeA);
 
@@ -108,13 +113,31 @@ class FomtOpcode : public Opcode {
   }
 
   // The defining quirk of this opcode: output count is a parameter, and the
-  // original requires nargout to match it exactly.
+  // original requires nargout to match it exactly. mexFunction calls this
+  // BEFORE Execute() (see src/mexitk.cpp), so a non-finite or wildly
+  // out-of-range numberOfThresholds is now caught here first, via
+  // CastParam<int>'s own mexitk:paramRange -- mexFunction wraps this call
+  // in its own try/catch specifically so that error surfaces cleanly
+  // instead of an uncaught exception crossing the mexFunction boundary.
+  // Previously this was a raw static_cast<int> of a double with no
+  // validation at all: undefined behaviour for NaN/Inf/out-of-int-range
+  // input (masked on ARM64 by a saturating conversion that happened to
+  // produce 0, caught downstream only by luck via the ordinary nargout
+  // mismatch path -- not guaranteed on other platforms, e.g. x86's
+  // documented differently-UB float-to-int conversion; see
+  // docs/COMPATIBILITY.md deviation 12).
   int OutputCount(const std::vector<double>& params) const override {
-    return static_cast<int>(params[0]);
+    return CastParam<int>(params[0], "FOMT", "numberOfThresholds");
   }
 
   void Execute(OpContext& ctx) const override {
-    const int nThresholds = static_cast<int>((*ctx.params)[0]);
+    // CastParam<int> replaces the previous raw static_cast<int>: both
+    // parameters are now validated (finite, in int's range) before any
+    // further use, closing the same undefined-behaviour gap OutputCount()
+    // above closes. The existing semantic range checks below (1..
+    // kMaxThresholds, >=1 bins) are unchanged -- CastParam only guards the
+    // cast itself, not this opcode's own parameter semantics.
+    const int nThresholds = CastParam<int>((*ctx.params)[0], "FOMT", "numberOfThresholds");
     if (nThresholds < 1 || nThresholds > kMaxThresholds) {
       // A plain mexErrMsgIdAndTxt call here would be caught by mexFunction's
       // outer std::exception handler (Execute() runs inside that try) and its
@@ -126,7 +149,8 @@ class FomtOpcode : public Opcode {
           FormatMessage("numberOfThresholds must be between 1 and %d; got %d.",
                         kMaxThresholds, nThresholds));
     }
-    if (static_cast<int>((*ctx.params)[1]) < 1) {
+    const int nBins = CastParam<int>((*ctx.params)[1], "FOMT", "numberOfBins");
+    if (nBins < 1) {
       throw OpcodeError("mexitk:FOMT:numberOfBins", "numberOfBins must be a positive integer.");
     }
     DispatchOnPixelType(mxGetClassID(ctx.volumeA),

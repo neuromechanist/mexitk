@@ -96,6 +96,29 @@ classdef tSwsReference < matlab.unittest.TestCase
             tc.verifyEqual(d, a);
         end
 
+        function rejectsNonFiniteLevelAndThreshold(tc)
+            % Neither level nor threshold had a prior mexitk-level sign/
+            % range constraint (the "0.0-1.0" registry hint is
+            % documentation, not an enforced range, and stays that way).
+            % Re-verified directly for this hardening pass, per parameter,
+            % in isolated runs: level=NaN, level=+Inf and level=-Inf each
+            % silently returned a defined-looking but degenerate labeling
+            % (no exception); threshold=NaN and threshold=-Inf silently
+            % returned a defined-looking labeling too; threshold=+Inf was
+            % the one combination already caught, by luck rather than
+            % design, by ITK's own internal consistency check inside
+            % WatershedSegmentTreeGenerator (mexitk:itkException) -- not a
+            % guarantee for the other five, which this guard now covers
+            % uniformly instead (param-guard hardening, Epic 3 issue #26).
+            [~, vin] = mexitkFixture('sws_level0p5_thresh0p5');
+            tc.verifyError(@() mexitk('SWS', [NaN 0.5], vin), 'mexitk:SWS:level');
+            tc.verifyError(@() mexitk('SWS', [Inf 0.5], vin), 'mexitk:SWS:level');
+            tc.verifyError(@() mexitk('SWS', [-Inf 0.5], vin), 'mexitk:SWS:level');
+            tc.verifyError(@() mexitk('SWS', [0.5 NaN], vin), 'mexitk:SWS:threshold');
+            tc.verifyError(@() mexitk('SWS', [0.5 Inf], vin), 'mexitk:SWS:threshold');
+            tc.verifyError(@() mexitk('SWS', [0.5 -Inf], vin), 'mexitk:SWS:threshold');
+        end
+
         function overthresholdingErrorsInsteadOfCrashing(tc)
             % The original catches ITK's overthresholding exception and then
             % dies: a segmentation violation takes the whole MATLAB process

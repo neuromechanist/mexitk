@@ -271,7 +271,35 @@ void mexFunction(int nlhs, mxArray* plhs[], int nrhs, const mxArray* prhs[]) {
   // MATLAB reports nlhs==0 for a bare statement call, which conventionally
   // still yields one value via ans.
   const int nargout = std::max(nlhs, 1);
-  const int expected = op->OutputCount(params);
+  // OutputCount() is a plain arithmetic query for every opcode except FOMT,
+  // whose override now validates numberOfThresholds through CastParam<int>
+  // (Epic 3 param-guard hardening) and so can throw OpcodeError. This call
+  // sits outside the try/catch below on purpose -- wrapping it separately
+  // here, rather than folding it into that block, keeps the "expected"
+  // value's own error path independent of Execute()'s. Without this catch,
+  // an OpcodeError thrown here would be a C++ exception crossing this
+  // extern "C" mexFunction boundary uncaught, which is undefined behaviour
+  // (in practice, an abort that takes the whole MATLAB session down) rather
+  // than the clean, catchable error every other validation failure in this
+  // file produces. `expected` is defensively zero-initialized: none of
+  // these catch handlers return (mexErrMsgIdAndTxt transfers control back
+  // to the MATLAB prompt and never returns to its caller, undocumented as
+  // such at the C++ type level since it carries no [[noreturn]]), so the
+  // initializer is never actually read, but leaving it uninitialized would
+  // invite reading indeterminate memory if that documented contract were
+  // ever wrong.
+  int expected = 0;
+  try {
+    expected = op->OutputCount(params);
+  } catch (const OpcodeError& err) {
+    mexErrMsgIdAndTxt(err.Id().c_str(), "%s", err.what());
+  } catch (const itk::ExceptionObject& err) {
+    mexErrMsgIdAndTxt("mexitk:itkException", "ITK exception in %s: %s",
+                      opcodeName.c_str(), err.what());
+  } catch (const std::exception& err) {
+    mexErrMsgIdAndTxt("mexitk:exception", "Exception in %s: %s", opcodeName.c_str(),
+                      err.what());
+  }
   if (nargout != expected) {
     mexPrintf("Expected number of output(s): %d.  Supplied output(s): %d\n", expected,
               nargout);
