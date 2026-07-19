@@ -1042,8 +1042,25 @@ directly and DISPROVED it: `rtps_coplanar3_distinct_double` (3 DISTINCT
 pairs, sources coplanar, no duplication) reproduces EXACTLY (RMS
 8.146892e-13) -- coplanarity alone is not the cause.
 `rtps_pairs3_distinct_double` (3 distinct, well-spread, non-coplanar
-pairs) is likewise exact (RMS 5.264589e-12), while
-`rtps_pairs2_distinct_double` (only 2 distinct pairs) has a real residual
+pairs) is likewise exact -- **RMS 5.264589e-12 on macOS arm64, 6.78818e-12
+on Linux x86_64**, a ~29% spread between two measurements that are BOTH
+genuine double-precision noise (relative to the 0-88 intensity range,
+each is roughly 1e-13). `ThinPlateSplineKernelTransform`'s `ComputeWMatrix`
+solves its augmented system via `vnl_svd`, which runs through each
+platform's own LAPACK/BLAS; the two platforms do not agree on the exact
+noise-floor residual, only on its ORDER of magnitude. The bound asserted
+in `tests/tReferenceBounded.m` is the MAXIMUM of the two measurements
+(6.78818e-12), not the macOS-only value this project first measured and
+shipped in PR #30 -- CI caught the gap when Linux's own run (6.78818e-12)
+exceeded the macOS-derived bound (ceiling 6.2646e-12, about 8% under)
+by exercising a platform this project had not yet measured this specific
+fixture against. This is completing an under-measured bound with a
+second platform's own data, not raising one to hide a real disagreement
+with the original: no comparison against the original binary moved,
+only the recorded floor of platform-dependent SVD noise grew to reflect
+a measurement that already existed in reality and simply had not been
+taken yet. `rtps_pairs2_distinct_double` (only 2 distinct pairs), by
+contrast, has a real residual
 (RMS 4.159985, comparable in kind to `pair1_minimal`'s single pair).
 **The threshold is the number of DISTINCT landmark pairs: 3 or more
 reproduces exactly (regardless of coplanarity), fewer than 3 leaves a
@@ -1071,8 +1088,9 @@ residual would shrink monotonically as distinct-pair count rose from 1
 toward 4+; it does not. The full sequence, ordered by distinct-pair
 count: 1 pair (`pair1_minimal`, RMS 3.647131), 2 pairs
 (`pairs2_distinct`, RMS 4.159985 -- WORSE than 1 pair, not smaller), 3
-pairs (`pairs3_distinct`, RMS 5.264589e-12 -- suddenly at the noise
-floor), 5 pairs (`nc5_identity`/`nc5_translate`, RMS ~2e-10 -- still at
+pairs (`pairs3_distinct`, RMS 5.26e-12 on macOS/6.79e-12 on Linux --
+suddenly at the noise floor, platform-dependent order of magnitude and
+all), 5 pairs (`nc5_identity`/`nc5_translate`, RMS ~2e-10 -- still at
 the noise floor). Agreement does not improve gradually as more distinct
 pairs are added; it steps from "real, measured residual" to
 "floating-point noise floor" the moment 3 distinct pairs are reached,

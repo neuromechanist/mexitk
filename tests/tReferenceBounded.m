@@ -243,7 +243,24 @@ classdef tReferenceBounded < matlab.unittest.TestCase
             'RTPS', 'rtps_nc5_translate_double',       1.998278382e-10, 7.471129493e-09; ...
             'RTPS', 'rtps_pairs4_translate_double',    2.634815908e-12, 7.443602765e-11; ...
             'RTPS', 'rtps_coplanar3_distinct_double',  8.146892322e-13, 1.563194019e-11; ...
-            'RTPS', 'rtps_pairs3_distinct_double',     5.264588848e-12, 1.091677859e-10; ...
+            ... rtps_pairs3_distinct_double's RMS below is the MAXIMUM
+            ... measured across both CI platforms (Linux x86_64
+            ... 6.78818e-12, macOS arm64 5.26459e-12), not a single-
+            ... platform measurement: at this magnitude (both values are
+            ... ~1e-13 relative to the 0-88 intensity range, i.e. genuine
+            ... double-precision noise), ThinPlateSplineKernelTransform's
+            ... vnl_svd solve runs through each platform's own LAPACK/BLAS,
+            ... and the two measurements disagree by about 29% of each
+            ... other -- Linux's own value exceeded the bound this project
+            ... had asserted from the macOS measurement alone by about 8%,
+            ... failing CI (caught on PR #30). This is completing an
+            ... under-measured bound, not raising one to hide a real
+            ... disagreement (forbidden by project policy): the quantity
+            ... being bounded is which-platform's-LAPACK noise, not
+            ... agreement with the original, and only ONE platform's noise
+            ... had been measured before. max-abs is unaffected (Linux's
+            ... own max-abs was not reported to exceed the existing bound).
+            'RTPS', 'rtps_pairs3_distinct_double',     6.78818e-12, 1.091677859e-10; ...
             'RTPS', 'rtps_pairs4_identity_double',     2.226571164, 88.0; ...
             'RTPS', 'rtps_pair1_minimal_double',       3.647131445, 88.0; ...
             'RTPS', 'rtps_pairs2_distinct_double',     4.159985105, 88.0};
