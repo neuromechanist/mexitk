@@ -441,6 +441,19 @@ classdef tPhase5LevelSetSmoke < matlab.unittest.TestCase
             outSdlsNoSeed = mexitk('SSDLS', [1 1 0.02 5], tc.V, tc.V);
             tc.verifyEqual(outSdlsSeed, outSdlsNoSeed);
         end
+
+        function twoVolumeOpcodesRejectExtraOutputArgument(tc)
+            % Single-output opcodes per the registry; requesting a second
+            % output must error, matching every other opcode's nargout
+            % contract (see sfmRejectsExtraOutputArgument above and
+            % tFomtReference.m's own use of the same withOutputs helper).
+            tc.verifyError(@() withOutputs(2, @() mexitk('SGAC', [1 1 1 0.02 5], tc.V, tc.V)), ...
+                'mexitk:nargout');
+            tc.verifyError(@() withOutputs(2, @() mexitk('SLLS', [0.5 1 1 0.02 5], tc.V, tc.V)), ...
+                'mexitk:nargout');
+            tc.verifyError(@() withOutputs(2, @() mexitk('SSDLS', [1 1 0.02 5], tc.V, tc.V)), ...
+                'mexitk:nargout');
+        end
     end
 end
 
