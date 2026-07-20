@@ -24,5 +24,11 @@ slprj/
 # macOS
 .DS_Store
 
+# Local MCP config (references a sibling checkout and a machine-specific MATLAB path)
+.mcp.json
+
+# Epic workflow state (local only)
+.claude/*.local.md
+
 # Note: do NOT add a blanket *.mat rule here.
 # tests/fixtures/*.mat are committed reference fixtures and must stay tracked.
