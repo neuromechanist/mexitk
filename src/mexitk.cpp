@@ -44,7 +44,7 @@ using mexitk::PixelTypeName;
 using mexitk::RegisterBuiltinOpcodes;
 using mexitk::StatusName;
 
-constexpr const char* kVersion = "0.5.0";
+constexpr const char* kVersion = "0.6.0";
 constexpr const char* kUsage =
     "mexitk(operationName,[parameters],[inputArray1],[inputArray2],"
     "[seed(s)Array],[Image(s)Spacing])";
@@ -90,6 +90,8 @@ void PrintOpcodeListing() {
       "                    The bound is asserted by a test. See the note.\n"
       "  smoke-tested      runs, but no reference capture exists.\n"
       "  untested          never run against a reference.\n"
+      "  unsupported       registered, but Execute() always throws: the\n"
+      "                    original's behaviour is not reproduced by design.\n"
       "See docs/COMPATIBILITY.md for the full record.\n");
   mexPrintf("\nExample:\n  load mri; V = squeeze(D);\n");
   mexPrintf("  b = mexitk('FCA',[5 0.0625 3.0], double(V));\n");

@@ -369,6 +369,27 @@ identically to FGAD.
 | Confidence | High |
 
 ### `FFFT` — Forward FFT (highest API drift of any filter opcode)
+
+**Resolved (Epic 4 Phase 2).** Implemented against the concrete
+`itk::VnlForwardFFTImageFilter` (the abstract `ForwardFFTImageFilter` below
+fails to instantiate on this project's own ITK build, which has no PocketFFT
+backend compiled in). The real/complex switch semantics this entry flags as
+**not confirmed** are now CONFIRMED, not by inference but by a controlled
+reference-host capture round (`s15`: three small 8x8x8 volumes with
+analytically known spectra): Real mode (param 0) is the REAL PART of the
+full 3-D forward FFT, rescaled to `[0,255]`; Complex mode (param 1) is the
+raw, unscaled IMAGINARY PART, with a sign correction the same captures
+revealed (`VnlForwardFFTImageFilter`'s own imaginary-part sign convention is
+the exact negation of the original's). The two original (mri-sized)
+fixtures still carry a real, measured residual even with the confirmed
+packing, independently traced to a genuine ITK-2.4-vs-modern difference on
+this composite (non-power-of-2, `z=27`) size, not a bug in this codebase
+(this codebase's own FFT was proven mathematically exact against MATLAB's
+`fftn` on the same volume). Status: bounded deviation, scoped to `double`.
+See `docs/COMPATIBILITY.md`'s "`FGMS` and `FFFT`: resolved (Epic 4 Phase 2)"
+and `src/opcodes/ffft.cpp`'s `StatusNote` for the full evidence trail.
+The table below is kept as the original mapping-pass record.
+
 | Field | Value |
 |---|---|
 | ITK 2.4 class | almost certainly `itk::VnlFFTRealToComplexConjugateImageFilter` (VNL was the only forward-FFT backend enabled by default pre-4.0; FFTW was opt-in for licensing reasons) |
@@ -428,6 +449,17 @@ identically to FGAD.
 | Confidence | High |
 
 ### `FGMS` — Gradient Magnitude with Smoothing (**flagged, low confidence**)
+
+**Resolved (Epic 4 Phase 2).** The two-stage hypothesis below is DISPROVEN,
+not merely superseded: a reference-host capture shows the original's own
+`FGMS` output is bit-identical to its own `FGMRG` output at every captured
+sigma. `mexitk` implements `FGMS` as the same
+`GradientMagnitudeRecursiveGaussianImageFilter` call as `FGMRG`, the same
+registry-duplicate situation as `FGA`/`FDG`. Status: bounded deviation. See
+`docs/COMPATIBILITY.md`'s "`FGMS` and `FFFT`: resolved (Epic 4 Phase 2)" and
+`src/opcodes/fgmrg.cpp`'s `FgmsOpcode::StatusNote` for the full evidence.
+The table below is kept as the original mapping-pass record.
+
 | Field | Value |
 |---|---|
 | ITK 2.4 class | unknown — no ITK class named "GradientMagnitudeWithSmoothingFilter" exists anywhere in the ITK 5.x tree (checked `Modules/Filtering/ImageFeature` and `Modules/Filtering/Smoothing`) |
@@ -553,6 +585,18 @@ output** (single labeled image; N binary masks are derived post-hoc via
 | Confidence | High |
 
 ### `SCSS` — highest-risk opcode in the whole set
+
+**Resolved (Epic 4 Phase 2).** `SCSS` is formally dispositioned unsupported,
+not implemented: registered with `Status::kUnsupported`, appears in
+`mexitk('?')`, but `Execute()` always throws `mexitk:SCSS:unsupported`. A
+reference-host capture (`scss_scss_20_60_10_seedS1_double`) confirms the risk
+this entry already flagged is real, not hypothetical: the original itself ran
+without error, and its own output is a `[10 1]` column of ones (one entry per
+`AdvanceTimeStep()` iteration), not an image. See `docs/COMPATIBILITY.md`'s
+"`SCSS`: formally unsupported (Epic 4 Phase 2)" and `src/opcodes/scss.cpp`.
+The analysis below is kept as the original mapping-pass record and remains
+the rationale for the disposition.
+
 **Not** `SimpleFuzzyConnectednessScalarImageFilter`/fuzzy-connectedness as
 initially hypothesized. `itk::SimpleFuzzyConnectednessScalarImageFilter`
 and `itk::FuzzyConnectednessImageFilterBase` are **confirmed removed** —

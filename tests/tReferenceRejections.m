@@ -3,7 +3,7 @@ classdef tReferenceRejections < matlab.unittest.TestCase
     % on whether to run at all, plus two fixtures whose "disagreement" is
     % not a real one (see emptySeed* below).
     %
-    % Three genuinely different situations live here, all deliberate, all
+    % Four genuinely different situations live here, all deliberate, all
     % documented in docs/COMPATIBILITY.md:
     %   - mexitk refuses an input the original accepted, because the
     %     original's own behaviour on that input is undefined behaviour in
@@ -16,6 +16,17 @@ classdef tReferenceRejections < matlab.unittest.TestCase
     %     runs and produces a result of the right shape/class.
     %   - Both reject the same input, for possibly different specific
     %     reasons (both still land outside the valid domain).
+    %   - mexitk refuses an ENTIRE OPCODE the original ran successfully,
+    %     because the original's own output for that opcode is not an
+    %     image (SCSS: the original returned without error, but its own
+    %     output is a [10 1] vector of ones, not anything mexitk's
+    %     image-in/image-out calling convention could return under this
+    %     name without misleading a caller -- see src/opcodes/scss.cpp).
+    %     This is not a per-input param-range rejection like the first
+    %     category above (the fixture's own params are unremarkable;
+    %     every SCSS call rejects, not just this one), so it gets its own
+    %     assertion against mexitk:SCSS:unsupported rather than
+    %     mexitk:paramRange.
     %
     % SPDX-License-Identifier: BSD-3-Clause
     % Copyright (c) 2026, Seyed Yahya Shirazi <shirazi@ieee.org>
@@ -35,7 +46,8 @@ classdef tReferenceRejections < matlab.unittest.TestCase
             'sct_arg4_mismatch_uint8', 'sic_20_255_extraignored_double', ...
             'sic_dimmax_double', 'snc_dimmax_double'};
 
-        mutualRejectionFixture = {'sct_base0_double', 'sic_split_s1only'};
+        mutualRejectionFixture = {'sct_base0_double', 'sic_split_s1only', ...
+            'rtps_tps_volB_seedS1_double', 'rtps_odd3_reject_double'};
     end
 
     methods (Test)  % mexitk refuses an input the original accepted
@@ -81,13 +93,43 @@ classdef tReferenceRejections < matlab.unittest.TestCase
         end
     end
 
+    methods (Test)  % mexitk refuses the whole opcode, not just this input
+        function scssRefusesDespiteOriginalSuccess(tc)
+            [fx, vin] = mexitkFixture('scss_scss_20_60_10_seedS1_double');
+            tc.assertTrue(fx.success, sprintf( ...
+                ['%s: original itself rejected this input (fixture bookkeeping ' ...
+                 'error -- SCSS''s refusal belongs in this test regardless, but ' ...
+                 'the assertTrue above would then be documenting the wrong fact)'], ...
+                'scss_scss_20_60_10_seedS1_double'));
+            % The original's own output confirms it is not an image: a
+            % [10 1] column, one entry per AdvanceTimeStep() iteration
+            % (numberOfIterations=10 in fx.params), not a volume shaped
+            % like the input. mexitk never attempts to reproduce this
+            % value; it always throws mexitk:SCSS:unsupported instead.
+            tc.verifyEqual(size(fx.output), [10 1]);
+            tc.verifyEqual(fx.output, ones(10, 1));
+            tc.verifyError(@() mexitk('SCSS', fx.params, vin, [], fx.seedArg), ...
+                'mexitk:SCSS:unsupported');
+        end
+    end
+
     methods (Test)  % both reject, for their own reasons
         function bothRejectTheSameInput(tc, mutualRejectionFixture)
-            [fx, vin] = mexitkFixture(mutualRejectionFixture);
+            % vinB is fetched and threaded through unconditionally: it is
+            % [] for sct_base0_double/sic_split_s1only (single-volume
+            % opcodes, no arg4Recipe), where mexitkFixtureCall's own
+            % isempty(vinB) fallback keeps their prior behaviour unchanged,
+            % but rtps_tps_volB_seedS1_double was captured WITH a genuine
+            % volumeB (arg4Recipe) -- dropping it here would exercise a
+            % different call shape than the one the original actually
+            % rejected (RequireVolumeB would fire first, under
+            % mexitk:RTPS:volumeB, not the landmarks rejection this fixture
+            % is actually evidence for).
+            [fx, vin, vinB] = mexitkFixture(mutualRejectionFixture);
             tc.assertFalse(fx.success, sprintf( ...
                 '%s: original itself succeeded on this input', mutualRejectionFixture));
 
-            fn = @() mexitkFixtureCall(fx.opcode, fx, vin);
+            fn = @() mexitkFixtureCall(fx.opcode, fx, vin, vinB);
             tc.verifyError(fn, sprintf('mexitk:%s', ...
                 localExpectedIdSuffix(mutualRejectionFixture)));
         end
@@ -138,6 +180,10 @@ switch name
         suffix = 'seeds';
     case 'sic_split_s1only'
         suffix = 'SIC:seeds';
+    case 'rtps_tps_volB_seedS1_double'
+        suffix = 'RTPS:landmarks';
+    case 'rtps_odd3_reject_double'
+        suffix = 'RTPS:landmarks';
     otherwise
         error('tReferenceRejections:unknownFixture', ...
             'No expected error id mapping for %s', name);

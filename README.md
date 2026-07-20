@@ -31,17 +31,30 @@ Keeping ITK keeps the algorithms.
 
 ## Status: honest summary
 
-This is version 0.5.0.
-**35 of the original's 40 opcodes are implemented.**
+This is version 0.6.0.
+**All 40 of the original's opcodes are now addressed: 39 implemented, 1 formally unsupported.**
 Epic 2 (Phases 1-3) extended reference capture to 30 of them and measured every one against
 the original binary; Epic 3 added `FMMCF` and `SFM` (Phase 1), then `SGAC`, `SLLS`, and `SSDLS`
-(Phase 2, the first opcodes to genuinely consume a second image volume), each with its own
-captured fixture.
+(Phase 2, the first opcodes to genuinely consume a second image volume); Epic 4 Phase 1 added
+`RD` and `RTPS`, the first `Category::kRegistration` opcodes. `RTPS`'s landmark calling
+convention (which no fixture initially proved) was settled by two follow-up reference-host
+capture rounds (`tools/capture_reference/s14_rtps_landmarks.m`, nine fixtures total) that
+disproved the phase's original inference outright, pinned down the real one, and then
+isolated the exact cause of its two residual cases. Epic 4 Phase 2 closed out the roadmap:
+`FGMS` is confirmed a registry duplicate of `FGMRG` (bit-identical in the original at every
+captured sigma, the same situation as `FGA`/`FDG`); `FFFT`'s packing (undetermined from the
+two original fixtures alone) was pinned down exactly by a follow-up controlled capture round
+(`tools/capture_reference/s15_ffft_packing.m`, three small volumes with analytically known
+spectra) -- real mode is the real part of the FFT rescaled to `[0,255]`, complex mode is the
+raw imaginary part -- though a real, independently-investigated residual remains on the
+original mri-sized fixtures even with the confirmed packing; `SCSS` is formally dispositioned
+**unsupported** rather than implemented -- see below. See `docs/COMPATIBILITY.md` for the full
+story on every one of these.
 The table below reflects that measurement, produced by `tools/classify_fixtures.m`.
 Every claim in the table is enforced by the test suite
 (`tests/tReferenceExact.m`, `tests/tReferenceBounded.m`,
 `tests/tReferenceRejections.m`, plus the dedicated FCA/FOMT/SWS suites):
-774 tests, run green in CI on Linux x86_64 and macOS arm64
+845 tests, run green in CI on Linux x86_64 and macOS arm64
 (including the no-ITK-installed static-artifact runs)
 for the tree this table describes.
 
@@ -72,6 +85,7 @@ for the tree this table describes.
 | `FGA` | `DiscreteGaussianImageFilter` | **bounded deviation** | Duplicate of `FDG`, now fixture-confirmed: bit-identical to `FDG`'s own output in the original at every capturable point. Same measured deviation as `FDG`. |
 | `FGAD` | `GradientAnisotropicDiffusionImageFilter` | **bounded deviation** | Gradient-conductance sibling of `FCA`. RMS order 5e-5 to 0.35 on double/single; `uint8`/`int32` promote to `float` internally with a larger residual (RMS up to ~11.7 on uint8). |
 | `FGMRG` | `GradientMagnitudeRecursiveGaussianImageFilter` | **bounded deviation** | Bit-identical on int32/uint8 at sigma=2; double/single have a floating-point-noise-floor residual otherwise. Distinct algorithm from `FGM`. |
+| `FGMS` | `GradientMagnitudeRecursiveGaussianImageFilter` | **bounded deviation** | Registry duplicate of `FGMRG`, fixture-confirmed: bit-identical to `FGMRG`'s own output in the original at every captured sigma (1, 2, 4), the same situation as `FGA`/`FDG`. Same measured deviation as `FGMRG` at matching sigma. |
 | `FLS` | `LaplacianRecursiveGaussianImageFilter` | **bounded deviation** | Bit-identical on int32 at sigma=2; double/single at the floating-point noise floor. `uint8`'s clamp-to-0 export of the signed field amplifies that tiny difference into a much larger measured residual (RMS ~98.7). |
 | `FMMCF` | `MinMaxCurvatureFlowImageFilter` | **bounded deviation** | Not bit-identical on the one captured fixture (double, RMS 1.60, max 43.3 on 33% of voxels); a real numerics drift, not floating-point noise -- verified 0 iterations is an exact no-op and the deviation compounds with iteration count, the same shape as `FCF`'s. `uint8`/`int32` promote to `float` internally; no fixture exists for them. |
 | `FOMT` | `OtsuMultipleThresholdsImageFilter` | **bounded deviation** | Bit-identical to the original for `double`/`single` at N=2,3,4, and for `uint8` at N=1 (asserted exactly). `uint8` at N=2,3,4 deviates (0.17%/0.38%/0.84% of voxels, measured); confirmed a genuine ITK 2.4-to-5.x integral-histogram-binning difference, not the same fixable bug SOT had. |
@@ -81,7 +95,11 @@ for the tree this table describes.
 | `SNC` | `NeighborhoodConnectedImageFilter` | **bounded deviation** | Bit-identical at radius [1,1,1] and the base threshold fixtures; other radii have a measured residual independent of axis order (an upstream algorithm difference, the same class as FCA/SWS). |
 | `SLLS` | `LaplacianSegmentationLevelSetImageFilter` | **bounded deviation** | Not bit-identical on the one captured fixture (double): 280/442368 voxels (0.063%) land on the wrong side of the binary threshold, each within 0.077 of the zero crossing -- the floating-point noise floor of a 50-iteration finite-difference solver. Two-volume opcode, same role assignment as `SGAC`. Threshold polarity is the SAME as `SGAC` (negative -> 255), the opposite of what this filter's own ITK header documents; the documented polarity was tried first and was wrong by nearly the entire volume. |
 | `SSDLS` | `ShapeDetectionLevelSetImageFilter` | **bounded deviation** | Not bit-identical on the one captured fixture (double): max-abs 5.25e-6, RMS 6.7e-8, the floating-point noise floor, the same category as `SFM`'s. Two-volume opcode, same role assignment as `SGAC`/`SLLS`. Unlike `SGAC`/`SLLS`, returns the raw, un-thresholded narrow-band level set directly (bounded +-4 on the captured fixture). |
+| `RD` | `HistogramMatchingImageFilter` + `DemonsRegistrationFilter` + `WarpImageFilter` | **bounded deviation** | Not bit-identical on the one captured fixture (double): RMS 4.63626, max-abs 88 (the full 0-88 input intensity range), 39.1% of voxels differ -- a real numerics difference in the iterative Demons solver, the same category as `FCA`/`FMMCF`, not floating-point noise. `numberOfIterations=0` is confirmed an exact identity no-op. Fixed/moving roles (volume A fixed, volume B moving) confirmed by a swap test; the swapped wiring measures materially worse (RMS 21.7). `uint8`/`int32`/`single` promote to `float` internally; no fixture exists for them. |
+| `RTPS` | `ThinPlateSplineKernelTransform` + `ResampleImageFilter` | **bounded deviation** | Two reference-host capture rounds (nine fixtures) disproved the phase's original inference (split-in-half landmarks, volume A fixed) outright and pinned down the real convention: landmarks are INTERLEAVED (`source1,target1,source2,target2,...`), and volume B is fixed / volume A is moving -- the opposite of `RD`. Five of eight successful captures reproduce at the floating-point noise floor (three at RMS ~1e-12, two at RMS ~2e-10); the other three have a real, modest, measured residual (RMS 2.23 to 4.16). A round-2 follow-up pinned the exact cause: 3 or more DISTINCT landmark pairs reproduce exactly regardless of coplanarity; fewer than 3 (whether from a small landmark count or duplicate pairs) leaves the underlying least-squares system underdetermined enough to diverge slightly between ITK 2.4 and 5.4, the same upstream-numerics category as `FCA`/`SNC`/`SWS`. Not a gradual improvement either: 2 distinct pairs (RMS 4.16) measures worse than 1 (RMS 3.65) before reproduction jumps straight to the noise floor at 3 -- a threshold, not a monotonic shrink, disproving the capture round's own working assumption. See docs/COMPATIBILITY.md for the full evidence, including why the original inference was wrong. `uint8`/`int32`/`single` promote to `float` internally; no fixture exists for them. |
+| `FFFT` | `ForwardFFTImageFilter` (via the concrete `VnlForwardFFTImageFilter`) | **bounded deviation** | Packing confirmed exactly by a follow-up controlled capture round (`s15`: three small 8x8x8 volumes with analytically known spectra) after the original two mri-sized fixtures alone proved insufficient: real mode is the real part of the FFT rescaled to `[0,255]`; complex mode is the raw imaginary part (with a sign correction the captures themselves revealed -- `VnlForwardFFTImageFilter`'s own convention is the exact negation of the original's). 4 of 6 small captures are bit-exact, the other 2 at the double-precision noise floor. The two original mri-sized fixtures still show a real, larger residual (real mode RMS 20.2/maxabs 95.5; complex mode RMS 16121/maxabs 3.54495e6) even with the confirmed packing -- independently traced to a genuine difference in the original's own FFT on this composite (non-power-of-2) size, not a bug here: this codebase's own FFT was proven mathematically exact (RMS 1.8e-11) against MATLAB's own `fftn` on the same volume. See `src/opcodes/ffft.cpp`'s `StatusNote` for the full evidence. |
 | `FAAB` | `AntiAliasBinaryImageFilter` | **smoke-tested** | Runs and returns plausible output; reference fixtures exist but disagreement is too large to bound meaningfully (RMS in the hundreds). Output is a signed level-set field (positive inside). Integral input promotes to `float`; on `uint8` the negative (outside) half saturates to 0 on export. |
+| `SCSS` | `bio::CellularAggregate` (BioCell remote module, not built into `mexitk`) | **unsupported** | Deliberately refused, not implemented. `SCSS` maps to a stateful mitosis/chemotaxis simulation whose native output is a triangulated surface mesh, not an image -- the captured fixture confirms the original's own output is a `[10 1]` vector of iteration counters, not anything `mexitk`'s image-in/image-out convention could return under this name without misleading a caller. Calling `SCSS` always throws `mexitk:SCSS:unsupported`. See `src/opcodes/scss.cpp` and `docs/itk_opcode_mapping.md`. |
 
 Status vocabulary, used consistently in the code, in `mexitk('?')`, and here:
 
@@ -89,12 +107,18 @@ Status vocabulary, used consistently in the code, in `mexitk('?')`, and here:
 - **bounded deviation**: compared against a reference fixture and does *not* match bit-for-bit.
   The difference is a measured, bounded consequence of ITK's own evolution from 2.4 to 5.x,
   not a porting error. The bound is asserted by a test.
-- **smoke-tested**: runs and returns plausible output, but no reference capture exists.
+- **smoke-tested**: runs and returns plausible output, but no reference capture exists or no
+  agreement was determined against the one that does.
 - **untested**: implemented from the ITK mapping only; never run against a reference.
+- **unsupported**: registers and appears in the `mexitk('?')` listing, but always throws.
+  A deliberate, documented refusal for an opcode whose original behaviour cannot be faithfully
+  reproduced even in principle -- not a missing implementation, and never applied to hide a
+  gap that could still be closed honestly. Only `SCSS` carries this status.
 
-The remaining 5 opcodes are **not implemented**.
-They are catalogued in `docs/matitk_opcode_registry.txt` (the original binary's own parameter dump)
-and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`.
+All 40 opcodes from the original's own parameter dump are now addressed: 39 implemented above,
+plus `SCSS` formally unsupported. Both are catalogued in `docs/matitk_opcode_registry.txt`
+(the original binary's own parameter dump) and mapped to modern ITK classes in
+`docs/itk_opcode_mapping.md`.
 
 > **Comparing against an older result?**
 > Output from any opcode marked **bounded deviation** above (`FCA` and `SWS` among them)
@@ -114,8 +138,8 @@ Read it before relying on this for science.
 
 | Platform | State |
 |---|---|
-| macOS arm64 (`maca64`) | Builds, loads, 774/774 tests pass. Verified locally against Homebrew ITK and in CI against static ITK, including the full suite on a runner with **no ITK installed**. |
-| Linux x86_64 (`glnxa64`) | Builds, loads, 774/774 tests pass. Verified in CI against static ITK, including the full suite on a runner with **no ITK installed**. Must be built with GCC 12 or older; see BUILDING.md. |
+| macOS arm64 (`maca64`) | Builds, loads, 845/845 tests pass. Verified locally against Homebrew ITK and in CI against static ITK, including the full suite on a runner with **no ITK installed**. |
+| Linux x86_64 (`glnxa64`) | Builds, loads, 845/845 tests pass. Verified in CI against static ITK, including the full suite on a runner with **no ITK installed**. Must be built with GCC 12 or older; see BUILDING.md. |
 | macOS x86_64 (`maci64`) | Legacy; built on a best-effort basis only. R2025b is MathWorks' final Intel-Mac release. |
 | Windows | Best-effort only; the ITK toolchain there is unresolved. Not attempted. |
 

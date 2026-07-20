@@ -551,6 +551,8 @@ or refuses to reproduce a defect.
 | 12 | **Every opcode with a raw floating-point parameter now rejects non-finite (`NaN`/`+-Inf`) input**, each with its own specific `mexitk:<OPCODE>:<param>` identifier **except `FOMT`'s two**, which route through the shared `CastParam<int>` validation and so surface as the generic `mexitk:paramRange` for every non-finite value, never `FOMT`'s own `mexitk:FOMT:numberOfThresholds`/`numberOfBins` ids (those stay reserved for in-range-but-semantically-invalid values, e.g. `numberOfThresholds = 0`) — closing a project-wide gap discovered during Epic 3 (Phase 1 review found it in `FMMCF`; a systematic survey of every remaining opcode, tracked as issue #26, found the identical defect class in ten more). The root cause is the same everywhere: a guard written as `<= 0.0` / `== 0.0` / `< 0.0` is silently false for `NaN` (every ordered comparison against `NaN` is false) and does not reject `+Inf` either, so a value that was supposed to be rejected instead reached the filter. Each parameter's guard was verified empirically (an isolated run per parameter, not inferred from reading the code) before being fixed, and the fix never tightens beyond the non-finite case: an existing sign/range constraint (`<= 0.0`, `== 0.0`) keeps its own exact semantics, gaining only the missing `!std::isfinite(...)` check; a parameter with no prior constraint gets that check alone, nothing more. **Twenty parameter instances across fourteen opcodes are covered** (counting convention, so the number is checkable: `FDG`'s and `FGA`'s `gaussianVariance` guards count as two instances, since each carries its own identifier despite sharing one C++ guard function; `FOMT`'s `numberOfThresholds` and `numberOfBins` likewise count as two, despite sharing `mexitk:paramRange` as their non-finite identifier): `FCA`/`FCF`/`FGAD`/`FMMCF` `timeStep` (Epic 3 Phase 1; `-Inf` was already caught by the pre-existing `< 0.0` guard on all four, so only `NaN`/`+Inf` were the actual gap); `FBL` `domainSigma`/`rangeSigma`; `FDG`/`FGA` `gaussianVariance` (one shared guard function fixes both opcodes); `FSN` `alpha` (kept its `== 0` constraint) and `beta` (had none); `FLS` and `FGMRG` `sigma` (each already had ITK's own `<= 0.0` exception for the sign case, which — unlike the `timeStep` family's `< 0.0` guards above — DOES already cover `-Inf` too, since `-Inf <= 0.0` is a well-ordered true comparison, unlike `NaN`; only `NaN`/`+Inf` were the actual pre-PR gap, but the new mexitk-level guard now intercepts `-Inf` first as well, since it runs before either filter ever dispatches, so `-Inf` surfaces as `mexitk:FLS:sigma`/`mexitk:FGMRG:sigma` instead of the pre-PR `mexitk:itkException` — a deliberate, disclosed identifier change for an input that was already rejected, not a new rejection); `FVMI` `SetSigma`/`SetAlpha1`/`SetAlpha2` (no prior constraint on any of the three); `SCC` `multiplier` (no prior constraint); `SWS` `level`/`threshold` (no prior constraint; the "0.0-1.0" registry hint is documentation only, not an enforced range, and stays that way); `FOMT` `numberOfThresholds`/`numberOfBins` (a different repair, below). Observed severity, measured per opcode and per parameter rather than assumed uniform: most silently return an all-`NaN` output with no exception (`FCF`; `FCA`'s own `NaN` case; `FGAD`; `FBL`'s `domainSigma`/`rangeSigma`; `FDG`/`FGA`; `FLS`; `FGMRG`; `FSN`'s `alpha` and `beta` on `double` input; `FVMI`'s `SetAlpha1`/`SetAlpha2`), the same class as deviation 11 (`FBL`'s own pre-existing silent-`NaN` guard); `FSN`'s `alpha` on `uint8` input is a distinct manifestation of the same underlying gap, not another all-`NaN` case: a silent all-zero output via the undefined-behaviour native cast deviation 7 already documents for `alpha == 0`, since `FSN` has no promote-and-`ClampExport` path to intervene; some parameters instead silently return a degenerate all-zero or empty-looking result (`FVMI`'s `SetSigma`, `SCC`'s `multiplier`, `SWS`'s `level`/`threshold` for five of six non-finite combinations — the sixth, `SWS` `threshold=+Inf`, was already caught, by luck rather than design, by an internal ITK consistency check inside `WatershedSegmentTreeGenerator`); `FCA`'s own `+Inf timeStep` case is a mixed `NaN`/`Inf` output, not uniformly one or the other; `FMMCF` is the outlier and the most severe of all of them, crashing the whole MATLAB process with a `SIGBUS` inside `MinMaxCurvatureFlowFunction::ComputeThreshold`'s `Dispatch<3>` path for both `NaN` and `+Inf` `timeStep` — the same severity class as deviation 1 (`SWS` overthresholding) and deviation 9 (`SOT` histogram bins), not the milder silent-corruption class every other opcode here shares. `FOMT`'s `numberOfThresholds`/`numberOfBins` are a genuinely different repair, not just another instance of the pattern above: both previously reached a raw `static_cast<int>` of a `double` with **no validation at all**, in three separate places (`OutputCount()`, `Execute()`, and `RunFomt()` itself) — actual standard-mandated undefined behaviour for a non-finite or out-of-`int`-range value, not merely an ITK-internal silent-`NaN` propagation. This was masked, not fixed, by luck on this project's own development platform: ARM64's saturating float-to-`int` conversion happens to produce `0` for `NaN`, caught downstream only via the ordinary `nargout` mismatch path, with no such guarantee on other platforms this project targets (x86 has its own, differently-undefined conversion behaviour — the same class of platform divergence already documented for `SeedPointsToIndices` in `mexitk_common.h`). All three casts now route through `CastParam<int>` instead, which was also the point where a second, structural gap surfaced and was fixed in the same pass: `mexFunction` (`src/mexitk.cpp`) calls `OutputCount()` *before* the `try`/`catch` block that wraps `Execute()`, so a `CastParam`-thrown `OpcodeError` from inside `OutputCount()` would have been an uncaught C++ exception crossing the `extern "C" mexFunction` boundary — undefined behaviour in its own right, and in practice an abort taking the whole session down, the same failure mode as `FMMCF`'s crash, just introduced fresh rather than inherited. `OutputCount()`'s own call site now has its own `try`/`catch`, mirroring `Execute()`'s. Three deliberate exceptions to this project-wide rule, all confirmed empirically to be genuinely benign, not merely unexamined: `FAAB`'s `maximumRMSError` is a convergence threshold checked each iteration as "has the RMS change dropped below this?"; a `NaN` value makes that comparison always false, so early stopping simply never fires and the solver runs its full `numberOfIterations` instead — verified bit-identical to a call using an extremely small but finite threshold that also never triggers (not merely "didn't crash"), with a measured negative control confirming the threshold genuinely matters on this data (the registry default, `0.01`, DOES trigger early stopping and produces a measurably different result: 73157/442368 voxels differ). `FF`'s `XDIRECTION`/`YDIRECTION`/`ZDIRECTION` are compared with `!= 0.0` to produce a boolean flip flag, a well-defined IEEE comparison (`NaN != 0.0` and `Inf != 0.0` are both `true`) with no numeric ITK computation downstream at all. `SFM`'s `stoppingTime` passes `CastParam<double>` through unguarded by design (Epic 3 Phase 1): a negative value stops marching at the seed's own first heap pop (defined); `NaN` is never exceeded by the stopping check, so marching runs to its own natural exhaustion instead of stopping early (also defined, and distinct from "every voxel loses its sentinel" — voxels with no finite-speed path from a seed stay at the sentinel regardless of `stoppingTime`, a property of the speed image, not of this parameter). | Same rationale as deviation 5: refuse an input whose original behaviour cannot be reproduced or verified, while leaving every previously-defined value unaffected — the sign/range constraint an opcode already enforced keeps its exact prior meaning, `timeStep == 0` and similar defined edge cases are untouched, and the three benign passthroughs stay unguarded because there is nothing undefined about them to refuse. `FMMCF`'s case is closer to deviation 1/9's rationale: taking down the user's MATLAB session is not behaviour worth preserving regardless of what the original would have done. `FOMT`'s repair is closer to deviation 10's rationale (`SeedPointsToIndices`'s own seed-casting fix): undefined behaviour that happened to look safe on one platform is not safe, and is not something to leave relying on luck once identified. |
 | 13 | **`FDM`/`FDMV` reject an all-background input** (no nonzero voxel anywhere) with `mexitk:fdm:noObject`. Measured directly against the `fdm_zero_double`/`fdm_zero_uint8` fixtures, where the original itself succeeded: an all-zero `uint8` input yields distances of roughly 294 to 443 across this project's reference geometry, every one of them past `uint8`'s 255 max and, on every pixel type, not a meaningful answer to "distance to the nearest object" when there is no object — an artifact of the distance filter's internal initialization, not a defined computation. | Same severity/rationale class as deviation 5: the original's own output for this input is not a value worth reproducing, since "distance to the nearest of zero objects" has no defined answer. Refusing it is a strict subset of accepted inputs; every volume with at least one nonzero voxel is unaffected. |
 | 14 | **`FD` accepts `uint8` and `int32` input; the original rejects both outright** with "This method is not supported with this data type! Try converting to double first.", regardless of parameters (measured directly against `fd_0_0_uint8`/`fd_1_0_uint8`/`fd_1_0_int32`, where the original itself failed). `mexitk` promotes `uint8` to `float` for the derivative (`itk::DerivativeImageFilter` requires a signed output pixel type, which `uint8` fails) and runs `int32` natively, returning a defined result for both. No agreement claim is made about the VALUE `mexitk` returns for these two pixel types — the original never produced one to compare against — only that the call succeeds; see `tests/tReferenceRejections.m`. | Accept strictly more, the same direction as deviation 2 (string objects): every call that worked against the original still works and still matches; `uint8`/`int32` input, which the original refused unconditionally, now succeeds instead of erroring. Nothing about the original's own defined behaviour (double/single) changes. |
+| 15 | **`RD` rejects `NumberOfHistogramLevels < 1`** with `mexitk:RD:NumberOfHistogramLevels`, instead of running `HistogramMatchingImageFilter`. Measured directly, not assumed: `NumberOfHistogramLevels = 0` segfaults the whole MATLAB process (a crash dump shows the fault inside `itk::HistogramMatchingImageFilter::ConstructHistogramFromIntensityRange`, called from `BeforeThreadedGenerateData`, called from `RdOpcode::Execute`), not a catchable `itk::ExceptionObject`. Traced to `itkHistogramMatchingImageFilter.hxx`: `histogram->SetBinMax(0, m_NumberOfHistogramLevels - 1, imageTrueMaxValue)` computes `0 - 1` on an unsigned `SizeValueType`, underflowing to `SIZE_MAX`, and writes out of the histogram's actual bin range — an out-of-bounds write. `CastParam<itk::SizeValueType>` (`src/mexitk_common.h`) already rejects non-finite and negative values for this parameter, but 0 is a perfectly valid `SizeValueType` and passes that check untouched, so a separate semantic guard is needed. The threshold is exactly 1, verified empirically rather than assumed or chosen for a safety margin: `NumberOfHistogramLevels = 1` was run in isolation and confirmed to complete normally (finite `128x128x27` output), before this bound was written. `NumberOfHistogramLevels >= 1` is unaffected. | Same severity class as deviation 1 (`SWS` overthresholding) and deviation 9 (`SOT` histogram bins): taking down the user's MATLAB session is not behaviour worth preserving, and there is no reference capture for a crashing call to match against in the first place. The guard refuses only the measured defect (0), not a wider margin invented around it, the same discipline as deviation 9's own `>= 2` bound for `SOT`. |
+| 16 | **`SCSS` registers and appears in `mexitk('?')`, but `Execute()` always throws `mexitk:SCSS:unsupported`**, refusing every call regardless of parameters. Confirmed against the captured fixture (`scss_scss_20_60_10_seedS1_double`): the original itself succeeded, and its own output is a `[10 1]` column of ones (one entry per `AdvanceTimeStep()` iteration), not an image of any size or shape `mexitk`'s calling convention could return under this name. | Refuse to reproduce an output-type mismatch mexitk's own calling convention cannot represent honestly: the original's own result for this opcode is not an image, and shipping an image-shaped substitute under the `SCSS` name would look like agreement where none exists — worse than refusing outright. See "`SCSS`: formally unsupported (Epic 4 Phase 2)" below for the full rationale. |
 
 ## Behaviour matched deliberately, including the odd bits
 
@@ -569,16 +571,33 @@ or refuses to reproduce a defect.
 
 ## Coverage
 
-`mexitk` currently implements **35 of the original's 40 opcodes**. Epic 2
-Phases 1-3 extended the capture harness to 30 of them, captured reference
-fixtures for every one, and measured `mexitk`'s own agreement against every
-fixture (`tools/classify_fixtures.m`; see "Second capture campaign: Phase 3
-findings" above for how). Epic 3 Phase 1 added `FMMCF` and `SFM`; Epic 3
-Phase 2 added `SGAC`, `SLLS`, and `SSDLS` -- the first opcodes to genuinely
-consume a second image volume (`inputArray2`) rather than accept-and-ignore
-it. All five have their own captured fixture, measured the same way. The
-status ladder now splits the 35 into three tiers by that measurement, not by
-guesswork:
+`mexitk` currently implements **39 of the original's 40 opcodes**, and formally
+disposes of the fortieth (`SCSS`) as unsupported rather than leaving it silently
+absent -- all 40 are addressed. Epic 2 Phases 1-3 extended the capture harness
+to 30 of them, captured reference fixtures for every one, and measured
+`mexitk`'s own agreement against every fixture (`tools/classify_fixtures.m`;
+see "Second capture campaign: Phase 3 findings" above for how). Epic 3 Phase 1
+added `FMMCF` and `SFM`; Epic 3 Phase 2 added `SGAC`, `SLLS`, and `SSDLS` --
+the first opcodes to genuinely consume a second image volume (`inputArray2`)
+rather than accept-and-ignore it. Epic 4 Phase 1 added `RD` and `RTPS`, the
+first `Category::kRegistration` opcodes -- see "RD and RTPS: the first
+registration opcodes" below. `RTPS`'s own initial fixture was a rejection
+only; two follow-up reference-host capture rounds (`s14`, nine more fixtures)
+then settled its calling convention, supplied eight successful captures, and
+isolated the exact cause of its two initially-unexplained residuals, promoting
+it out of smoke-tested. Epic 4 Phase 2 closed out the roadmap: `FGMS` is
+implemented as a registry duplicate of `FGMRG` (fixture-confirmed
+bit-identical in the original); `FFFT`'s packing was fully determined by a
+follow-up controlled capture round (`s15`) after the original two (mri-sized)
+fixtures alone proved insufficient, and carries a real, measured, bounded
+residual on those two fixtures even with the confirmed packing (investigated
+down to independently proving this codebase's own FFT computation exact, not
+left as an open question); and `SCSS` is registered with a deliberate refusal
+-- see "`SCSS`: formally unsupported (Epic 4 Phase 2)" and "`FGMS` and `FFFT`:
+resolved (Epic 4 Phase 2)" above. All ten opcodes from Epic 3 and Epic 4
+(FMMCF, SFM, SGAC, SLLS, SSDLS, RD, RTPS, FGMS, FFFT, SCSS) have their own
+captured fixture(s), measured the same way. The status ladder now splits the
+40 into four tiers by that measurement, not by guesswork:
 
 - **Validated (15):** FBB, FBD, FBE, FBT, FD, FF, FGM, FMEAN, FMEDIAN,
   FVBIH, SCC, SCT, SGAC, SIC, SOT.
@@ -589,9 +608,9 @@ guesswork:
   than a defined reference (SCC's empty-seed fixture; see above) — those
   are asserted separately in `tests/tReferenceRejections.m` with no
   agreement claim.
-- **Bounded deviation (19):** FCA, SWS (their own dedicated sections
-  above), FBL, FCF, FDG, FDM, FDMV, FGA, FGAD, FGMRG, FLS, FMMCF, FOMT,
-  FSN, FVMI, SFM, SLLS, SNC, SSDLS.
+- **Bounded deviation (23):** FCA, SWS (their own dedicated sections
+  above), FBL, FCF, FDG, FDM, FDMV, FFFT, FGA, FGAD, FGMRG, FGMS, FLS,
+  FMMCF, FOMT, FSN, FVMI, SFM, SLLS, SNC, SSDLS, RD, RTPS.
   Runs the same ITK filter with the same parameters, but does not
   reproduce the original bit-for-bit; the difference is measured and
   bounded (`tests/tReferenceBounded.m`, plus FCA/SWS/FOMT's own dedicated
@@ -614,10 +633,49 @@ guesswork:
   thresholding, not an algorithmic difference; SSDLS's residual (RMS
   6.7e-8, max-abs 5.25e-6, on its raw un-thresholded output) is the same
   noise-floor category as SFM's — see their own `StatusNote`s in
-  `src/opcodes/slls.cpp` / `src/opcodes/ssdls.cpp`.
+  `src/opcodes/slls.cpp` / `src/opcodes/ssdls.cpp`. RD (Epic 4 Phase 1)
+  also has exactly one captured fixture (double only): its residual (RMS
+  4.63626, max-abs 88 -- the full 0-88 input intensity range -- on
+  173173/442368 voxels, 39.1%) is far above the floating-point noise
+  floor, a real numerics difference in the iterative Demons solver, the
+  same category as FCA/FMMCF rather than SFM/SLLS/SSDLS's noise-floor
+  category -- see "RD and RTPS: the first registration opcodes" below and
+  `src/opcodes/rd.cpp`'s own `StatusNote`. RTPS (Epic 4 Phase 1, `s14`
+  capture round, two rounds) has eight captured fixtures (double only):
+  five are at the floating-point noise floor, in two magnitude bands
+  (three at RMS ~1e-12, two at RMS ~2e-10 -- not one uniform ceiling);
+  the other three have a real, modest residual (RMS 2.226571, 3.647131,
+  4.159985) traced specifically to fewer than 3 distinct landmark pairs,
+  not coplanarity as first suspected — see "RD and RTPS: the first
+  registration opcodes" below and
+  `src/opcodes/rtps.cpp`'s own `StatusNote` for the full evidence,
+  including how the calling convention itself was determined. FGMS (Epic
+  4 Phase 2) has three captured fixtures (double only, sigma 1/2/4): the
+  original's own FGMS output is bit-identical to its own FGMRG output at
+  every one, so mexitk implements it as the identical filter call and
+  measures the identical residual FGMRG measures against its own
+  fixtures at the same sigma -- see "`FGMS` and `FFFT`: resolved (Epic 4
+  Phase 2)" above and `src/opcodes/fgmrg.cpp`'s `FgmsOpcode::StatusNote`.
+  FFFT (Epic 4 Phase 2, `s15` controlled-capture round) has its packing
+  fully confirmed (4 of 6 small captures bit-exact, the other 2 at the
+  double-precision noise floor -- see `tests/tReferenceExact.m`) but
+  still shows a real, larger residual on the two original mri-sized
+  fixtures despite the confirmed packing (real mode RMS 20.2/maxabs
+  95.5; complex mode RMS 16121/maxabs 3.54495e6) -- independently traced
+  to a genuine difference in the original's own ITK-2.4-vintage VNL FFT
+  on this specific composite size, not a bug in this codebase (this
+  codebase's own FFT was proven exact against MATLAB's `fftn` on the
+  same volume) -- see "`FGMS` and `FFFT`: resolved (Epic 4 Phase 2)"
+  above and `src/opcodes/ffft.cpp`'s `StatusNote` for the full evidence.
 - **Smoke-tested (1):** FAAB. Its disagreement with the
   original is large enough (RMS in the hundreds) that pinning a bound
   would not be a useful signal — see "SWS and FAAB: not bounded" below.
+- **Unsupported (1):** SCSS. Registers and appears in `mexitk('?')`, but
+  `Execute()` always throws `mexitk:SCSS:unsupported` by design: the
+  original's own output for this opcode is not an image (a `[10 1]`
+  vector of iteration counters, fixture-confirmed), so no image-shaped
+  result could be returned under this name without misleading a caller
+  — see "`SCSS`: formally unsupported (Epic 4 Phase 2)" above.
 
 **Worst measured deviation per bounded-deviation opcode** (excluding FCA,
 SWS, and FOMT, each of which has its own dedicated measurement table or
@@ -645,6 +703,7 @@ status reflects its OTHER captured points, not that class.
 | FSN | 1.7e-15 (double) | 2.8e-14 (double) | one point; every other captured point exact |
 | FVMI | 0.514 (double/single) | 10.05 (double) | int32/uint8 0.494/10.0; no exact points captured |
 | FGMRG | 2.7e-7 (double) | 5.4e-6 (double) | single at noise floor too; int32/uint8 exact at sigma=2 |
+| FGMS | 2.7e-7 (double) | 5.4e-6 (double) | registry duplicate of FGMRG; identical measured numbers at matching sigma; only double captured |
 | FLS | 98.7 (uint8) | 255.0 (uint8) | double/single at noise floor; int32 exact at sigma=2 |
 | FDM | 0.218 (uint8) | 6.0 (uint8) | double/single/int32 exact |
 | FDMV | 11.4 (uint8) | 255.0 (uint8) | double at noise floor (~3e-12); single/int32 exact |
@@ -653,11 +712,16 @@ status reflects its OTHER captured points, not that class.
 | SLLS | 6.42 (double) | 255.0 (double) | 280/442368 voxels (0.063%) flip category near the zero crossing; only one fixture (double); uint8/int32 unmeasured |
 | SNC | 73.3 (double) | 255.0 (double) | radius [1,1,1] and base-threshold fixtures exact |
 | SSDLS | 6.7e-8 (double) | 5.3e-6 (double) | floating-point noise floor, raw un-thresholded output; only one fixture (double); uint8/int32 unmeasured |
+| RD | 4.63626 (double) | 88.0 (double) | full input intensity range; only one fixture (double); uint8/int32 unmeasured |
+| RTPS | 4.159985 (double) | 88.0 (double) | worst of 3 captures with fewer than 3 distinct landmark pairs; 5 well-posed (3+ distinct pairs) captures at the floating-point noise floor instead (3 at RMS ~1e-12, 2 at RMS ~2e-10); only double captured, uint8/int32/single unmeasured |
+| FFFT | 16121.494 (double, complex mode) | 3544950.7 (double, complex mode) | packing confirmed exact (s15 controlled captures, 4/6 bit-exact, 2/6 at noise floor); real mode alone is much smaller, RMS 20.2/maxabs 95.5; residual independently traced to the original's own FFT on this composite (non-power-of-2) size, not this codebase (own FFT proven exact vs MATLAB fftn); only double captured, uint8/int32/single unmeasured |
 
-The remaining 5 opcodes are catalogued in `docs/matitk_opcode_registry.txt`
+All 40 opcodes are catalogued in `docs/matitk_opcode_registry.txt`
 (the original binary's own parameter dump)
-and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`,
-but they are **not implemented**.
+and mapped to modern ITK classes in `docs/itk_opcode_mapping.md`.
+39 are implemented above; the fortieth, `SCSS`, is formally **unsupported**
+(registered, documented, always refuses -- see "`SCSS`: formally unsupported
+(Epic 4 Phase 2)" above) rather than silently absent.
 See the README for the current status of each.
 
 ## SWS and FAAB: not bounded
@@ -676,9 +740,90 @@ bound that would only ever measure "still roughly this different," not
 "still the same algorithm." `FAAB` stays smoke-tested; the measured
 numbers above are the honest record, not a target.
 
+## Bound margins for noise-floor entries
+
+`tests/tReferenceBounded.m`'s ceiling formula gates its headroom by
+magnitude, a policy ruling from Epic 4 Phase 1's PR #30 review, applied
+project-wide, not a per-fixture exception, and applied identically and
+independently to BOTH metrics it asserts. Below 1e-5 (relative ~1e-7 on
+this project's 0-88 reference volume), the RMS ceiling is
+`max(measured * 1.5, measured + 1e-12)` and the max-abs ceiling is
+`max(measured * 1.5, measured + 1e-9)`; at or above 1e-5, each stays
+`max(measured * 1.1, measured + <its own floor>)`, exactly the original
+flat 10% rule. The gate is evaluated separately per metric, so a single
+fixture can have its RMS gated while its max-abs is not (or vice versa)
+if the two measured values straddle the 1e-5 threshold -- this is
+correct, not an inconsistency: RMS and max-abs are different
+measurements of the same output and are not guaranteed to sit in the
+same regime. Only the ASSERTION MARGIN changed. No measured value in
+`tests/tReferenceBounded.m`'s `Cases` table changed because of this
+policy, and it is not a relaxation of "never loosen a tolerance to make
+a test pass": the entries it widens are not being reproduced any
+differently than before, and the entries it does not touch (any real
+algorithmic disagreement, however small, in either metric) keep exactly
+the tight margin they always had.
+
+**Why the gate exists.** A measured RMS below 1e-5 on this project's
+data is presumptively floating-point/library noise, not a real
+algorithmic difference: several opcodes here (`RTPS`'s
+`ThinPlateSplineKernelTransform`, and others with an internal
+finite-difference or kernel solve) route through `vnl_svd` or similar
+LAPACK/BLAS-backed linear algebra, whose exact last-bit result is
+platform-dependent -- the same class of non-determinism this project
+already documents for ITK's own 2.4-to-5.x numerics evolution, except
+here the two things being compared are two runs of the SAME `mexitk`
+build on different platforms, not `mexitk` versus the original. A bound
+tighter than the platform variation itself does not test agreement with
+the original; it tests which platform's linear-algebra library happened
+to run the test.
+
+**What was actually observed, not assumed.** `rtps_pairs3_distinct_double`
+measured RMS 5.264588848e-12 on macOS arm64 and 6.78818e-12 on Linux
+x86_64 -- a ~29% spread between two measurements that are both genuine
+double-precision noise (see "RD and RTPS: the first registration
+opcodes" above for the full writeup of that specific fixture). The prior
+flat 10% margin, derived from the macOS measurement alone, did not
+absorb the Linux measurement and failed CI on PR #30. A magnitude-gated
+survey across every noise-floor-adjacent entry in `tests/
+tReferenceBounded.m`'s `Cases` table (not just `RTPS`'s own) found 13
+entries sitting at exactly the prior flat-10%-headroom floor once their
+own RMS clears roughly 1e-11 (where the formula's `+1e-12` additive term
+becomes negligible): `FCF`'s `fcf_10_0p0625_single`; `FGMRG`'s
+`fgmrg_1_double`, `fgmrg_2_double`, `fgmrg_2_single`, `fgmrg_4_double`;
+`FLS`'s `fls_1_double`, `fls_2_double`, `fls_2_single`, `fls_4_double`;
+`SSDLS`'s `ssdls_ssdls_volB_seedS1_double`; `RTPS`'s
+`rtps_nc5_identity_double`, `rtps_nc5_translate_double`, and
+`rtps_pairs3_distinct_double` itself even after its own bound was
+corrected -- all with 10-15% headroom, less than the ~29% spread already
+measured on one of them. Under the 1.5x gate, all 13 now carry 50%
+headroom, comfortably above the observed spread with room to spare. The
+identical survey run against max-abs found the same pattern (12 of the
+13 RMS-affected fixtures also have a sub-1e-5 max-abs, gaining the same
+50% headroom there too; the one exception, `FCF`'s
+`fcf_10_0p0625_single`, has max-abs 5.34e-05 -- just above the
+threshold -- so its max-abs bound stays at 10% even though its RMS bound
+is gated to 1.5x, the straddling case described above). Every entry at
+or above 1e-5 in EITHER metric -- every genuine algorithmic disagreement
+this project has measured, from `FGAD`'s uint8 residual through `RD`'s
+Demons-solver drift to the three real-residual `RTPS` captures
+(`rtps_pairs4_identity_double`, `rtps_pair1_minimal_double`,
+`rtps_pairs2_distinct_double`) -- keeps exactly the 10% margin it had
+before this policy, unchanged, because a real disagreement is exactly
+where a tight margin is meaningful regression detection.
+
+`rtps_pairs3_distinct_double`'s own stored RMS (6.78818e-12, the
+cross-platform maximum) is kept even though the 1.5x gate alone would
+now absorb the Linux measurement starting from the macOS-only value:
+the cross-platform maximum is the more accurate number, and recording it
+is belt-and-suspenders on top of the wider margin, not a substitute for
+measuring it. A third platform's own noise-floor measurement, whatever
+it turns out to be, is best compared against the most accurate value
+already on file, not a smaller one kept only because a wider margin
+happens to cover the two platforms measured so far.
+
 ## Opcode-to-ITK-class reference
 
-This table covers all 35 implemented opcodes regardless of tier (it
+This table covers all 37 implemented opcodes regardless of tier (it
 predates the validated/bounded-deviation/smoke-tested split above, and is
 kept as a single reference rather than split three ways).
 
@@ -709,6 +854,8 @@ kept as a single reference rather than split three ways).
 | FSN | `SigmoidImageFilter` |
 | FVBIH | `VotingBinaryIterativeHoleFillingImageFilter` |
 | FVMI | `HessianRecursiveGaussianImageFilter` + `Hessian3DToVesselnessMeasureImageFilter` |
+| RD | `HistogramMatchingImageFilter` + `DemonsRegistrationFilter` + `WarpImageFilter` (see "RD and RTPS" below) |
+| RTPS | `ThinPlateSplineKernelTransform` + `ResampleImageFilter` (see "RD and RTPS" below) |
 | SCC | `ConfidenceConnectedImageFilter` |
 | SCT | `ConnectedThresholdImageFilter` |
 | SFM | `FastMarchingImageFilter` |
@@ -849,6 +996,242 @@ other two.
 Full detail, including the exact measured residuals and the swapped-role
 control numbers, is in each opcode's own `StatusNote()`:
 `src/opcodes/sgac.cpp`, `src/opcodes/slls.cpp`, `src/opcodes/ssdls.cpp`.
+
+### RD and RTPS: the first registration opcodes
+
+`RD` (Demons deformable registration) and `RTPS` (thin-plate-spline
+landmark warping) are Epic 4 Phase 1's two additions, the first opcodes in
+`Category::kRegistration`. Both are now bounded-deviation, but `RTPS` got
+there in three steps: its own first captured fixture was a rejection
+only, enough to cap it at smoke-tested with an INFERRED calling
+convention; `s14`'s first capture round
+(`tools/capture_reference/s14_rtps_landmarks.m`, six fixtures) then
+disproved that inference outright and pinned down the real one,
+promoting it to bounded-deviation; `s14`'s second round (three more
+fixtures) then isolated the exact cause of the two residual fixtures
+round 1 left unexplained, refining -- not changing -- the status. All
+three steps, including the disproven inference and the disproven
+"monotonic shrink" prediction from round 2's own plan, are recorded
+below, not just the final answer, because a wrong hypothesis is itself
+useful evidence about what does and does not follow from "landmarks
+ride the seed argument, one point is rejected, the count must be even."
+
+**RD: fixed/moving role assignment, determined by the same swap-test
+method as SGAC.** The registry (`docs/matitk_opcode_registry.txt`) gives
+no role hint -- it only dumps the four numeric parameters. Built both
+ways and run against `rd_demons_volB_double` (`NumberOfHistogramLevels
+=1024, NumberOfMatchPoints=7, DemonNumberofIterations=150,
+DemonStandardDeviations=1`, `volumeB=circshift(volumeA,[3 3 1])`): with
+volumeA fixed / volumeB moving, RMS 4.63626, max-abs 88, 173173/442368
+voxels differ (39.1%); with the roles swapped, RMS 21.7, 189263/442368
+voxels differ (42.8%) -- clearly worse, not merely different, so
+volumeA=fixed / volumeB=moving is the assignment used, though neither
+wiring reaches bit-exactness. **This is a real, measured numerics
+difference, not floating-point noise**: `numberOfIterations=0` is
+confirmed an exact identity no-op (warping by an all-zero displacement
+field returns the moving image unchanged, 0/442368 voxels differ),
+ruling out a basic wiring error, so the residual traces to the Demons
+solver's own 150-iteration numerics having moved between ITK 2.4 and
+5.4 -- the same broad category as `FCA`/`FMMCF` (an iterative PDE-style
+solver whose exact per-step arithmetic evolved upstream), not the
+floating-point-noise-floor category `SFM`/`SLLS`/`SSDLS` fall into. Two
+consecutive local runs were compared bit-for-bit before comparing
+against the fixture at all, to rule out iterative/multithreaded
+nondeterminism as a confound (registration is both); they matched
+exactly. Only one fixture exists (double), so `uint8`/`int32`/`single`
+carry no agreement claim; they promote to `float` internally the same as
+every other promoted opcode.
+
+**RD: which image gets warped, the original moving image or the
+histogram-matched intermediate.** The classic ITK Demons registration
+example (`HistogramMatchingImageFilter` feeding `DemonsRegistrationFilter`
+feeding `WarpImageFilter`) warps the ORIGINAL pre-match moving image with
+the resulting displacement field, using the histogram-matched image only
+as the Demons filter's own input -- histogram matching is a computational
+aid for registration, not something meant to survive into the final
+output. `mexitk` follows that convention, but `rd_demons_volB_double`
+cannot independently prove it either way: `volumeB` is
+`circshift(volumeA,[3 3 1])`, so both images share EXACTLY the same
+histogram (a circular shift permutes voxel positions, not values), and
+histogram-matching an image against its own histogram is very close to
+identity here -- measured directly, warping `matcher->GetOutput()`
+instead of the original moving image produces bit-identical `mexitk`
+output on this fixture. A future fixture with genuinely different
+fixed/moving intensity distributions would be needed to settle this
+independently; see `src/opcodes/rd.cpp`.
+
+**`SetStandardDeviations` is silently inert unless smoothing is
+explicitly enabled.** `PDEDeformableRegistrationFilter::
+m_SmoothDisplacementField` default-initializes to `false`, and
+`DemonsRegistrationFilter`'s own constructor never touches it -- a real
+silent-failure trap, not a hypothetical one (this is why it was flagged
+in `docs/itk_opcode_mapping.md` before implementation even began). `RD`
+calls `SmoothDisplacementFieldOn()` explicitly; removing it would make
+`DemonStandardDeviations` a parameter that is accepted, validated, and
+then silently ignored.
+
+**RTPS before `s14`: only a rejection fixture existed.** The one fixture
+captured before `s14` (`rtps_tps_volB_seedS1_double`, a single seed point
+`[70 50 14]`) is a FAILED capture: the original's full error text is
+`This method requires landmarks.  Each landmark should be 3-dimensional,
+and there should be even number of landmarks (source->target)`. This
+proved three things and no more: landmarks ride the seed argument
+(arg5); a single landmark point is refused; the count must be even.
+`mexitk` reproduces exactly that -- `mexitk:RTPS:landmarks` on an empty
+or odd-count landmark list. With no successful capture, Phase 1 shipped
+an INFERENCE: landmarks split in half (a full source block then a full
+target block, the Insight Software Guide's own landmark-warping worked
+example), fixed/moving roles carried over from RD's own determination
+(volumeA fixed, volumeB moving), and the standard source=fixed-space /
+target=moving-space wiring into `ResampleImageFilter`. Status was capped
+at smoke-tested accordingly, since none of that was checked against the
+original.
+
+**RTPS, `s14` round 1: the captures disproved the inference directly.**
+`tools/capture_reference/s14_rtps_landmarks.m`'s first round captured six
+fixtures targeting exactly the two open questions the original rejection
+fixture's error text left open: does the landmark list split in half or
+interleave, and which
+volume does the transform resample, in which direction. One structural
+finding surfaced along the way, worth recording on its own: the original
+rejects a landmark argument passed as a **matrix** with `Seed array must
+be a vector.` -- landmarks, like every other seed array in this
+codebase, must be a flat row vector of concatenated 3-tuples, not a
+2-column matrix of points.
+
+The DECISIVE result is `rtps_nc5_identity_double`: `volumeA==volumeB`
+(both the raw `mri` volume) and a landmark seed array built as
+`[src5 src5]` (five well-spread, non-coplanar points, repeated). Under
+Phase 1's split-half reading this is a literal identity landmark set
+(source==target, 5 well-posed pairs) and the resulting warp MUST
+reproduce the input exactly. It does not: measured, 181548/442368 voxels
+differ (41%), output mean 2.62 against the raw volume's own mean 21.82 --
+proof the split-half inference was simply wrong, not merely imprecise.
+`rtps_nc5_translate_double` (same `volumeA==volumeB`, second half offset
+by a fixed `[6 -4 2]` translation instead of repeated) gave the second
+data point needed to diagnose it: since both `nc5_*` fixtures share the
+identical FIRST-HALF/SECOND-HALF point stream structure and differ only
+in whether the second half repeats or offsets, comparing candidate
+readings against both together isolates the correct one. **The flat
+landmark list is INTERLEAVED**
+(`source1,target1,source2,target2,...`), not split into a source block
+and a target block: reading `[src5 src5]` as 5 interleaved pairs gives
+`(src5pt1,src5pt2), (src5pt3,src5pt4), (src5pt5,src5pt1), ...` -- NOT an
+identity correspondence at all, which is exactly why the fixture named
+"identity" does not reproduce the input under either reading naively
+assumed identity, but DOES reproduce it under interleaved reading once
+the correct fixed/moving assignment below is also used (verified
+directly: RMS 2.12e-10, 20898/442368 voxels differ only at the
+floating-point noise floor, not zero, because the "identical" landmark
+stream is not literally an identity map, just a self-consistent one that
+the original and `mexitk` now agree on bit-for-bit modulo double-precision
+noise). `rtps_nc5_translate_double` confirms the same reading
+independently: RMS 2.00e-10.
+
+`rtps_pairs4_translate_double` is the DECISIVE capture for direction:
+`volumeB` here is `circshift(flip(volumeA,1),[5 9 2])`, asymmetric on
+purpose (flipped, not just shifted), so a source/target or fixed/moving
+mixup misplaces the output visibly rather than looking coincidentally
+close. **volumeB is FIXED (the source-landmark/output space) and volumeA
+is MOVING (the target-landmark/input space, the one actually
+resampled)** -- the OPPOSITE of `RD`'s own role assignment. With volumeB
+fixed, this capture reproduces at RMS 2.63e-12 (floating-point noise
+floor); with volumeA fixed (Phase 1's original, RD-consistent
+assumption), RMS is 37.7 -- not a close call. Three of round 1's five
+successful captures (`nc5_identity`, `nc5_translate`, `pairs4_translate`)
+are therefore reproduced at the floating-point noise floor under
+INTERLEAVED landmarks + volumeB-fixed/volumeA-moving, with the
+source/target roles read literally (no further swap needed): this rules
+out a wiring bug as the residual's source in round 1's two remaining
+captures, since the wiring is identical across all five and three of
+them match essentially exactly.
+
+**Two of round 1's five captures have a real, modest, measured
+residual, not a wiring problem -- and round 2's follow-up captures
+isolated exactly why.** `rtps_pairs4_identity_double` (RMS 2.226571,
+58566/442368 voxels differ, 13.2%) and `rtps_pair1_minimal_double` (RMS
+3.647131, 100523/442368 voxels differ, 22.7%) both involve landmark
+configurations that are structurally degenerate for a thin-plate spline.
+The first hypothesis tried here was coplanarity: `pairs4_identity`'s
+four interleaved pairs collapse to only TWO distinct (source,target)
+pairs, each supplied twice (verified directly, pair 1 equals pair 3 and
+pair 2 equals pair 4 exactly), built from a coplanar 4-point source set.
+A second capture round (`s14`, round 2: `rtps_coplanar3_distinct_double`,
+`rtps_pairs2_distinct_double`, `rtps_pairs3_distinct_double`) tested this
+directly and DISPROVED it: `rtps_coplanar3_distinct_double` (3 DISTINCT
+pairs, sources coplanar, no duplication) reproduces EXACTLY (RMS
+8.146892e-13) -- coplanarity alone is not the cause.
+`rtps_pairs3_distinct_double` (3 distinct, well-spread, non-coplanar
+pairs) is likewise exact -- **RMS 5.264589e-12 on macOS arm64, 6.78818e-12
+on Linux x86_64**, a ~29% spread between two measurements that are BOTH
+genuine double-precision noise (relative to the 0-88 intensity range,
+each is roughly 1e-13). `ThinPlateSplineKernelTransform`'s `ComputeWMatrix`
+solves its augmented system via `vnl_svd`, which runs through each
+platform's own LAPACK/BLAS; the two platforms do not agree on the exact
+noise-floor residual, only on its ORDER of magnitude. The bound asserted
+in `tests/tReferenceBounded.m` is the MAXIMUM of the two measurements
+(6.78818e-12), not the macOS-only value this project first measured and
+shipped in PR #30 -- CI caught the gap when Linux's own run (6.78818e-12)
+exceeded the macOS-derived bound (ceiling 6.2646e-12, about 8% under)
+by exercising a platform this project had not yet measured this specific
+fixture against. This is completing an under-measured bound with a
+second platform's own data, not raising one to hide a real disagreement
+with the original: no comparison against the original binary moved,
+only the recorded floor of platform-dependent SVD noise grew to reflect
+a measurement that already existed in reality and simply had not been
+taken yet. `rtps_pairs2_distinct_double` (only 2 distinct pairs), by
+contrast, has a real residual
+(RMS 4.159985, comparable in kind to `pair1_minimal`'s single pair).
+**The threshold is the number of DISTINCT landmark pairs: 3 or more
+reproduces exactly (regardless of coplanarity), fewer than 3 leaves a
+real, measured residual.** This also explains `pairs4_identity`
+precisely: its 4 landmark pairs carry only 2 pieces of DISTINCT
+information (the duplication), the same effective count as
+`pairs2_distinct`, and its residual is the same order of magnitude.
+All of this is consistent with ITK's SVD-based pseudo-inverse resolving
+an underdetermined augmented least-squares system slightly differently
+between 2.4 (the original's 2006 build) and 5.4 once fewer than 3
+distinct correspondences are available to constrain it -- the same
+upstream-numerics-evolution category as `FCA`/`SNC`/`SWS` elsewhere in
+this project, not tuned away, measured and asserted as-is in
+`tests/tReferenceBounded.m`. Five captures spanning coplanar and
+non-coplanar, identity and translation, and symmetric and asymmetric
+volumes all reproduce exactly under the identical wiring, which rules
+out a systematic wiring error as the source of the remaining three
+residuals.
+
+**This is a threshold, not a gradual improvement -- a disproven
+assumption worth recording explicitly, the same way `FDMV`'s accessor
+guess and `SOT`'s inside-value default are recorded above once
+measurement contradicted them.** Round 2's own plan predicted the
+residual would shrink monotonically as distinct-pair count rose from 1
+toward 4+; it does not. The full sequence, ordered by distinct-pair
+count: 1 pair (`pair1_minimal`, RMS 3.647131), 2 pairs
+(`pairs2_distinct`, RMS 4.159985 -- WORSE than 1 pair, not smaller), 3
+pairs (`pairs3_distinct`, RMS 5.26e-12 on macOS/6.79e-12 on Linux --
+suddenly at the noise floor, platform-dependent order of magnitude and
+all), 5 pairs (`nc5_identity`/`nc5_translate`, RMS ~2e-10 -- still at
+the noise floor). Agreement does not improve gradually as more distinct
+pairs are added; it steps from "real, measured residual" to
+"floating-point noise floor" the moment 3 distinct pairs are reached,
+with no smooth transition through 2.
+
+`rtps_odd3_reject_double` (three landmarks, captured in `s14`'s first
+round alongside its five successes) is a second rejection fixture,
+confirming the even-count requirement independently of the original,
+pre-`s14` single-seed rejection; both rejections are asserted in
+`tests/tReferenceRejections.m`.
+
+**RTPS's status is now bounded-deviation, not smoke-tested.** Eight
+successful fixtures exist across the two `s14` rounds (all double only;
+`uint8`/`int32`/`single` carry no agreement claim and promote to `float`
+internally, same as every other promoted opcode). The internal identity
+self-check Phase 1 used as a stand-in for reference evidence
+(`volumeA==volumeB` with matching source/target landmarks reproduces the
+input exactly) still holds, but now under the CORRECT interleaved
+reading -- a landmark list built from repeated `(p_i, p_i)` pairs, not
+Phase 1's `[p1 p2 ... pN p1 p2 ... pN]`, which the `s14` captures proved
+is not an identity map at all under the real convention.
 
 ### Seed coordinate convention
 
@@ -1124,10 +1507,11 @@ something `mexitk` chooses. Non-vessel voxels are exactly 0 by construction
 (`itkHessian3DToVesselnessMeasureImageFilter.hxx:87`); measured on the
 reference volume at `[1 0.5 2]`, 249505 of 442368 voxels are exactly 0.
 
-### `SCSS`: will not support
+### `SCSS`: formally unsupported (Epic 4 Phase 2)
 
-**Decision: `SCSS` will not be implemented.** This is settled; please do not re-open it
-without new information.
+**Decision: `SCSS` is registered but deliberately refused, not implemented.**
+This closes out the earlier "will not support" plan with a captured fixture and a
+real disposition, rather than leaving the opcode silently absent from the registry.
 
 `SCSS` is not a segmentation filter in the modern sense.
 It maps to `itk::bio::CellularAggregate`, which:
@@ -1140,17 +1524,81 @@ It maps to `itk::bio::CellularAggregate`, which:
 - carries global static state, which is hostile to a MEX file that is loaded once and
   called repeatedly inside a long-lived MATLAB session.
 
+A reference-host capture (Epic 4 Phase 2, `scss_scss_20_60_10_seedS1_double`) confirms this
+directly rather than leaving it inferred: the original itself ran without error on
+`SCSS([20 60 10], V, [], S1)`, and its own captured output is a `[10 1]` column of ones, one
+entry per `AdvanceTimeStep()` iteration (`numberOfIterations=10`) — a vector of iteration
+counters, not an image of any size or shape `mexitk`'s calling convention expects.
+
 There is no modern ITK filter that is behaviourally equivalent.
 Shipping something merely *similar* under the name `SCSS` would be worse than not
 shipping it: callers would get silently different results under a familiar name,
-which is exactly the failure mode this project exists to avoid.
-Calling `mexitk('SCSS', ...)` returns an unknown-operation error, which is the honest answer.
+which is exactly the failure mode this project exists to avoid. `SCSS` is registered with
+`Status::kUnsupported` (`src/opcode.h`) — it appears in `mexitk('?')` like every other
+opcode, so a caller can discover it exists and why it refuses, but `Execute()` always throws
+`mexitk:SCSS:unsupported` with the rationale above. This is a deliberate refusal, not the
+generic `mexitk:unknownOpcode` error an unregistered name would produce, and not a
+placeholder for a future implementation: per this project's core honesty principle, a
+plausible-looking image-shaped substitute under this name would be strictly worse than
+refusing. See `src/opcodes/scss.cpp` and `tests/tReferenceRejections.m`'s
+`scssRefusesDespiteOriginalSuccess`.
 
-### Other opcodes needing resolution before implementation
+### `FGMS` and `FFFT`: resolved (Epic 4 Phase 2)
 
-- **`FGMS`** could not be pinned to any ITK class name with confidence
-  and needs verification against the original binary before implementation.
-- **`FFFT`**: the VNL FFT backend was removed from ITK and rerouted via pocketfft;
-  the real/complex output switch semantics are unconfirmed.
-- **`RD`**: `SetStandardDeviations` is silently inert unless `SmoothDisplacementFieldOn()`
-  is also called, a real silent-failure trap to avoid inheriting.
+Both were left open after the initial mapping pass; both are now resolved with fixture
+evidence rather than left as "needs verification":
+
+- **`FGMS`**: reference-host capture (`fgms_sigma1_double`, `fgms_sigma2_double`,
+  `fgms_sigma4_double`) settles the question the mapping pass could not: the original's own
+  `FGMS` output is bit-identical to its own `FGMRG` output at every captured sigma
+  (`isequal` plus an independent hash check, not merely close). `mexitk` implements `FGMS` as
+  the same `GradientMagnitudeRecursiveGaussianImageFilter` call as `FGMRG` (`src/opcodes/
+  fgmrg.cpp`), the same registry-duplicate situation as `FGA`/`FDG`, and measures the
+  identical residual against these fixtures as `FGMRG` measures against its own (RMS
+  2.73366e-07 at sigma=1, 1.32290e-07 at sigma=2, 7.13001e-08 at sigma=4 — the
+  floating-point noise floor). Status: **bounded deviation**.
+- **`FFFT`**: the concrete `itk::VnlForwardFFTImageFilter` (not the abstract, object-factory-
+  resolved `ForwardFFTImageFilter` the mapping pass pointed at, which fails to instantiate on
+  this build with no PocketFFT backend compiled in) runs cleanly on all four pixel types. The
+  packing was initially undetermined from the original two (mri-sized) fixtures alone — one
+  inline guess from that first pass was directly disproven, not just unconfirmed:
+  `ffft_complex1_double`'s own extreme value (±3543768.099) is NOT the DC component of the
+  volume's FFT (the true DC term, computed directly, is 9650539 — the sum of all voxel
+  intensities). A follow-up controlled reference-host capture round (`s15`:
+  `tools/capture_reference/s15_ffft_packing.m`, three small 8x8x8 volumes with analytically
+  known spectra) then settled the packing exactly, not by inference: **Real mode (param 0)
+  = the REAL PART of the full 3-D forward FFT, rescaled to [0,255]; Complex mode (param 1) =
+  the IMAGINARY PART, raw and unscaled.** Proof: an impulse one voxel off-origin has a
+  real/imaginary phase-ramp spectrum in closed form, and its real-mode fixture is exactly
+  that rescaled to [0,255] (maxabs 2.84e-14); an impulse at the origin has a constant,
+  purely-real spectrum, and its real-mode fixture is exactly all-zero, matching
+  `RescaleIntensityImageFilter`'s own documented min==max collapses to `OutputMinimum`
+  behaviour — and ruling out magnitude (the earlier top candidate) decisively, since
+  magnitude is *also* constant for the off-origin impulse (only phase varies), which would
+  wrongly all-zero that case too. The captures also forced one correction nobody predicted in
+  advance: `itk::VnlForwardFFTImageFilter`'s own raw imaginary part is the *exact negation* of
+  the original's (confirmed: `mexitk_output + fixture == 0` to floating-point noise, not
+  merely `mexitk_output - fixture` being small), so Complex mode negates post-hoc via
+  `ShiftScaleImageFilter`. 4 of the 6 `s15` fixtures are bit-exact; the other 2 (the two
+  impulse cases' real-mode outputs) are at the absolute double-precision noise floor
+  (~1e-14/1e-15). The two *original* mri-sized fixtures still do not match closely even with
+  the now-confirmed packing (real mode RMS 20.2/maxabs 95.5 against `[0,255]`; complex mode
+  RMS 16121/maxabs 3.54495e6 against a fixture ranging ±3.54377e6) — investigated, not left
+  unexplained: this codebase's own ITK-native FFT was independently verified mathematically
+  EXACT (RMS 1.8e-11) against MATLAB's own `fftn` on the real 128×128×27 volume, ruling out
+  every hypothesis that would implicate this implementation specifically (axis-order
+  mismatch — tested via all 6 permutations, all land at the same ~1e-11 floor; `z=27`
+  radix-3 mixed-radix mishandling — the one prime factor the cubic, power-of-2-only `s15`
+  captures never exercise; an unapplied `fftshift` — already ruled out at small scale; and
+  size-driven zero-padding — ruled out by reading `itkVnlForwardFFTImageFilter.hxx` directly,
+  which explicitly *rejects* illegal sizes via `VnlFFTCommon::IsDimensionSizeLegal` rather
+  than padding them, and 27=3³ is a legal, unpadded radix-3 size). With this implementation's
+  own FFT independently proven exact, the residual is best explained as a genuine difference
+  between the original 2006 binary's own ITK-2.4-vintage VNL FFT and modern ITK's, specific to
+  this composite (non-power-of-2) size — the same category of real, measured, bounded
+  numerics difference as `FCA`/`RD`, not floating-point noise, and not something the
+  power-of-2-only `s15` captures could have revealed even in principle. Status: **bounded
+  deviation**, scoped to `double` (`single`/`uint8`/`int32` promote to a real type the same
+  way but carry no fixture of their own). See `src/opcodes/ffft.cpp`'s `StatusNote` for the
+  full evidence trail, `tests/tReferenceExact.m`/`tests/tReferenceBounded.m` for the
+  assertions, and `tools/capture_reference/s15_ffft_packing.m` for the capture script.

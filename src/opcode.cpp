@@ -55,6 +55,8 @@ const char* StatusName(Status s) {
       return "smoke-tested";
     case Status::kUntested:
       return "untested";
+    case Status::kUnsupported:
+      return "unsupported";
   }
   return "unknown";
 }
@@ -100,10 +102,12 @@ const Opcode* GetFdgOpcode();
 const Opcode* GetFdmOpcode();
 const Opcode* GetFdmvOpcode();
 const Opcode* GetFfOpcode();
+const Opcode* GetFfftOpcode();
 const Opcode* GetFgaOpcode();
 const Opcode* GetFgadOpcode();
 const Opcode* GetFgmOpcode();
 const Opcode* GetFgmrgOpcode();
+const Opcode* GetFgmsOpcode();
 const Opcode* GetFlsOpcode();
 const Opcode* GetFmeanOpcode();
 const Opcode* GetFmedianOpcode();
@@ -112,7 +116,10 @@ const Opcode* GetFomtOpcode();
 const Opcode* GetFsnOpcode();
 const Opcode* GetFvbihOpcode();
 const Opcode* GetFvmiOpcode();
+const Opcode* GetRdOpcode();
+const Opcode* GetRtpsOpcode();
 const Opcode* GetSccOpcode();
+const Opcode* GetScssOpcode();
 const Opcode* GetSctOpcode();
 const Opcode* GetSfmOpcode();
 const Opcode* GetSgacOpcode();
@@ -148,10 +155,12 @@ void RegisterBuiltinOpcodes() {
   RegisterOpcode(GetFdmOpcode());
   RegisterOpcode(GetFdmvOpcode());
   RegisterOpcode(GetFfOpcode());
+  RegisterOpcode(GetFfftOpcode());
   RegisterOpcode(GetFgaOpcode());
   RegisterOpcode(GetFgadOpcode());
   RegisterOpcode(GetFgmOpcode());
   RegisterOpcode(GetFgmrgOpcode());
+  RegisterOpcode(GetFgmsOpcode());
   RegisterOpcode(GetFlsOpcode());
   RegisterOpcode(GetFmeanOpcode());
   RegisterOpcode(GetFmedianOpcode());
@@ -160,7 +169,10 @@ void RegisterBuiltinOpcodes() {
   RegisterOpcode(GetFsnOpcode());
   RegisterOpcode(GetFvbihOpcode());
   RegisterOpcode(GetFvmiOpcode());
+  RegisterOpcode(GetRdOpcode());
+  RegisterOpcode(GetRtpsOpcode());
   RegisterOpcode(GetSccOpcode());
+  RegisterOpcode(GetScssOpcode());
   RegisterOpcode(GetSctOpcode());
   RegisterOpcode(GetSfmOpcode());
   RegisterOpcode(GetSgacOpcode());

@@ -106,6 +106,44 @@ classdef tReferenceBounded < matlab.unittest.TestCase
             'FGMRG', 'fgmrg_4_double', 7.13001e-08, 9.00417e-07; ...
             'FGMRG', 'fgmrg_2_single', 1.16793e-07, 1.90735e-06; ...
             ...
+            ... FGMS: registry duplicate of FGMRG (Epic 4 Phase 2) -- the
+            ... original's own FGMS output is bit-identical to its own
+            ... FGMRG output at every captured sigma, so mexitk implements
+            ... it as the same filter call and measures the identical
+            ... residual against these fixtures as FGMRG measures against
+            ... its own, at the same sigma. See src/opcodes/fgmrg.cpp's
+            ... FgmsOpcode::StatusNote for the bit-identity proof.
+            'FGMS', 'fgms_sigma1_double', 2.73366e-07, 5.43344e-06; ...
+            'FGMS', 'fgms_sigma2_double', 1.32290e-07, 1.85020e-06; ...
+            'FGMS', 'fgms_sigma4_double', 7.13001e-08, 9.00417e-07; ...
+            ...
+            ... FFFT: packing confirmed exact on 4/6 s15 controlled
+            ... captures (see tReferenceExact.m); the other 2 have a
+            ... residual at absolute double-precision noise floor
+            ... (imporig_real, impoff_real -- both real-part outputs on
+            ... small 8x8x8 volumes). The two ORIGINAL mri-sized fixtures
+            ... (real0, complex1; input [128 128 27], the same shape
+            ... every other opcode's mri fixture uses) have a real, much
+            ... larger measured residual that persists despite the
+            ... packing itself being proven correct: this project's own
+            ... ITK-native FFT computation was independently verified
+            ... EXACT (rms 1.8e-11) against MATLAB's own trusted fftn on
+            ... the real 128x128x27 volume (ruling out any bug in this
+            ... codebase -- axis order, radix-3/z=27 handling, fftshift,
+            ... padding, all directly tested and ruled out), so the
+            ... residual reflects a genuine difference between the
+            ... original 2006 binary's own ITK-2.4-vintage VNL FFT and
+            ... modern ITK's, on this specific composite (non-power-of-2)
+            ... size -- a real numerics difference, the same category as
+            ... FCA/RD, not floating-point noise. See src/opcodes/
+            ... ffft.cpp's StatusNote and docs/COMPATIBILITY.md for the
+            ... full evidence trail, including the sign-convention
+            ... correction the controlled captures also revealed.
+            'FFFT', 'ffft_imporig_real_double', 1.0658141e-14, 1.0658141e-14; ...
+            'FFFT', 'ffft_impoff_real_double',  3.5527137e-15, 7.1054274e-15; ...
+            'FFFT', 'ffft_real0_double',        20.219783,     95.495205;     ...
+            'FFFT', 'ffft_complex1_double',     16121.494,     3544950.7;     ...
+            ...
             ... FLS: LaplacianRecursiveGaussianImageFilter, same story;
             ... uint8's clamp-back export (deviation 8) makes its own
             ... residual much larger since the underlying signed field
@@ -194,7 +232,88 @@ classdef tReferenceBounded < matlab.unittest.TestCase
             ... (unlike SGAC/SLLS): floating-point noise floor of a
             ... 50-iteration finite-difference solver, the same category as
             ... SFM's own bounded deviation -- see src/opcodes/ssdls.cpp.
-            'SSDLS', 'ssdls_ssdls_volB_seedS1_double', 6.69151e-08, 5.25301e-06};
+            'SSDLS', 'ssdls_ssdls_volB_seedS1_double', 6.69151e-08, 5.25301e-06; ...
+            ...
+            ... RD: HistogramMatching + DemonsRegistrationFilter + Warp
+            ... (Epic 4 Phase 1, the first RegistrationCategory opcode).
+            ... Far above the floating-point noise floor: a real numerics
+            ... difference in the iterative Demons solver, the same
+            ... category as FCA/FMMCF, not rounding. numberOfIterations=0
+            ... is confirmed an exact identity no-op (rules out a basic
+            ... wiring error); fixed/moving role assignment (volumeA
+            ... fixed, volumeB moving) was confirmed by a swap test
+            ... against this fixture (the swapped wiring measures RMS
+            ... 21.7/ndiff 189263) -- see src/opcodes/rd.cpp.
+            'RD', 'rd_demons_volB_double', 4.63626, 88.0; ...
+            ...
+            ... RTPS: ThinPlateSplineKernelTransform + Resample (Epic 4
+            ... Phase 1, s14 reference-host capture round, two rounds, 8
+            ... successful captures: 5 at the floating-point noise floor,
+            ... 3 with a real, modest, measured residual). The 5 noise-
+            ... floor captures split into two magnitude bands, not one
+            ... uniform ceiling: 3 at RMS ~1e-12 (rtps_pairs4_translate_
+            ... double 2.63e-12, rtps_coplanar3_distinct_double 8.15e-13,
+            ... rtps_pairs3_distinct_double 5.26e-12) and 2 at RMS ~2e-10
+            ... (rtps_nc5_identity_double 2.12e-10, rtps_nc5_translate_
+            ... double 2.00e-10). The 3 with a real residual
+            ... (rtps_pairs4_identity_double, rtps_pair1_minimal_double,
+            ... rtps_pairs2_distinct_double) come from round 2
+            ... (rtps_coplanar3_distinct_double, rtps_pairs2_distinct_double,
+            ... rtps_pairs3_distinct_double), which isolated exactly why:
+            ... the threshold is 3+ DISTINCT landmark pairs, not
+            ... coplanarity (3 distinct coplanar pairs reproduce exactly)
+            ... and not raw pair count (rtps_pairs4_identity_double's 4
+            ... pairs collapse to only 2 distinct ones and shows the same
+            ... residual class as genuinely having only 2 --
+            ... rtps_pairs2_distinct_double). Not a monotonic shrink either:
+            ... 2 distinct pairs (RMS 4.16) is WORSE than 1 (RMS 3.65),
+            ... then reproduction jumps straight to the noise floor at 3 --
+            ... a threshold, not a gradual improvement. Consistent with
+            ... ITK's SVD-based pseudo-inverse resolving an underdetermined
+            ... system slightly differently between 2.4 and 5.4, the same
+            ... upstream-numerics-evolution category as FCA/SNC/SWS -- see
+            ... src/opcodes/rtps.cpp's StatusNote for the full evidence,
+            ... including how the convention itself was determined
+            ... (interleaved landmarks, volumeB fixed/volumeA moving) and
+            ... why Phase 1's original split-half/volumeA-fixed inference
+            ... was wrong.
+            'RTPS', 'rtps_nc5_identity_double',        2.12194811e-10, 7.809859426e-09; ...
+            'RTPS', 'rtps_nc5_translate_double',       1.998278382e-10, 7.471129493e-09; ...
+            'RTPS', 'rtps_pairs4_translate_double',    2.634815908e-12, 7.443602765e-11; ...
+            'RTPS', 'rtps_coplanar3_distinct_double',  8.146892322e-13, 1.563194019e-11; ...
+            ... rtps_pairs3_distinct_double's RMS below is the MAXIMUM
+            ... measured across both CI platforms (Linux x86_64
+            ... 6.78818e-12, macOS arm64 5.26459e-12), not a single-
+            ... platform measurement: at this magnitude (both values are
+            ... ~1e-13 relative to the 0-88 intensity range, i.e. genuine
+            ... double-precision noise), ThinPlateSplineKernelTransform's
+            ... vnl_svd solve runs through each platform's own LAPACK/BLAS,
+            ... and the two measurements disagree by about 29% of each
+            ... other -- Linux's own value exceeded the bound this project
+            ... had asserted from the macOS measurement alone by about 8%,
+            ... failing CI (caught on PR #30). This is completing an
+            ... under-measured bound, not raising one to hide a real
+            ... disagreement (forbidden by project policy): the quantity
+            ... being bounded is which-platform's-LAPACK noise, not
+            ... agreement with the original, and only ONE platform's noise
+            ... had been measured before. The magnitude-gated bound margin
+            ... below (see deviationMatchesDocumentedBound's own rmsFactor
+            ... comment, and docs/COMPATIBILITY.md's "Bound margins for
+            ... noise-floor entries") now ALSO gives 1.5x headroom here on
+            ... its own, since this RMS is well under the 1e-5 gate
+            ... threshold -- from the macOS-only value alone that policy
+            ... would already have absorbed the Linux measurement. The
+            ... cross-platform maximum is kept as the stored value anyway,
+            ... deliberately: it is the more accurate number, belt and
+            ... suspenders on top of the wider margin, not a substitute
+            ... for it. max-abs gets the identical magnitude gate now too
+            ... (it was previously unaffected only because that gate did
+            ... not exist yet), and Linux's own max-abs was never reported
+            ... to exceed even the prior bound.
+            'RTPS', 'rtps_pairs3_distinct_double',     6.78818e-12, 1.091677859e-10; ...
+            'RTPS', 'rtps_pairs4_identity_double',     2.226571164, 88.0; ...
+            'RTPS', 'rtps_pair1_minimal_double',       3.647131445, 88.0; ...
+            'RTPS', 'rtps_pairs2_distinct_double',     4.159985105, 88.0};
     end
 
     methods (Static)
@@ -230,12 +349,56 @@ classdef tReferenceBounded < matlab.unittest.TestCase
             rms = sqrt(mean(e .^ 2));
             mx = max(e);
 
-            % 10% headroom over the measured value: enough to absorb
-            % platform floating-point ordering, far too tight to hide
-            % a real behavioural change. A floor keeps this meaningful
-            % for measurements at (or near) zero.
-            rmsCeiling = max(rmsMeasured * 1.1, rmsMeasured + 1e-12);
-            maxCeiling = max(maxMeasured * 1.1, maxMeasured + 1e-9);
+            % RMS headroom is magnitude-gated, a policy ruling from the
+            % PR #30 review, not an ad hoc per-fixture choice: below 1e-5
+            % (relative ~1e-7 on this project's 0-88 reference data), a
+            % residual is presumptively floating-point/library noise
+            % rather than a real algorithmic difference -- RTPS's
+            % ThinPlateSplineKernelTransform and several other filters
+            % here solve through vnl_svd or similar LAPACK/BLAS-backed
+            % routines, whose exact last-bit result is platform-dependent.
+            % A margin tighter than the observed platform variation would
+            % assert false precision and test the linear-algebra library
+            % rather than agreement with the original -- caught directly
+            % on PR #30's Linux CI run: rtps_pairs3_distinct_double
+            % measured RMS 6.78818e-12 there against a macOS-only-derived
+            % bound of 5.264588848e-12 (a ~29% spread), which the prior
+            % flat 10% margin did not absorb. Above 1e-5 the residual is a
+            % real, if sometimes small, algorithmic difference (FGAD's
+            % uint8 residual, FDM's uint8 residual, RD, the three
+            % non-noise-floor RTPS cases, etc.), where a tight 10% margin
+            % is meaningful regression detection and stays exactly as
+            % before -- loosening it there would be exactly the "raise a
+            % bound to hide disagreement" move this project forbids. See
+            % docs/COMPATIBILITY.md's "Bound margins for noise-floor
+            % entries" for the full policy and the measured spread that
+            % motivated it. This widens ASSERTION MARGINS only: no
+            % measured value in the Cases table above changed because of
+            % this gate, and every case at or above 1e-5 keeps exactly the
+            % same 10% factor it always had.
+            if rmsMeasured < 1e-5
+                rmsFactor = 1.5;
+            else
+                rmsFactor = 1.1;
+            end
+            rmsCeiling = max(rmsMeasured * rmsFactor, rmsMeasured + 1e-12);
+            % max-abs gets the SAME magnitude gate as RMS above, for the
+            % same reason: a max-abs measurement below 1e-5 comes from the
+            % identical platform-dependent vnl_svd/LAPACK noise floor as
+            % its own fixture's RMS, so a flat 10% margin there is exposed
+            % to the same class of latent cross-platform brittleness, even
+            % though no max-abs entry has actually failed CI yet -- gating
+            % it now, on the same measured-magnitude signal, is closing
+            % the gap before it produces its own surprise red run rather
+            % than waiting for one. The +1e-9 additive floor (already
+            % larger than RMS's own +1e-12, since max-abs values run
+            % larger for the same fixture) stays in every case.
+            if maxMeasured < 1e-5
+                maxFactor = 1.5;
+            else
+                maxFactor = 1.1;
+            end
+            maxCeiling = max(maxMeasured * maxFactor, maxMeasured + 1e-9);
             tc.verifyLessThan(rms, rmsCeiling, sprintf( ...
                 '%s (%s): RMS deviation %.6g exceeds documented %.6g', ...
                 name, opcode, rms, rmsMeasured));

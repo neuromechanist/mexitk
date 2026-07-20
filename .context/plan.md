@@ -1,6 +1,45 @@
 # mexitk plan
 
-Status as of 2026-07-19. Version 0.4.0.
+Status as of 2026-07-19. Version 0.6.0.
+
+## Current state
+
+**All 40 of the original's opcodes are now addressed: 39 implemented, 1
+formally unsupported. The Epic 4 (registration/dispositions) roadmap is
+complete.** Epics 1-3 are done: Epic 1 (30 opcodes, Phases 1-4,
+smoke-tested), Epic 2 (reference-capture campaign + Phase 3 status
+promotions, `docs/COMPATIBILITY.md`'s "Second capture campaign"
+sections), Epic 3 (`FMMCF`/`SFM`, then `SGAC`/`SLLS`/`SSDLS`, the first
+two-volume opcodes). Epic 4 (registration) is now done too: Phase 1 added
+`RD` (Demons deformable registration, bounded deviation -- one fixture,
+RMS 4.63626/max-abs 88) and `RTPS` (thin-plate-spline landmark warping),
+the first `Category::kRegistration` opcodes. `RTPS` shipped smoke-tested
+on an inferred landmark convention (only a rejection fixture existed);
+two follow-up reference-host capture rounds (`s14`, nine fixtures total)
+disproved that inference and settled the real one (interleaved
+landmarks, volumeB fixed/volumeA moving -- the opposite of `RD`),
+promoting `RTPS` to bounded-deviation (5 of 8 new fixtures at the
+floating-point noise floor; the other 3 have a real modest residual
+traced specifically to fewer than 3 distinct landmark pairs, not
+coplanarity as first suspected -- and not a monotonic shrink either, 2
+distinct pairs measures worse than 1 before jumping to the noise floor
+at 3). See `docs/COMPATIBILITY.md`'s "RD and RTPS: the first
+registration opcodes" for the full evidence trail. Phase 2 closed out
+the last three: `FGMS` (fixture-confirmed registry duplicate of
+`FGMRG`, bounded deviation), `FFFT` (packing confirmed exactly by a
+follow-up controlled capture round, `s15`, after the original two
+fixtures alone proved insufficient; promoted to bounded deviation with
+a real, independently-investigated residual on the mri-sized fixtures
+-- see `docs/COMPATIBILITY.md`'s "`FGMS` and `FFFT`: resolved (Epic 4
+Phase 2)"), and `SCSS` (formally dispositioned `Status::kUnsupported`: it
+registers, appears in `mexitk('?')`, and always throws
+`mexitk:SCSS:unsupported` -- the original's own output for it is a
+`[10 1]` vector, not an image, fixture-confirmed).
+See `docs/COMPATIBILITY.md`'s Coverage section for the authoritative tier
+breakdown; the `## Done` log below is a historical record that stops at
+Epic 2 Phase 2 and is not being retroactively rewritten -- treat
+`docs/COMPATIBILITY.md` and the opcode registry as current truth, this
+log as how we got here.
 
 ## Done
 
@@ -345,9 +384,17 @@ Status as of 2026-07-19. Version 0.4.0.
    see COMPATIBILITY.md). It feeds Otsu thresholding in NFT's segmentation,
    so the downstream masks can shift slightly.
    The alternative today is that segmentation does not run at all on Apple Silicon.
-3. **How broad should the opcode surface get?** 30 of 40 are now implemented;
-   only 3 (FCA, FOMT, SWS) have reference data, and reference capture requires
-   the Intel-Linux binary. The 27 Phase 1/2/3/4 opcodes ship smoke-tested only.
+3. **How broad should the opcode surface get?** Answered, and now closed:
+   39 of 40 are implemented (up from 30 when this item was written), and
+   the vast majority have reference data from Epic 2's capture campaign
+   onward -- 38 of 39 carry a validated or bounded-deviation status; only
+   `FAAB` remains smoke-tested with no useful bound. `FFFT`'s own packing
+   was undetermined at first but was settled exactly by a follow-up
+   controlled capture round (`s15`), promoting it to bounded deviation.
+   The fortieth (`SCSS`) is formally unsupported, not
+   silently missing. See `docs/COMPATIBILITY.md`'s Coverage section for
+   the authoritative current tier breakdown; this item is stale, not
+   current state.
 
 ## Next
 
@@ -393,16 +440,41 @@ Status as of 2026-07-19. Version 0.4.0.
 
 ### Broadening the opcode surface
 
-10 opcodes remain unimplemented; parameters are known exactly
-(`docs/matitk_opcode_registry.txt`) and ITK classes are mapped.
-Phase 1 (FMEDIAN, FMEAN, FBT, FDG, FBB, FSN, FF, FD, FGA), Phase 2 (FBD,
-FBE, FDM, FDMV, FVBIH), Phase 3 (SCT, SCC, SIC, SNC, SOT) and Phase 4
-(FAAB, FBL, FCF, FGAD, FGM, FGMRG, FLS, FVMI) are done.
-Each ships with an honest status; no reference data means `smoke-tested` at best.
+**Done as of Epic 4 Phase 2.** All 40 opcodes are addressed (39
+implemented, `SCSS` formally unsupported); there is nothing left to
+broaden. Everything below this line is a historical record, stale by
+construction: written when 10 opcodes remained unimplemented (Epic 1's
+own state). See the "Current state" section at the top of this file and
+`docs/COMPATIBILITY.md`'s Coverage section for what is actually current.
+Epic 1's own Phase 1 (FMEDIAN, FMEAN, FBT, FDG, FBB, FSN, FF, FD, FGA),
+Phase 2 (FBD, FBE, FDM, FDMV, FVBIH), Phase 3 (SCT, SCC, SIC, SNC, SOT)
+and Phase 4 (FAAB, FBL, FCF, FGAD, FGM, FGMRG, FLS, FVMI) are done,
+followed by Epics 2-4 (see "Current state"). Each ships with an honest
+status; no reference data means `smoke-tested` at best.
 
-Known problem cases:
-- **SCSS** maps to `itk::bio::CellularAggregate` (opt-in `ITKBioCell` remote module,
-  mesh output, global static state). Recommend dropping rather than porting.
-- **FGMS** could not be pinned to an ITK class; needs verification against the binary.
-- **FFFT** VNL FFT backend was removed; rerouted via pocketfft. Output semantics unconfirmed.
-- **RD** `SetStandardDeviations` is inert unless `SmoothDisplacementFieldOn()` is also called.
+Formerly-known problem cases, all now resolved (Epic 4 Phase 2):
+- ~~**SCSS** maps to `itk::bio::CellularAggregate` (opt-in `ITKBioCell` remote module,
+  mesh output, global static state). Recommend dropping rather than porting.~~
+  Resolved: formally dispositioned `Status::kUnsupported`, not dropped silently --
+  it registers, appears in `mexitk('?')`, and `Execute()` always throws
+  `mexitk:SCSS:unsupported`, backed by a captured fixture proving the original's
+  own output is a `[10 1]` vector, not an image. See `src/opcodes/scss.cpp`.
+- ~~**FGMS** could not be pinned to an ITK class; needs verification against the binary.~~
+  Resolved: a reference-host capture shows `FGMS` is bit-identical to `FGMRG` in the
+  original at every captured sigma. Implemented as the same filter call, the same
+  registry-duplicate situation as `FGA`/`FDG`. See `src/opcodes/fgmrg.cpp`.
+- ~~**FFFT** VNL FFT backend was removed; rerouted via pocketfft. Output semantics unconfirmed.~~
+  Resolved: implemented against the concrete `itk::VnlForwardFFTImageFilter`
+  (the factory-dispatched `ForwardFFTImageFilter` fails to instantiate on this build).
+  Output semantics are now CONFIRMED, not by inference but by a follow-up controlled
+  reference-host capture round (`s15`, three small volumes with analytically known
+  spectra): real mode is the real part of the FFT rescaled to `[0,255]`, complex mode
+  is the raw imaginary part. The original two mri-sized fixtures still carry a real,
+  measured residual even with the confirmed packing, independently traced to a
+  genuine ITK-2.4-vs-modern difference on that composite (non-power-of-2) size, not a
+  bug here (this codebase's own FFT was proven exact against MATLAB's own `fftn` on
+  the same volume). Ships bounded deviation, scoped to `double`. See
+  `src/opcodes/ffft.cpp`'s `StatusNote` for the full evidence trail.
+- ~~**RD** `SetStandardDeviations` is inert unless `SmoothDisplacementFieldOn()` is also
+  called.~~ Resolved: `RD` is implemented (Epic 4 Phase 1) and calls
+  `SmoothDisplacementFieldOn()` explicitly; see `src/opcodes/rd.cpp`.

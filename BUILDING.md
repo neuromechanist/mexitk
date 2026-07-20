@@ -126,14 +126,14 @@ matlab -batch "addpath('matlab'); exit(run_mexitk_tests('.'))"
 
 `run_mexitk_tests` returns the number of failing tests, which becomes the
 process exit code; `0` means every test passed.
-On the verified macOS arm64 build, this reports 774/774 tests passing.
+On the verified build, this reports 845/845 tests passing.
 
 ## Platform status
 
 | Platform | MEX extension | Status |
 |---|---|---|
-| macOS arm64 | `mexmaca64` | Builds and tested, 774/774, against both Homebrew ITK (locally: Apple M4 Pro, MATLAB R2025b, ITK 5.4.6, Apple clang 21) and static ITK 5.4.6 in CI. The static artifact is confirmed self-contained: CI runs the full suite on a runner with no ITK installed. |
-| Linux x86_64 | `mexa64` | Builds and tested, 774/774, with static ITK 5.4.6 built from source, verified in CI on a runner with no ITK installed. **Must be built with GCC 12 or older** (see Troubleshooting). |
+| macOS arm64 | `mexmaca64` | Builds and tested, 845/845, against both Homebrew ITK (locally: Apple M4 Pro, MATLAB R2025b, ITK 5.4.6, Apple clang 21) and static ITK 5.4.6 in CI. The static artifact is confirmed self-contained: CI runs the full suite on a runner with no ITK installed. |
+| Linux x86_64 | `mexa64` | Builds and tested, 845/845, with static ITK 5.4.6 built from source, verified in CI on a runner with no ITK installed. **Must be built with GCC 12 or older** (see Troubleshooting). |
 | macOS x86_64 | `mexmaci64` | Untried. Legacy target: R2025b is MathWorks' final Intel-Mac release. Build it if convenient, but it is never a blocker. |
 | Windows | `mexw64` | Not attempted. Best-effort only, through GitHub Actions. |
 
